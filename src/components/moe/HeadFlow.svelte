@@ -45,7 +45,7 @@
 		>
 	</div>
 	<svg
-		viewBox="0 0 480 116"
+		viewBox="0 0 510 116"
 		role="img"
 		aria-label={`Query splits into ${queryHeads} heads of ${headSize} dimensions; key and value each split into ${keyValueHeads} heads of ${headSize} dimensions. Query heads ${sharedQueryLabel} share key and value head ${sharedHead + 1}. RoPE rotates query and key, preserving their dimensions. Value bypasses RoPE.`}
 	>
@@ -75,7 +75,9 @@
 			<rect x="351" y="16" width="54" height="22" rx="3" class="rope-box" />
 			<text x="378" y="31" text-anchor="middle" class="rope-label">RoPE</text>
 			<path d="M410 27 H432 M429 24 L432 27 L429 30" class="trace" />
-			<text x="440" y="31" class="output-size">{headSize}D</text>
+			<text x="440" y="31" class="output-size"
+				><tspan font-weight="700">Q′</tspan> · {headSize}D</text
+			>
 		</g>
 		<g class="key-row">
 			<text x="2" y="67" class="projection-letter">K</text>
@@ -104,7 +106,9 @@
 			<rect x="351" y="52" width="54" height="22" rx="3" class="rope-box" />
 			<text x="378" y="67" text-anchor="middle" class="rope-label">RoPE</text>
 			<path d="M410 63 H432 M429 60 L432 63 L429 66" class="trace" />
-			<text x="440" y="67" class="output-size">{headSize}D</text>
+			<text x="440" y="67" class="output-size"
+				><tspan font-weight="700">K′</tspan> · {headSize}D</text
+			>
 		</g>
 		<g class="value-row">
 			<text x="2" y="103" class="projection-letter">V</text>

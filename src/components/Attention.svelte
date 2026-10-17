@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HeadSplitInspector from './moe/HeadSplitInspector.svelte';
 	import PlainHeadFlow from './vit/PlainHeadFlow.svelte';
 	import { hybridHeadOperations, hybridInspector } from '$lib/hybrid/store';
 	import { vitHeadOperations } from '$lib/vit/store';
@@ -18,7 +19,6 @@
 		attentionHeadIdx,
 		moeExample,
 		moeModel,
-		weightPopover,
 		moeAttentionOperations,
 		blockIdx
 	} from '~/store';
@@ -44,6 +44,7 @@
 
 	let isHovered = false;
 	let showRoPE = false;
+	let showHeadSplit = false;
 	let ropeKind: 'query' | 'key' = 'query';
 	let mlaStage: string | null = null;
 	$: isMLA = $moeModel?.architecture === 'mla';
@@ -122,7 +123,7 @@
 							on:rope={() => (showRoPE = true)}
 						/>{:else}
 						<div class="rotary-sequence">
-							<button on:click={() => weightPopover.set('qkv')}>Head split ↗</button>
+							<button on:click|stopPropagation={() => (showHeadSplit = true)}>Head split ↗</button>
 							<span aria-hidden="true">→</span>
 							<button on:click={() => inspectRoPE()}>RoPE · position encoding ↗</button>
 							<span aria-hidden="true">→</span><span>Attention</span>
@@ -140,15 +141,18 @@
 					<div class="qkv flex h-full flex-col justify-center gap-[5rem] pl-[6rem]">
 						<div class="column key">
 							<div class="head1 title">
-								<TextbookTooltip id="qkv">Key {kvHead + 1}</TextbookTooltip><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'After RoPE'} · {headSize}D</small
+								<TextbookTooltip id="qkv"
+									>{#if usesRoPE}<strong class="rotated-symbol">K′</strong> ·
+									{/if}Key {kvHead + 1}</TextbookTooltip
+								><small
+									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'Rotated'} · {headSize}D</small
 								>
 							</div>
 
 							{#if usesRoPE}<button
 									class="rotary-gate"
 									on:click={() => inspectRoPE('key')}
-									aria-label="Inspect key RoPE before attention">RoPE<small>position</small></button
+									aria-label="Inspect key RoPE before attention">RoPE<small>rotate K</small></button
 								>{/if}
 							{#each $tokens as token, index}
 								<div
@@ -185,15 +189,18 @@
 						</div>
 						<div class="column query">
 							<div class="head1 title">
-								<TextbookTooltip id="qkv">Query {$attentionHeadIdx + 1}</TextbookTooltip><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'After RoPE'} · {headSize}D</small
+								<TextbookTooltip id="qkv"
+									>{#if usesRoPE}<strong class="rotated-symbol">Q′</strong> ·
+									{/if}Query {$attentionHeadIdx + 1}</TextbookTooltip
+								><small
+									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'Rotated'} · {headSize}D</small
 								>
 							</div>
 							{#if usesRoPE}<button
 									class="rotary-gate"
 									on:click={() => inspectRoPE('query')}
 									aria-label="Inspect query RoPE before attention"
-									>RoPE<small>position</small></button
+									>RoPE<small>rotate Q</small></button
 								>{/if}
 							{#each $tokens as token, index}
 								<div
@@ -284,6 +291,14 @@
 		</div>
 	</div>
 </div>
+{#if showHeadSplit}<HeadSplitInspector
+		on:close={() => (showHeadSplit = false)}
+		on:rope={() => {
+			showHeadSplit = false;
+			inspectRoPE();
+		}}
+	/>{/if}
+
 {#if showRoPE}<RoPEInspector
 		kind={ropeKind}
 		on:close={() => (showRoPE = false)}
@@ -307,6 +322,10 @@
 	/>{/if}
 
 <style lang="scss">
+	.rotated-symbol {
+		font-size: 1.2rem;
+		font-weight: 700;
+	}
 	.rotary-sequence {
 		display: flex;
 		align-items: center;
@@ -342,18 +361,18 @@
 		margin-top: 7px;
 	}
 	.rotary .head-block > .qkv {
-		padding-left: 10rem;
+		padding-left: 13rem;
 	}
 	.rotary .column.key .label.float,
 	.rotary .column.query .label.float {
-		left: -94px;
+		left: -138px;
 	}
 	.rotary-token-input {
 		position: absolute;
-		left: -84px;
+		left: -128px;
 		top: 0;
 		height: 100%;
-		width: 84px;
+		width: 128px;
 		display: flex;
 		align-items: center;
 		color: #80afe9;
@@ -370,21 +389,28 @@
 	}
 	.rotary-gate {
 		position: absolute;
-		left: -70px;
-		top: -3px;
-		height: calc(100% + 6px);
-		width: 42px;
+		left: -114px;
+		top: 50%;
+		transform: translateY(-50%);
+		height: calc(100% + 16px);
+		min-height: 36px;
+		width: 76px;
+		border: 1.5px solid #b48acb;
+		background: #f3e9fa;
+		color: #755092;
+		font-weight: 600;
 		z-index: 36;
 		padding: 0;
-		font-size: 10px;
+		font-size: 16px;
 	}
 	.rotary-gate small {
 		display: block;
-		font-size: 7px;
-		color: #a48eb2;
+		font-size: 10px;
+		font-weight: 400;
+		color: #87669e;
 	}
 	.rotary-gate-space {
-		width: 40px;
+		width: 76px;
 		flex-shrink: 0;
 	}
 
