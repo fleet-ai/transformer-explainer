@@ -112,6 +112,7 @@
 		class:hybrid-model={$moeModel?.architecture === 'hybrid'}
 		class:mamba-only={$moeModel?.architecture === 'hybrid' &&
 			!$moeExample?.layers[$blockIdx]?.queryPreview.length}
+		class:latent-model={$moeModel?.architecture === 'mla'}
 		class:seq2seq={$moeModel?.architecture === 'encoder-decoder'}
 		class:decoder={$moeModel?.architecture === 'encoder-decoder' && $moeModel?.stack === 'decoder'}
 		style={`--vector-height: ${$vectorHeight}px;--title-height: ${titleHeight}px;--content-height:${vizHeight - titleHeight}px;`}
@@ -205,6 +206,15 @@
 		}
 	}
 
+	.latent-model .steps {
+		grid-template-columns: auto max-content 120px 210px;
+		min-width: 100%;
+		width: max-content;
+	}
+	.latent-model .steps .blocks .block-steps {
+		position: relative;
+		grid-template-columns: 80px max-content 440px;
+	}
 	.seq2seq .steps {
 		grid-template-columns: auto 7fr 0.45fr 0.85fr;
 	}

@@ -91,6 +91,7 @@
 		expanded: isAttentionExpanded
 	})}
 	class:rotary={usesRoPE}
+	class:latent={isMLA}
 	data-click="attention-step"
 >
 	<div
@@ -117,39 +118,43 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
-				<div class="head-flow-wrap">
-					{#if isPlain}<div class="rotary-sequence">
-							<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button><span
-								aria-hidden="true">→</span
-							><span>Attention</span>
-						</div>{:else if isMLA}<LatentHeadFlow
-							on:inspect={(event) => attentionInspector.set({ kind: 'mla', stage: event.detail })}
-							on:rope={() => inspectRoPE()}
-						/>{:else}
-						<div class="rotary-sequence">
-							<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button>
-							<span aria-hidden="true">→</span>
-							<button on:click={() => inspectRoPE()}>RoPE · position encoding ↗</button>
-							<span aria-hidden="true">→</span><span>Attention</span>
-						</div>
-						<div class="rotary-sharing">
-							Q head {$attentionHeadIdx + 1} · {headSize}D · shares K/V head {kvHead + 1} · V bypasses
-							RoPE
-						</div>
-					{/if}
-				</div>
+				{#if !isMLA}<div class="head-flow-wrap">
+						{#if isPlain}<div class="rotary-sequence">
+								<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button><span
+									aria-hidden="true">→</span
+								><span>Attention</span>
+							</div>{:else}
+							<div class="rotary-sequence">
+								<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button>
+								<span aria-hidden="true">→</span>
+								<button on:click={() => inspectRoPE()}>RoPE · position encoding ↗</button>
+								<span aria-hidden="true">→</span><span>Attention</span>
+							</div>
+							<div class="rotary-sharing">
+								Q head {$attentionHeadIdx + 1} · {headSize}D · shares K/V head {kvHead + 1} · V bypasses
+								RoPE
+							</div>
+						{/if}
+					</div>
+				{/if}
 				<div
 					class="head-block flex w-full items-center justify-between px-2"
 					style={`height:${Math.max($headContentHeight - 110, 320)}px;min-height:calc(var(--vector-height) * ${($tokens.length * 3) / 16} + ${($tokens.length - 1) * 1.5 + 14}rem);`}
 				>
+					{#if isMLA}<div class="mla-projections resize-watch">
+							<LatentHeadFlow
+								on:inspect={(event) => attentionInspector.set({ kind: 'mla', stage: event.detail })}
+								on:rope={(event) => inspectRoPE(event.detail)}
+							/>
+						</div>{/if}
 					<div class="qkv flex h-full flex-col justify-center gap-[5rem] pl-[6rem]">
 						<div class="column key">
 							<div class="head1 title">
 								<TextbookTooltip id="qkv"
-									>{#if usesRoPE}<strong class="rotated-symbol">K′</strong> ·
+									>{#if usesRoPE || isMLA}<strong class="rotated-symbol">K′</strong> ·
 									{/if}Key {kvHead + 1}</TextbookTooltip
 								><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'Rotated'} · {headSize}D</small
+									>{isPlain ? 'Projected' : isMLA ? 'Content + rotated position' : 'Rotated'} · {headSize}D</small
 								>
 							</div>
 
@@ -194,10 +199,10 @@
 						<div class="column query">
 							<div class="head1 title">
 								<TextbookTooltip id="qkv"
-									>{#if usesRoPE}<strong class="rotated-symbol">Q′</strong> ·
+									>{#if usesRoPE || isMLA}<strong class="rotated-symbol">Q′</strong> ·
 									{/if}Query {$attentionHeadIdx + 1}</TextbookTooltip
 								><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'Rotated'} · {headSize}D</small
+									>{isPlain ? 'Projected' : isMLA ? 'Content + rotated position' : 'Rotated'} · {headSize}D</small
 								>
 							</div>
 							{#if usesRoPE}<button
@@ -299,7 +304,7 @@
 		plain={isPlain}
 		on:close={() => attentionInspector.set(null)}
 		on:projections={() => weightPopover.set('qkv')}
-		on:rope={() => inspectRoPE()}
+		on:rope={(event) => inspectRoPE(event.detail)}
 	/>{:else if $attentionInspector?.kind === 'rope'}<RoPEInspector
 		kind={$attentionInspector.vector}
 		on:close={() => attentionInspector.set(null)}
@@ -310,7 +315,7 @@
 	/>{:else if $attentionInspector?.kind === 'mla'}<LatentInspector
 		stage={$attentionInspector.stage}
 		on:close={() => attentionInspector.set(null)}
-		on:rope={() => inspectRoPE()}
+		on:rope={(event) => inspectRoPE(event.detail)}
 		on:attention={() => {
 			attentionInspector.set(null);
 			$expandedBlock = { id: 'attention' };
@@ -422,6 +427,22 @@
 		text-align: center;
 	}
 
+	.mla-projections {
+		width: 440px;
+		flex: 0 0 440px;
+		position: relative;
+		z-index: 30;
+		padding: 12px;
+	}
+	.latent .head-block > .qkv {
+		padding-left: 4rem;
+	}
+	.attention.latent .heads {
+		padding-left: 3rem;
+	}
+	.latent .head-block {
+		min-width: 900px;
+	}
 	.head-flow-wrap {
 		position: relative;
 		z-index: 30;
