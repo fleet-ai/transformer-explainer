@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { modelMeta, tokens, rootRem, moeModel, weightPopover, expandedBlock } from '~/store';
+	import { modelMeta, tokens, rootRem, moeModel } from '~/store';
 	import * as d3 from 'd3';
 	import { gsap } from '~/utils/gsap';
 	import Matrix from '~/components/common/Matrix.svelte';
@@ -8,9 +8,6 @@
 	import tailwindConfig from '../../../tailwind.config';
 	import HelpPopover from '../common/HelpPopover.svelte';
 	import WeightPopoverCard from '../common/WeightPopoverCard.svelte';
-	import HeadFlow from '../moe/HeadFlow.svelte';
-	import RoPEInspector from '../moe/RoPEInspector.svelte';
-	let showRoPE = false;
 	import Katex from '~/utils/Katex.svelte';
 
 	const { theme } = resolveConfig(tailwindConfig);
@@ -379,22 +376,9 @@
 		({queryDimension}), K ({keyValueDimension}), and V ({keyValueDimension}); Q and K receive RoPE
 		afterward.
 	</div>
-	<div class="projection-head-flow"><HeadFlow on:inspect={() => (showRoPE = true)} /></div>
 </WeightPopoverCard>
-{#if showRoPE}<RoPEInspector
-		on:close={() => (showRoPE = false)}
-		on:attention={() => {
-			$weightPopover = null;
-			$expandedBlock = { id: 'attention' };
-		}}
-	/>{/if}
 
 <style lang="scss">
-	.projection-head-flow {
-		width: min(100%, 580px);
-		margin: 0 auto 12px;
-		padding: 0 15px;
-	}
 	.recording-note {
 		max-width: 42rem;
 		padding: 0.5rem 1rem;

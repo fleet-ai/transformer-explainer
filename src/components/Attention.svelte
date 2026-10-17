@@ -19,6 +19,7 @@
 		attentionHeadIdx,
 		moeExample,
 		moeModel,
+		weightPopover,
 		moeAttentionOperations,
 		blockIdx
 	} from '~/store';
@@ -45,6 +46,16 @@
 	let isHovered = false;
 	let showRoPE = false;
 	let showHeadSplit = false;
+	// Projection, head split, and RoPE are successive inspectors, never stacked.
+	$: if ($weightPopover) {
+		showHeadSplit = false;
+		showRoPE = false;
+	}
+	function inspectHeadSplit() {
+		$weightPopover = null;
+		showRoPE = false;
+		showHeadSplit = true;
+	}
 	let ropeKind: 'query' | 'key' = 'query';
 	let mlaStage: string | null = null;
 	$: isMLA = $moeModel?.architecture === 'mla';
@@ -56,6 +67,8 @@
 		(isVlm && $moeModel?.maskMode === 'bidirectional');
 	$: usesRoPE = !isPlain && !isMLA;
 	function inspectRoPE(kind: 'query' | 'key' = 'query') {
+		$weightPopover = null;
+		showHeadSplit = false;
 		ropeKind = kind;
 		if (isVlm) vlmInspectorStage.set('rope');
 		else if (isHybrid) hybridInspector.set('rope');
@@ -123,7 +136,7 @@
 							on:rope={() => (showRoPE = true)}
 						/>{:else}
 						<div class="rotary-sequence">
-							<button on:click|stopPropagation={() => (showHeadSplit = true)}>Head split ↗</button>
+							<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button>
 							<span aria-hidden="true">→</span>
 							<button on:click={() => inspectRoPE()}>RoPE · position encoding ↗</button>
 							<span aria-hidden="true">→</span><span>Attention</span>
