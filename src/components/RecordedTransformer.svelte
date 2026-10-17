@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { recordedAssetUrl } from '$lib/recorded-json.js';
 	import { onMount, type ComponentType } from 'svelte';
 	import { base } from '$app/paths';
 	import classNames from 'classnames';
@@ -61,7 +62,7 @@
 			if (loadRecording) {
 				cleanupRecording = await loadRecording();
 			} else {
-				const response = await fetch(`${base}/${tracePath}`);
+				const response = await fetch(recordedAssetUrl(`${base}/${tracePath}`));
 				if (!response.ok) throw new Error(`Trace file returned HTTP ${response.status}`);
 				hydrateRecordedExample((await response.json()) as TraceDocument, 0);
 			}

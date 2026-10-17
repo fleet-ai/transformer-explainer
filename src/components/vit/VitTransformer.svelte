@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { recordedAssetUrl } from '$lib/recorded-json.js';
+
 	import { base } from '$app/paths';
 	import RecordedTransformer from '../RecordedTransformer.svelte';
 	import VitEmbedding from './VitEmbedding.svelte';
@@ -52,7 +54,7 @@
 					in every recorded attention row; displayed probabilities are not renormalized.</small
 				>
 			</div>
-			<a href={`${base}/traces/vit/manifest.json`} target="_blank" rel="noreferrer"
+			<a href={recordedAssetUrl(`${base}/traces/vit/manifest.json`)} target="_blank" rel="noreferrer"
 				>Trace provenance ↗</a
 			>
 		</div>{/if}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { readRecordedJson } from '../src/lib/recorded-json.js';
+import { readRecordedJson, recordedAssetUrl } from '../src/lib/recorded-json.js';
 import { validateAttentionOperations, verifyAttentionOperationsProvenance, validateRopeExample, verifyRopeExampleProvenance } from '../scripts/validate-attention-operations.mjs';
 
 const root = new URL('../static/traces/', import.meta.url);
@@ -23,12 +23,12 @@ const compiled = ts.transpileModule(
 function production(fetch = () => { throw new Error('Unexpected network request'); }) {
   const exports = {};
   const live = {};
-  runInNewContext(liveCompiled, { exports: live });
+  runInNewContext(liveCompiled, { exports: live, require: name => { assert.equal(name, '$lib/recorded-json.js'); return { recordedAssetUrl }; } });
   runInNewContext(compiled, {
     exports, fetch,
     require(name) {
       if (name === '$app/paths') return { base: '/moe' };
-      if (name === '$lib/recorded-json.js') return { readRecordedJson };
+      if (name === '$lib/recorded-json.js') return { readRecordedJson, recordedAssetUrl };
       if (name === './live') return live;
       throw new Error(`Unexpected helper dependency: ${name}`);
     }

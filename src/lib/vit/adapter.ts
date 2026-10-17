@@ -1,3 +1,4 @@
+import { recordedAssetUrl } from '$lib/recorded-json.js';
 import { base } from '$app/paths';
 import { get } from 'svelte/store';
 import { hydrateRecordedExample } from '$lib/moe/adapter';
@@ -16,7 +17,7 @@ import type { VitDocument, VitRecording, TensorFile, TensorData } from './types'
 import { tensor, row } from './types';
 
 async function loadTensorFile(file: TensorFile): Promise<TensorData> {
-	const response = await fetch(`${base}/traces/vit/${file.file}`);
+	const response = await fetch(recordedAssetUrl(`${base}/traces/vit/${file.file}`));
 	if (!response.ok) throw new Error(`ViT tensor ${file.file}: HTTP ${response.status}`);
 	const bytes = await response.arrayBuffer();
 	if (bytes.byteLength !== file.bytes) throw new Error(`Incomplete ViT recording ${file.file}`);
@@ -136,7 +137,7 @@ export function showVitPatchPage(page: number): void {
 	);
 }
 export async function loadVitRecording(): Promise<() => void> {
-	const response = await fetch(`${base}/traces/vit/manifest.json`);
+	const response = await fetch(recordedAssetUrl(`${base}/traces/vit/manifest.json`));
 	if (!response.ok) throw new Error(`ViT manifest: HTTP ${response.status}`);
 	const document = (await response.json()) as VitDocument;
 	if (
@@ -152,7 +153,7 @@ export async function loadVitRecording(): Promise<() => void> {
 	vitRecording.set({ document, common, layers });
 	recordedControls.set({
 		status: 'Recorded DeiT · all 12 encoder blocks · image classification',
-		traceUrl: `${base}/traces/vit/manifest.json`,
+		traceUrl: recordedAssetUrl(`${base}/traces/vit/manifest.json`),
 		replay: () => showVitPositions(get(vitVisiblePositions), get(vitSelectedPosition))
 	});
 	showVitPositions([0, 1, 2, 3, 4, 5, 6, 7, 8], 0, false);

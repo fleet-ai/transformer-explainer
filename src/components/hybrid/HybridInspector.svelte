@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { recordedAssetUrl } from '$lib/recorded-json.js';
+
 	import { createEventDispatcher } from 'svelte';
 	import { base } from '$app/paths';
 	import { blockIdx, attentionHeadIdx, attentionHeadIdxTemp, moeTokenIndex } from '~/store';
@@ -627,7 +629,7 @@
 			<footer>
 				Pretrained Zamba2-1.2B · complete 38-block forward pass · calculations use full saved
 				precision; numbers are rounded for display. <a
-					href={`${base}/traces/hybrid/manifest.json`}
+					href={recordedAssetUrl(`${base}/traces/hybrid/manifest.json`)}
 					target="_blank"
 					rel="noreferrer">Trace provenance ↗</a
 				>

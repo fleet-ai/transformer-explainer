@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { recordedAssetUrl } from '$lib/recorded-json.js';
+
 	import { base } from '$app/paths';
 	import { blockIdx } from '~/store';
 	import RecordedTransformer from '../RecordedTransformer.svelte';
@@ -49,7 +51,7 @@
 				</div>
 				<small>Prompt: {$vlmRecording.document.prompt}</small>
 			</div>
-			<a href={`${base}/traces/vlm/manifest.json`} target="_blank" rel="noreferrer"
+			<a href={recordedAssetUrl(`${base}/traces/vlm/manifest.json`)} target="_blank" rel="noreferrer"
 				>Trace provenance ↗</a
 			>
 		</div>{/if}

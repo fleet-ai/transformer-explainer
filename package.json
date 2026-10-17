@@ -12,7 +12,8 @@
     "deploy": "gh-pages -d build --nojekyll",
     "test": "node --test tests/*.test.mjs",
     "validate:traces": "node scripts/validate-traces.mjs && node scripts/validate-expert-operations.mjs && node scripts/validate-attention-operations.mjs",
-    "validate:attention": "node scripts/validate-attention-operations.mjs"
+    "validate:attention": "node scripts/validate-attention-operations.mjs",
+    "build:hosted": "node scripts/build-hosted.mjs"
   },
   "devDependencies": {
     "@neoconfetti/svelte": "^1.0.0",

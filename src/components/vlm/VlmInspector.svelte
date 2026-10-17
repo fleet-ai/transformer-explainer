@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { recordedAssetUrl } from '$lib/recorded-json.js';
+
 	import { createEventDispatcher } from 'svelte';
 	import { base } from '$app/paths';
 	import { blockIdx, attentionHeadIdx, attentionHeadIdxTemp } from '~/store';
@@ -540,7 +542,7 @@
 					<footer>
 						Full pretrained SmolVLM inference: 12 vision blocks + connector + 30 language blocks.
 						Values are float32 recordings, rounded for display. <a
-							href={`${base}/traces/vlm/manifest.json`}
+							href={recordedAssetUrl(`${base}/traces/vlm/manifest.json`)}
 							target="_blank"
 							rel="noreferrer">Trace provenance ↗</a
 						>

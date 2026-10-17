@@ -42,6 +42,13 @@ stay unchanged. After recapturing MLA, call `chunkTraceAssets('static/traces',
 48 * 1024 * 1024)` from `scripts/chunk-trace-assets.mjs` before publishing its
 source; the production build independently applies its stricter 24 MiB limit.
 
+`npm run build` produces a self-contained build with all recordings. The public
+Sites deployment uses `npm run build:hosted`: its five new architecture tabs load
+the identical complete recordings from the immutable Fleet GitHub revision pinned
+in `scripts/build-hosted.mjs`. Tensor and trace-part checksums are still verified.
+This keeps the deployment package below the host's upload/build size limits.
+Dense, Granite MoE, and the local inference service keep their existing locations.
+
 The diagrams can show a window of image/text positions, while attention inspectors
 retain the full sequence and full denominator. Cropped probabilities are never
 renormalized. Final output probabilities use all vocabulary or classifier logits.

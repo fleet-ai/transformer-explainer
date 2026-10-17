@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { recordedAssetUrl } from '$lib/recorded-json.js';
+
 	import { createEventDispatcher } from 'svelte';
 	import { base } from '$app/paths';
 	import { attentionHeadIdx, attentionHeadIdxTemp, blockIdx } from '~/store';
@@ -368,7 +370,7 @@
 					{/if}
 					<footer>
 						Recorded from pretrained {document.model.id} · all 12 blocks / 3 heads / 197 positions.
-						<a href={`${base}/traces/vit/manifest.json`} target="_blank" rel="noreferrer"
+						<a href={recordedAssetUrl(`${base}/traces/vit/manifest.json`)} target="_blank" rel="noreferrer"
 							>Trace provenance ↗</a
 						>
 					</footer>

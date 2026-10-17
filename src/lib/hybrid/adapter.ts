@@ -1,3 +1,4 @@
+import { recordedAssetUrl } from '$lib/recorded-json.js';
 import { base } from '$app/paths';
 import { get } from 'svelte/store';
 import { hydrateRecordedExample } from '$lib/moe/adapter';
@@ -19,7 +20,7 @@ let applying = false,
 	disposed = false,
 	generation = 0;
 async function loadFile(file: TensorFile): Promise<TensorData> {
-	const response = await fetch(`${base}/traces/hybrid/${file.file}`);
+	const response = await fetch(recordedAssetUrl(`${base}/traces/hybrid/${file.file}`));
 	if (!response.ok) throw new Error(`Hybrid recording ${file.file}: HTTP ${response.status}`);
 	const bytes = await response.arrayBuffer();
 	if (bytes.byteLength !== file.bytes) throw new Error(`Incomplete hybrid recording ${file.file}`);
@@ -185,7 +186,7 @@ export async function selectHybridBlock(index: number) {
 }
 export async function loadHybridRecording() {
 	disposed = false;
-	const response = await fetch(`${base}/traces/hybrid/manifest.json`);
+	const response = await fetch(recordedAssetUrl(`${base}/traces/hybrid/manifest.json`));
 	if (!response.ok) throw new Error(`Hybrid manifest: HTTP ${response.status}`);
 	const document = (await response.json()) as HybridDocument;
 	if (document.kind !== 'hybrid-full' || document.layers.length !== 38)
@@ -200,7 +201,7 @@ export async function loadHybridRecording() {
 	applying = false;
 	recordedControls.set({
 		status: 'Zamba2-1.2B · all 38 blocks · 6 shared-attention calls + 38 state-space mixers',
-		traceUrl: `${base}/traces/hybrid/manifest.json`,
+		traceUrl: recordedAssetUrl(`${base}/traces/hybrid/manifest.json`),
 		replay: () => selectHybridBlock(5)
 	});
 	await ensureBlock(5);

@@ -1,3 +1,4 @@
+import { recordedAssetUrl } from '$lib/recorded-json.js';
 import { base } from '$app/paths';
 import { readRecordedJson } from '$lib/recorded-json.js';
 import { get } from 'svelte/store';
@@ -45,7 +46,7 @@ export function selectT5Stack(stack: Stack) {
 	selectT5Example(get(t5ExampleIndex), stack, true);
 }
 export async function loadT5Recording() {
-	const response = await fetch(`${base}/traces/t5-full.json`);
+	const response = await fetch(recordedAssetUrl(`${base}/traces/t5-full.json`));
 	if (!response.ok) throw new Error(`T5 recording returned HTTP ${response.status}.`);
 	const document = (await readRecordedJson(response)) as T5Document;
 	if (
@@ -59,7 +60,7 @@ export async function loadT5Recording() {
 	selectT5Example(0, 'decoder');
 	recordedControls.set({
 		status: 'T5-small · full 6 encoder + 6 decoder blocks · all 8 heads',
-		traceUrl: `${base}/traces/t5-full.json`,
+		traceUrl: recordedAssetUrl(`${base}/traces/t5-full.json`),
 		selectExample: (index) => selectT5Example(index),
 		replay: () => selectT5Example(get(t5ExampleIndex))
 	});

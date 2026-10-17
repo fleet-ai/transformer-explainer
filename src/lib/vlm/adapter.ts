@@ -1,3 +1,4 @@
+import { recordedAssetUrl } from '$lib/recorded-json.js';
 import { base } from '$app/paths';
 import { get } from 'svelte/store';
 import { hydrateRecordedExample, recordedProbabilities } from '$lib/moe/adapter';
@@ -34,7 +35,7 @@ async function loadFile(directory: string, file: TensorFile): Promise<TensorData
 		pending.set(
 			key,
 			(async () => {
-				const response = await fetch(`${base}/traces/vlm/${key}`);
+				const response = await fetch(recordedAssetUrl(`${base}/traces/vlm/${key}`));
 				if (!response.ok) throw new Error(`VLM recording ${key}: HTTP ${response.status}`);
 				const bytes = await response.arrayBuffer();
 				if (bytes.byteLength !== file.bytes) throw new Error(`Incomplete recording ${key}`);
@@ -237,7 +238,7 @@ export function selectVlmPage(page: number): void {
 }
 export async function loadVlmRecording(): Promise<() => void> {
 	disposed = false;
-	const response = await fetch(`${base}/traces/vlm/manifest.json`);
+	const response = await fetch(recordedAssetUrl(`${base}/traces/vlm/manifest.json`));
 	if (!response.ok) throw new Error(`VLM manifest: HTTP ${response.status}`);
 	const document = (await response.json()) as VlmDocument;
 	if (
@@ -259,7 +260,7 @@ export async function loadVlmRecording(): Promise<() => void> {
 	});
 	recordedControls.set({
 		status: 'Recorded SmolVLM · 12 vision + 30 language blocks',
-		traceUrl: `${base}/traces/vlm/manifest.json`,
+		traceUrl: recordedAssetUrl(`${base}/traces/vlm/manifest.json`),
 		replay: () => selectVlmPhase(get(vlmPhase))
 	});
 	await selectVlmPhase('vision');

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { recordedAssetUrl } from '$lib/recorded-json.js';
+
 	import { onDestroy, tick } from 'svelte';
 	import { Dropdown, DropdownItem, ButtonGroup } from 'flowbite-svelte';
 	import Temperature from './Temperature.svelte';
@@ -79,7 +81,7 @@
 	$: traceUrl =
 		$recordedControls?.traceUrl ??
 		(isMLA
-			? `${base}/traces/deepseek-mla.json`
+			? recordedAssetUrl(`${base}/traces/deepseek-mla.json`)
 			: traceAssetUrl($moeExample?.id ?? '', 'main', base));
 	$: currentIsLive = isLiveTrace($moeExample?.id ?? '');
 	function closeDiagramDetails() {

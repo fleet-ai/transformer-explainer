@@ -27,3 +27,13 @@ export async function readRecordedJson(response, fetchPart = fetch) {
   if (await digest(result) !== document.sha256) throw new Error('Complete trace integrity check failed.');
   return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(result));
 }
+
+/** Hosted builds read large immutable recordings from the Fleet source revision. */
+export function recordedAssetUrl(url, origin = import.meta.env?.VITE_RECORDED_TRACE_ORIGIN || '') {
+  if (!origin || !url.startsWith('/')) return url;
+  const start = url.indexOf('/traces/');
+  if (start < 0) return url;
+  const asset = url.slice(start + '/traces/'.length);
+  if (!/^(?:deepseek-mla\.json$|(?:attention|expert)-operations-deepseek-fact\.json(?:\.part\d+\.bin)?$|t5-full\.json$|(?:vit|vlm|hybrid)\/)/.test(asset)) return url;
+  return origin.replace(/\/$/, '') + url.slice(start);
+}

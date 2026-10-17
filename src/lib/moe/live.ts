@@ -1,3 +1,4 @@
+import { recordedAssetUrl } from '$lib/recorded-json.js';
 import type { TraceDocument } from './types';
 
 export const LOCAL_INFERENCE_ORIGIN = 'http://127.0.0.1:8766';
@@ -44,9 +45,9 @@ export function traceAssetUrl(exampleId: string, kind: TraceAsset, base = ''): s
 	if (registered) return registered[kind];
 	if (isLiveTrace(exampleId))
 		throw new Error('This live trace is no longer connected. Generate the prompt again.');
-	return kind === 'main'
+	return recordedAssetUrl(kind === 'main'
 		? `${base}/traces/${exampleId.startsWith('deepseek-') ? 'deepseek-mla' : 'granite-moe'}.json`
-		: `${base}/traces/${kind}-operations-${encodeURIComponent(exampleId)}.json`;
+		: `${base}/traces/${kind}-operations-${encodeURIComponent(exampleId)}.json`);
 }
 
 function abortError(): DOMException {
