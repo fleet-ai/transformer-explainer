@@ -28,7 +28,7 @@
 		let xScale = d3
 			.scaleLinear()
 			.domain([0, d3.max(data, (d) => d.probability) ?? 1])
-			.range([0, Math.max(0, svgEl.clientWidth - rootRem * 4)]);
+			.range([0, svgEl?.clientWidth - rootRem * 3]);
 
 		const groups = svg
 			.selectAll<SVGGElement, Probability>('g.probability')
@@ -109,10 +109,7 @@
 
 	// Initial draw without transition
 	onMount(() => {
-		const observer = new ResizeObserver(() => drawBars());
-		observer.observe(svgEl);
 		drawBars();
-		return () => observer.disconnect();
 	});
 
 	$: if ($modelData && svgEl) {

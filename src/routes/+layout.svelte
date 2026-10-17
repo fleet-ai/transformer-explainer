@@ -12,8 +12,8 @@
 	$: originalArchitecture =
 		!architecture ||
 		['mla', 'vit', 'encoder-decoder', 'vision-language', 'hybrid'].includes(architecture);
-	$: minScreenWidth = architecture === 'mla' ? 0 : architecture === 'encoder-decoder' ? 1900 : 1600;
-	$: minColumnWidth = Math.max(16, Math.floor(minScreenWidth / 24) - rootRem * 2);
+	$: minScreenWidth = architecture === 'encoder-decoder' ? 1900 : 1600;
+	$: minColumnWidth = Math.floor(minScreenWidth / 24) - rootRem * 2;
 </script>
 
 {#if !originalArchitecture}
@@ -24,7 +24,6 @@
 {:else}
 	<div
 		id="app"
-		class:mla-page={architecture === 'mla'}
 		style={`--min-screen-width:${minScreenWidth}px;--min-column-width:${minColumnWidth}px;--predicted-color:${predictedColor};`}
 	>
 		<div id="landing">
@@ -50,9 +49,6 @@
 	#app {
 		height: 100vh;
 		min-width: 1600px;
-	}
-	#app.mla-page {
-		min-width: 0;
 	}
 	#landing {
 		height: 100%;

@@ -428,21 +428,20 @@
 	}
 
 	.mla-projections {
-		width: 360px;
-		flex: 0 0 360px;
+		width: 440px;
+		flex: 0 0 440px;
 		position: relative;
 		z-index: 30;
-		padding: 8px;
+		padding: 12px;
 	}
 	.latent .head-block > .qkv {
-		padding-left: 3.5rem;
+		padding-left: 4rem;
 	}
 	.attention.latent .heads {
-		padding: 0 1.5rem 0 1rem;
+		padding-left: 3rem;
 	}
 	.latent .head-block {
-		min-width: 0;
-		gap: 4px;
+		min-width: 900px;
 	}
 	.head-flow-wrap {
 		position: relative;
