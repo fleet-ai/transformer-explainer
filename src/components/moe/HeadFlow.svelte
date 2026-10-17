@@ -76,6 +76,7 @@
 			<text x="378" y="31" text-anchor="middle" class="rope-label">RoPE</text>
 			<path d="M410 27 H432 M429 24 L432 27 L429 30" class="trace" />
 			<text x="440" y="31" class="output-size">{headSize}D</text>
+			<circle data-rope-output="query" cx="474" cy="27" r="0" />
 		</g>
 		<g class="key-row">
 			<text x="2" y="67" class="projection-letter">K</text>
@@ -105,6 +106,7 @@
 			<text x="378" y="67" text-anchor="middle" class="rope-label">RoPE</text>
 			<path d="M410 63 H432 M429 60 L432 63 L429 66" class="trace" />
 			<text x="440" y="67" class="output-size">{headSize}D</text>
+			<circle data-rope-output="key" cx="474" cy="63" r="0" />
 		</g>
 		<g class="value-row">
 			<text x="2" y="103" class="projection-letter">V</text>

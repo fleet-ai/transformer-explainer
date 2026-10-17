@@ -1,5 +1,6 @@
 <script lang="ts">
 	import HeadFlow from './moe/HeadFlow.svelte';
+	import RoPEAttentionLinks from './moe/RoPEAttentionLinks.svelte';
 	import PlainHeadFlow from './vit/PlainHeadFlow.svelte';
 	import { hybridHeadOperations, hybridInspector } from '$lib/hybrid/store';
 	import { vitHeadOperations } from '$lib/vit/store';
@@ -107,6 +108,7 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
+				{#if !isPlain && !isMLA}<RoPEAttentionLinks expanded={isAttentionExpanded} />{/if}
 				<div class="head-flow-wrap">
 					{#if isPlain}<PlainHeadFlow />{:else if isMLA}<LatentHeadFlow
 							on:inspect={(event) => (mlaStage = event.detail)}
@@ -130,7 +132,7 @@
 						<div class="column key">
 							<div class="head1 title">
 								<TextbookTooltip id="qkv">Key {kvHead + 1}</TextbookTooltip><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'RoPE'} · {headSize}D</small
+									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'After RoPE'} · {headSize}D</small
 								>
 							</div>
 
@@ -159,7 +161,7 @@
 						<div class="column query">
 							<div class="head1 title">
 								<TextbookTooltip id="qkv">Query {$attentionHeadIdx + 1}</TextbookTooltip><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'RoPE'} · {headSize}D</small
+									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'After RoPE'} · {headSize}D</small
 								>
 							</div>
 							{#each $tokens as token, index}
