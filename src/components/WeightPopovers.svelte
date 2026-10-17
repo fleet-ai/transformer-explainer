@@ -187,16 +187,8 @@
 	</div>
 {/if}
 
-{#if $weightPopover === 'qkv'}
-	<div
-		bind:this={popoverEl}
-		class="qkv-weight-popover weight-popover"
-		style={`left:${qkvPos.left}px;top:${qkvPos.top}px;`}
-		in:fade={{ duration: 300 }}
-		role="group"
-	>
-		<QkvWeightPopover></QkvWeightPopover>
-	</div>
+{#if $weightPopover === 'qkv' && (!$moeModel?.architecture || $moeModel.architecture === 'moe')}
+	<QkvWeightPopover />
 {/if}
 {#if $weightPopover === 'attention'}
 	<div

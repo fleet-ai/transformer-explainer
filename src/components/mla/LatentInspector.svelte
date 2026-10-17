@@ -12,6 +12,7 @@
 	import { loadAttentionOperations } from '$lib/moe/attention';
 	import { traceAssetUrl } from '$lib/moe/live';
 	import TraceSelector from '../moe/TraceSelector.svelte';
+	import ProjectionOperation from '../common/ProjectionOperation.svelte';
 	import { tokenLabel } from '$lib/moe/format';
 	export let stage = 'compression';
 	const dispatch = createEventDispatcher<{ close: void; rope: void; attention: void }>();
@@ -52,7 +53,7 @@
 						color: 'query'
 					},
 					{
-						label: 'Q rotary · after RoPE',
+						label: 'Q′ rotary · after RoPE',
 						values: layer?.queryAfter?.[head]?.[token],
 						color: 'query'
 					}
@@ -71,7 +72,7 @@
 							color: 'key'
 						},
 						{
-							label: 'Shared rotary key · after RoPE',
+							label: 'K′ shared rotary · after RoPE',
 							values: layer?.keyAfter?.[0]?.[token],
 							color: 'key'
 						}
@@ -106,9 +107,39 @@
 								color: 'latent'
 							}
 						];
+	$: projectionRows =
+		stage === 'query'
+			? [
+					{
+						label: 'Wq',
+						weight: `${(model?.attentionHeads ?? 16) * (model?.attentionHeadSize ?? 192)} × ${model?.hiddenSize ?? 2048}`,
+						input: `RMSNorm(x) · ${model?.hiddenSize ?? 2048}D`,
+						output: `Q · ${(model?.attentionHeads ?? 16) * (model?.attentionHeadSize ?? 192)}D`,
+						color: 'query'
+					}
+				]
+			: stage === 'compression'
+				? [
+						{
+							label: 'Wᴰᴷⱽ',
+							weight: `${(model?.kvLatentSize ?? 512) + (model?.rotarySize ?? 64)} × ${model?.hiddenSize ?? 2048}`,
+							input: `RMSNorm(x) · ${model?.hiddenSize ?? 2048}D`,
+							output: `Latent ${model?.kvLatentSize}D + rotary key ${model?.rotarySize}D`
+						}
+					]
+				: stage === 'expansion'
+					? [
+							{
+								label: `Wᵁᴷⱽ · head ${head + 1}`,
+								weight: `${(model?.contentKeySize ?? 128) + (model?.valueHeadSize ?? 128)} × ${model?.kvLatentSize ?? 512}`,
+								input: `Normalized latent · ${model?.kvLatentSize}D`,
+								output: `K content ${model?.contentKeySize}D + V ${model?.valueHeadSize}D`
+							}
+						]
+					: [];
 	$: maximum = Math.max(0, ...vectors.map((v) => (v.values?.length ?? 0) - 1));
 	$: if (coordinate > maximum) coordinate = Math.max(0, maximum - 3);
-	$: coords = Array.from({ length: 4 }, (_, i) => coordinate + i);
+	$: coords = [coordinate, coordinate + 1, coordinate + 2, coordinate + 3];
 	$: if ($moeExample) load($moeExample.id);
 	async function load(id: string) {
 		const current = ++request;
@@ -196,8 +227,8 @@
 				>
 			</p>{:else if layer}
 			<div class="explanation">
+				{#if projectionRows.length}<ProjectionOperation rows={projectionRows} />{/if}
 				{#if stage === 'query'}
-					<h3>Q = Wq · RMSNorm(x)</h3>
 					<p>
 						Each head splits into {model?.contentKeySize} content coordinates and {model?.rotarySize}
 						positional coordinates. Only the positional branch receives RoPE. Concatenating both branches
@@ -207,7 +238,6 @@
 						>Inspect recorded RoPE rotations →</button
 					>
 				{:else if stage === 'compression'}
-					<h3>[c<sup>KV</sup>, k<sup>R</sup>] = W<sup>DKV</sup> · RMSNorm(x)</h3>
 					<p>
 						A {model?.hiddenSize}D hidden vector produces a {model?.kvLatentSize}D latent and a
 						separate {model?.rotarySize}D rotary key. RMSNorm normalizes the latent. The cache
@@ -219,10 +249,6 @@
 						>Inspect the shared rotary key →</button
 					>
 				{:else if stage === 'expansion'}
-					<h3>
-						[k<sub>h</sub><sup>C</sup>, v<sub>h</sub>] = W<sup>UKV</sup><sub>h</sub> · c<sup>KV</sup
-						>
-					</h3>
 					<p>
 						Each head has its own learned expansion from the same {model?.kvLatentSize}D latent into {model?.contentKeySize}
 						content-key and {model?.valueHeadSize} value coordinates. The {model?.rotarySize}D
@@ -268,9 +294,9 @@
 					</section>{/each}
 			</div>
 			<p class="footnote">
-				All {model?.numLayers} transformer blocks execute before the vocabulary prediction. The diagram
-				reuses this block's recorded tensors; changing a head or token selects a different slice of that
-				computation.
+				Matrix boxes show shapes; values below each stage are recorded tensors. All {model?.numLayers}
+				transformer blocks execute before the vocabulary prediction. The diagram reuses this block's
+				recorded tensors; changing a head or token selects a different slice of that computation.
 				<a
 					href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
 					target="_blank"
@@ -287,7 +313,7 @@
 		right: 16px;
 		bottom: 16px;
 		width: min(1080px, calc(100vw - 32px));
-		height: min(680px, calc(100dvh - 32px));
+		height: min(710px, calc(100dvh - 32px));
 		z-index: 1200;
 		display: flex;
 		flex-direction: column;
@@ -373,7 +399,10 @@
 		color: #81549f;
 	}
 	.explanation {
-		min-height: 118px;
+		min-height: 130px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 	}
 	.explanation h3 {
 		font:
@@ -429,7 +458,7 @@
 	}
 	.tensor-grid {
 		display: grid;
-		grid-template-columns: repeat(var(--columns), 1fr);
+		grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
 		gap: 14px;
 	}
 	.tensor-grid h4 {

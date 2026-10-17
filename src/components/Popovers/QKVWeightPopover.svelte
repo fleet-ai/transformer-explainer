@@ -1,389 +1,377 @@
 <script lang="ts">
-	import { modelMeta, tokens, rootRem, moeModel } from '~/store';
-	import * as d3 from 'd3';
-	import { gsap } from '~/utils/gsap';
-	import Matrix from '~/components/common/Matrix.svelte';
-	import { onDestroy, onMount } from 'svelte';
-	import resolveConfig from 'tailwindcss/resolveConfig';
-	import tailwindConfig from '../../../tailwind.config';
-	import HelpPopover from '../common/HelpPopover.svelte';
-	import WeightPopoverCard from '../common/WeightPopoverCard.svelte';
-	import Katex from '~/utils/Katex.svelte';
-
-	const { theme } = resolveConfig(tailwindConfig);
-
-	const tokenGap = 6;
-
-	// Neutral placeholders show the matrix operation, not captured tensor values.
-	const visibleDimension = 18;
-	const visibleKeyValueDimension = visibleDimension / 2;
-	const visibleOutputDimension = visibleDimension + 2 * visibleKeyValueDimension;
-	$: queryDimension = ($moeModel?.attentionHeads ?? 16) * ($moeModel?.attentionHeadSize ?? 64);
-	$: keyValueDimension = ($moeModel?.keyValueHeads ?? 8) * ($moeModel?.attentionHeadSize ?? 64);
-	$: outputDimension = queryDimension + 2 * keyValueDimension;
-	$: tokenLen = $tokens.length;
-	$: embeddingData = Array(tokenLen)
-		.fill(0)
-		.map((col) =>
-			Array(visibleDimension)
-				.fill(0)
-				.map((d) => 0)
-		);
-
-	const qkvWeightData = Array(visibleOutputDimension)
-		.fill(0)
-		.map((col) =>
-			Array(visibleDimension)
-				.fill(0)
-				.map((d) => 0)
-		);
-
-	$: qkvOutData = Array(tokenLen)
-		.fill(0)
-		.map((col) =>
-			Array(visibleOutputDimension)
-				.fill(0)
-				.map((d) => 0)
-		);
-
-	// color scale
-	const embeddingColorScale = (d, i) => {
-		return d3.interpolate(theme.colors['gray'][100], theme.colors['gray'][400])(d);
-	};
-
-	const qkvColorScale = (d, i) => {
-		let color =
-			i < visibleDimension
-				? 'blue'
-				: i < visibleDimension + visibleKeyValueDimension
-					? 'red'
-					: 'green';
-		return d3.interpolate(theme.colors[color][100], theme.colors[color][400])(d);
-	};
-
-	// animation
-	let isAnimationActive = false;
-	let progress = 0;
-	let timeline = gsap.timeline();
-	let animationStart: ReturnType<typeof setTimeout>;
-
-	onMount(() => {
-		timeline.eventCallback('onUpdate', () => {
-			progress = timeline.progress();
-			if (progress === 1) isAnimationActive = false;
-		});
-
-		animationStart = setTimeout(() => {
-			isAnimationActive = true;
-			draw();
-		}, 300);
-	});
-
-	onDestroy(() => {
-		clearTimeout(animationStart);
-		if (timeline) {
-			timeline.kill();
-			timeline = null;
+	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
+	import {
+		attentionHeadIdx,
+		blockIdx,
+		moeExample,
+		moeModel,
+		moeTokenIndex,
+		moeAttentionOperations,
+		weightPopover
+	} from '~/store';
+	import { attentionInspector } from '$lib/inspectors';
+	import { headMapping, loadAttentionOperations } from '$lib/moe/attention';
+	import { traceAssetUrl } from '$lib/moe/live';
+	import { tokenLabel } from '$lib/moe/format';
+	import TraceSelector from '../moe/TraceSelector.svelte';
+	import ProjectionOperation from '../common/ProjectionOperation.svelte';
+	let panel: HTMLDivElement;
+	let error = '';
+	let loading = true;
+	let request = 0;
+	let coordinate = 0;
+	$: coordinates = [coordinate, coordinate + 1, coordinate + 2, coordinate + 3];
+	$: model = $moeModel;
+	$: headSize = model?.attentionHeadSize ?? 64;
+	$: mapping = headMapping(
+		$attentionHeadIdx,
+		model?.attentionHeads ?? 16,
+		model?.keyValueHeads ?? 8
+	);
+	$: layer =
+		$moeAttentionOperations?.example.id === $moeExample?.id
+			? $moeAttentionOperations?.layers[$blockIdx]
+			: undefined;
+	$: tokenOptions = ($moeExample?.tokens ?? []).map((t) => ({
+		value: t.index,
+		label: `${t.index}: ${tokenLabel(t.text)}`
+	}));
+	$: rows = [
+		{
+			label: 'Wq',
+			weight: `${(model?.attentionHeads ?? 16) * headSize} × ${model?.hiddenSize ?? 1024}`,
+			input: `x · ${model?.hiddenSize ?? 1024}D`,
+			output: `Q · ${(model?.attentionHeads ?? 16) * headSize}D`,
+			color: 'query'
+		},
+		{
+			label: 'Wk',
+			weight: `${(model?.keyValueHeads ?? 8) * headSize} × ${model?.hiddenSize ?? 1024}`,
+			input: `x · ${model?.hiddenSize ?? 1024}D`,
+			output: `K · ${(model?.keyValueHeads ?? 8) * headSize}D`,
+			color: 'key'
+		},
+		{
+			label: 'Wv',
+			weight: `${(model?.keyValueHeads ?? 8) * headSize} × ${model?.hiddenSize ?? 1024}`,
+			input: `x · ${model?.hiddenSize ?? 1024}D`,
+			output: `V · ${(model?.keyValueHeads ?? 8) * headSize}D`,
+			color: 'value'
 		}
+	];
+	$: vectors = [
+		{
+			label: `Q · head ${mapping.queryHead + 1}`,
+			values: layer?.queryBefore[mapping.queryHead]?.[$moeTokenIndex],
+			color: 'query'
+		},
+		{
+			label: `K · shared head ${mapping.keyValueHead + 1}`,
+			values: layer?.keyBefore[mapping.keyValueHead]?.[$moeTokenIndex],
+			color: 'key'
+		},
+		{
+			label: `V · shared head ${mapping.keyValueHead + 1}`,
+			values: layer?.value[mapping.keyValueHead]?.[$moeTokenIndex],
+			color: 'value'
+		}
+	];
+	$: if ($moeExample) load($moeExample.id);
+	async function load(id: string) {
+		const current = ++request;
+		loading = true;
+		error = '';
+		try {
+			const doc = await loadAttentionOperations(id);
+			if (current === request) $moeAttentionOperations = doc;
+		} catch (reason) {
+			if (current === request)
+				error = reason instanceof Error ? reason.message : 'Could not load recorded projections.';
+		} finally {
+			if (current === request) loading = false;
+		}
+	}
+	function portal(element: HTMLElement) {
+		document.body.appendChild(element);
+		return { destroy: () => element.remove() };
+	}
+	onMount(() => {
+		const previous = document.activeElement;
+		panel.focus({ preventScroll: true });
+		return () => {
+			request++;
+			if (previous instanceof HTMLElement && previous.isConnected)
+				previous.focus({ preventScroll: true });
+		};
 	});
-
-	const draw = () => {
-		const embeddingRows = d3.selectAll('.weight-popover-content .token-embedding g.g-row').nodes();
-		const weightCols = d3.selectAll('.weight-popover-content .qkv-weights g.g-col').nodes();
-
-		const outRows = d3.selectAll('.weight-popover-content .qkv-output g.g-row').nodes();
-
-		const mulSymbol = d3.select('.weight-popover-content .symbol.mul').node();
-		const equalSymbol = d3.select('.weight-popover-content .symbol.equal').node();
-
-		const highlight = '#94a3b8';
-
-		// first row detail animation
-
-		timeline.set('.formula .first-row', { opacity: 1 });
-		timeline.set('.formula .total', { opacity: 0 });
-
-		const firstOutputRowRects = d3.select(outRows[0]).selectAll('rect').nodes();
-		const firstEmbeddingRowRects = d3.select(embeddingRows[0]).selectAll('rect').nodes();
-
-		firstOutputRowRects.forEach((outputRect, outCellIdx) => {
-			const isFirstOutCell = outCellIdx === 0;
-			const firstWeightColRects = d3.select(weightCols[outCellIdx]).selectAll('rect').nodes();
-			timeline.set(firstEmbeddingRowRects, { opacity: 0.1 });
-
-			firstEmbeddingRowRects.forEach((embeddingRect, i) => {
-				//embedding
-				timeline
-					.fromTo(
-						embeddingRect,
-						{ opacity: 0.1, strokeWidth: 0 },
-						{
-							opacity: 1,
-							duration: isFirstOutCell ? 0.1 : 0.002,
-							strokeWidth: 10,
-							stroke: highlight
-						}
-					)
-					.to(
-						embeddingRect,
-						{
-							strokeWidth: 0,
-							duration: isFirstOutCell ? 0.1 : 0.002
-						},
-						'<50%'
-					);
-
-				//weights
-				timeline
-					.fromTo(
-						firstWeightColRects[i],
-						{ opacity: 0.1, strokeWidth: 0 },
-						{
-							opacity: 1,
-							duration: isFirstOutCell ? 0.1 : 0.002,
-							strokeWidth: 10,
-							stroke: highlight
-						},
-						'<-50%'
-					)
-					.to(
-						firstWeightColRects[i],
-						{
-							strokeWidth: 0,
-							duration: isFirstOutCell ? 0.1 : 0.002
-						},
-						'<50%'
-					);
-			});
-
-			//symbol
-			if (isFirstOutCell) {
-				timeline.from(
-					[mulSymbol, equalSymbol, '.formula .first-row .part1', '.formula .first-row .part2'],
-					{
-						duration: 0.05,
-						opacity: 1
-					},
-					'<50%'
-				);
-			}
-			//out
-			timeline
-				.fromTo(
-					outputRect,
-					{ opacity: 0, strokeWidth: 0 },
-					{
-						opacity: 1,
-						duration: isFirstOutCell ? 0.4 : 0.002,
-						strokeWidth: 10,
-						stroke: highlight
-					},
-					'<-50%'
-				)
-				.to(
-					outputRect,
-
-					{
-						strokeWidth: 0,
-						duration: isFirstOutCell ? 0.4 : 0.002
-					},
-					'<50%'
-				);
-
-			if (isFirstOutCell) {
-				timeline.to('.formula .first-row', { opacity: 0, duration: 0.3 }, '>+1');
-				timeline.to('.formula .total', { opacity: 1, duration: 0.3 }, `<`);
-			}
-		});
-
-		// rest row animation
-		let previousRowIdx = 0;
-
-		// out vectors
-		outRows.forEach(function (row, rowIdx) {
-			if (rowIdx === 0) return;
-
-			const outputCells = d3.select(row).selectAll('rect').nodes();
-			const embeddingRowRects = d3.select(embeddingRows[rowIdx]).selectAll('rect').nodes();
-
-			// Check if rowIdx has changed
-			if (previousRowIdx !== null && previousRowIdx !== rowIdx) {
-				timeline.fromTo(
-					embeddingRowRects,
-					{ opacity: 0.1 },
-					{
-						opacity: 1,
-						duration: 0.01
-					},
-					'<'
-				);
-
-				const weightColRects = d3
-					.selectAll('.weight-popover-content .qkv-weights g.g-col rect')
-					.nodes();
-				timeline.set(weightColRects, { opacity: 0.1 });
-			}
-
-			outputCells.forEach((d, colIdx) => {
-				const weightColRects = d3.select(weightCols[colIdx]).selectAll('rect').nodes();
-
-				timeline.fromTo(
-					weightColRects,
-					{ opacity: 0.1 },
-					{
-						opacity: 1,
-						duration: 0.01
-					},
-					`<50%`
-				);
-
-				timeline.from(
-					d,
-					{
-						opacity: 0,
-						duration: 0.01
-					},
-					`<50%`
-				);
-			});
-			previousRowIdx = rowIdx;
-		});
-	};
-
-	// event
-	let highlightCol: number | undefined = undefined;
-	let highlightRow: number | undefined = undefined;
-
-	const onMouseOverCell = (e, d) => {
-		if (isAnimationActive) return;
-		highlightRow = d.rowIndex;
-		highlightCol = d.colIndex;
-	};
-	const onMouseOutSvg = () => {
-		highlightCol = undefined;
-		highlightRow = undefined;
-	};
-
-	// const showTooltip = (e, d) => {
-	// return `(${highlightRow},${highlightCol})`;
-	// return `(i,j)`;
-	// };
 </script>
 
-<WeightPopoverCard id="qkv" title={'Query Key Value'} bind:isAnimationActive {timeline}>
-	<div class="weight-popover-content flex items-center justify-start">
-		<div class="matrix flex flex-col items-center">
-			<div class="tokens" style={`gap:${tokenGap}px`}>
-				{#each $tokens as token, index}
-					<div class="token-label"><span>{token}</span></div>
-				{/each}
-			</div>
+<svelte:window
+	on:keydown={(e) => {
+		if (e.key === 'Escape') weightPopover.set(null);
+	}}
+/>
+<div
+	use:portal
+	bind:this={panel}
+	class="projection-inspector"
+	role="dialog"
+	aria-label="Recorded Q K V projections"
+	aria-modal="false"
+	tabindex="-1"
+	on:click|stopPropagation
+>
+	<header>
+		<div>
+			<h2>Query · Key · Value</h2>
+			<p>Granite · Block {$blockIdx + 1} · Query head {$attentionHeadIdx + 1} · Before RoPE</p>
 		</div>
-		<div class="matrix flex flex-col items-center">
-			<div class="title flex items-center gap-1 self-end">
-				RMSNorm output<HelpPopover id="qkv-emgeddings"
-					>{`Each token’s hidden state after the block’s input RMSNorm.`}</HelpPopover
-				>
-			</div>
-			<!-- (tokenLen, 1024) -->
-			<Matrix
-				className="token-embedding"
-				data={embeddingData}
-				showSize={false}
-				cellHeight={rootRem * 0.8}
-				cellWidth={2}
-				rowGap={tokenGap}
-				colorScale={embeddingColorScale}
-				{highlightRow}
-			/>
-			<div class="size">({tokenLen}, {$modelMeta.dimension})</div>
-		</div>
-		<div class="operator"><div class="symbol mul">&times;</div></div>
-		<div class="matrix flex flex-col items-center">
-			<div class="title flex items-center gap-1">
-				Q·K·V Weights<HelpPopover id="qkv-weights"
-					>{`Bias-free projections produce Q with 16 heads and K/V with 8 heads each.\nRoPE is then applied to Q and K inside attention.`}</HelpPopover
-				>
-			</div>
-			<div class="flex gap-0">
-				<Matrix
-					className="qkv-weights"
-					data={qkvWeightData}
-					showSize={false}
-					groupBy={'col'}
-					cellHeight={3}
-					cellWidth={3}
-					rowGap={0}
-					colorScale={qkvColorScale}
-					{highlightCol}
-				/>
-			</div>
-
-			<div class="size">({$modelMeta.dimension}, {outputDimension})</div>
-		</div>
-		<div class="operator"><div class="symbol equal">=</div></div>
-		<div class="matrix flex flex-col items-center">
-			<div class="tokens" style={`gap:${tokenGap}px`}>
-				{#each $tokens as token, index}
-					<div class="token-label"><span>{token}</span></div>
-				{/each}
-			</div>
-		</div>
-		<div class="matrix flex flex-col items-center">
-			<div class="title">Q·K·V before RoPE</div>
-			<div class="flex">
-				<Matrix
-					className="qkv-output"
-					data={qkvOutData}
-					showSize={false}
-					cellHeight={rootRem * 0.8}
-					cellWidth={2}
-					rowGap={tokenGap}
-					colorScale={qkvColorScale}
-					{onMouseOverCell}
-					{onMouseOutSvg}
-					{highlightCol}
-					{highlightRow}
-				/>
-			</div>
-			<div class="size">({tokenLen}, {outputDimension})</div>
-		</div>
-	</div>
-	<div class="formula">
-		<div class="first-row flex items-center justify-center gap-1">
-			<span class="part1">
-				<Katex
-					displayMode
-					math={`
-	(Hidden_{1,1}×Weights_{1,1} + \\cdots + Hidden_{1,1024}×Weights_{1024,1})`}
-				/>
-			</span>
-			<span class="part2">
-				<Katex displayMode math={`= QKV_{1,1}`} />
-			</span>
-		</div>
-		<div class="total">
-			<Katex
-				displayMode
-				math={`
-	\\sum_{d=1}^{1024} Hidden_{id} \\cdot Weights_{dj} = QKV_{ij}
-	`}
+		<button
+			class="close"
+			aria-label="Close Q K V projections"
+			on:click={() => weightPopover.set(null)}>×</button
+		>
+	</header>
+	<div class="body">
+		<div class="token-row">
+			<span>Token</span><TraceSelector
+				label="Projection token"
+				options={tokenOptions}
+				bind:value={$moeTokenIndex}
 			/>
 		</div>
+		<p class="description">
+			The same RMSNorm output <b>x</b> enters three separate, bias-free projections.
+		</p>
+		<ProjectionOperation {rows} />
+		<div class="equation">
+			Q[j] = Σ Wq[j, d] × x[d] <span
+				>Sum over all {model?.hiddenSize ?? 1024} input coordinates; K and V use Wk and Wv.</span
+			>
+		</div>
+		<div class="recording-heading">
+			<h3>Recorded outputs · before RoPE</h3>
+			<div class="coordinates">
+				<span>{coordinate}–{Math.min(coordinate + 3, headSize - 1)}</span><button
+					aria-label="Previous projection coordinates"
+					disabled={coordinate === 0}
+					on:click={() => (coordinate = Math.max(0, coordinate - 4))}>‹</button
+				><button
+					aria-label="Next projection coordinates"
+					disabled={coordinate + 4 >= headSize}
+					on:click={() => (coordinate = Math.min(headSize - 4, coordinate + 4))}>›</button
+				>
+			</div>
+		</div>
+		{#if loading}<p role="status">Loading recorded projections…</p>{:else if error}<p role="alert">
+				{error} <button on:click={() => $moeExample && load($moeExample.id)}>Retry</button>
+			</p>{:else if layer}
+			<div class="tensor-grid">
+				{#each vectors as vector}<section class={vector.color}>
+						<h4>{vector.label}</h4>
+						{#each coordinates as index}<div class="value-row">
+								<span>[{index}]</span><b>{vector.values?.[index]?.toFixed(6) ?? '—'}</b>
+							</div>{/each}
+					</section>{/each}
+			</div>
+		{/if}
+		<div class="next">
+			<button on:click={() => attentionInspector.set({ kind: 'heads' })}>Head split ↗</button><span
+				>→</span
+			><button on:click={() => attentionInspector.set({ kind: 'rope', vector: 'query' })}
+				>RoPE on Q / K ↗</button
+			><span>→ Q′K′ᵀ · attention</span>
+		</div>
+		<p class="footnote">
+			Weights are shown by shape, not as recorded cells. The values above are captured projection
+			outputs, indexed by head; splitting into heads does not change them. V bypasses RoPE. <a
+				href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
+				target="_blank"
+				rel="noreferrer">Trace JSON ↗</a
+			>
+		</p>
 	</div>
-	<div class="recording-note">
-		All cells in this animation are schematic, not recorded values. Bias-free projections produce Q
-		({queryDimension}), K ({keyValueDimension}), and V ({keyValueDimension}); Q and K receive RoPE
-		afterward.
-	</div>
-</WeightPopoverCard>
+</div>
 
-<style lang="scss">
-	.recording-note {
-		max-width: 42rem;
-		padding: 0.5rem 1rem;
-		color: #6b7280;
-		font-size: 0.75rem;
-		line-height: 1.5;
+<style>
+	.projection-inspector {
+		position: fixed;
+		right: 16px;
+		bottom: 16px;
+		width: min(980px, calc(100vw - 32px));
+		max-height: calc(100dvh - 32px);
+		z-index: 1200;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		border: 1px solid #ded5eb;
+		border-radius: 8px;
+		background: white;
+		box-shadow: 0 8px 34px #33224b30;
+		color: #665775;
+		font:
+			13px/1.5 Arial,
+			sans-serif;
+		outline: none;
+		box-sizing: border-box;
+	}
+	header {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		flex-shrink: 0;
+		background: #faf8fc;
+		border-bottom: 1px solid #e9e2ef;
+		padding: 12px 18px;
+	}
+	h2 {
+		font-size: 20px;
+		font-weight: 600;
+		color: #624685;
+		margin: 0;
+	}
+	header p {
+		margin: 3px 0 0;
+		color: #91849e;
+		font-size: 12px;
+	}
+	button {
+		font: inherit;
+		cursor: pointer;
+		color: #8b59b6;
+		background: #faf7fc;
+		border: 1px solid #ded5eb;
+		border-radius: 4px;
+		padding: 4px 10px;
+	}
+	button:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+	button:focus-visible,
+	a:focus-visible {
+		outline: 2px solid #a07ac0;
+		outline-offset: 2px;
+	}
+	.close {
+		width: 30px;
+		height: 30px;
+		font-size: 24px;
+		line-height: 1;
+		padding: 0;
+		background: white;
+	}
+	.body {
+		padding: 14px 18px;
+		overflow: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.token-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-width: 0;
+	}
+	.description {
+		margin: 0;
+	}
+	.equation {
+		padding: 10px 12px;
+		border-radius: 5px;
+		background: #faf7fc;
+		color: #805a9b;
+		font:
+			15px/1.5 Georgia,
+			serif;
+	}
+	.equation span {
+		display: block;
+		font:
+			11px/1.5 Arial,
+			sans-serif;
+		color: #91849e;
+	}
+	.recording-heading,
+	.coordinates {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	h3 {
+		font-size: 13px;
+		font-weight: 500;
+		margin: 0;
+	}
+	.coordinates {
+		font-size: 11px;
+	}
+	.tensor-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 14px;
+	}
+	h4 {
+		font-size: 12px;
+		font-weight: 500;
+		margin: 0 0 6px;
+	}
+	.value-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 4px;
+		padding: 6px 10px;
+		border-radius: 3px;
+		margin: 4px 0;
+		background: #eff5fd;
+		color: #527eaf;
+	}
+	.value-row span {
+		font-size: 10px;
+		opacity: 0.75;
+	}
+	.value-row b {
+		font:
+			12px ui-monospace,
+			monospace;
+	}
+	.key .value-row {
+		background: #fdf0f1;
+		color: #ab6274;
+	}
+	.value .value-row {
+		background: #eff8f3;
+		color: #4f8a6d;
+	}
+	.next {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+	.footnote {
+		font-size: 11px;
+		color: #91849e;
+		margin: 0;
+	}
+	a {
+		color: #8b59b6;
+	}
+	@media (max-width: 600px) {
+		.body {
+			padding: 10px;
+		}
+		.tensor-grid {
+			gap: 5px;
+		}
+		.value-row {
+			padding: 6px 4px;
+		}
+		.value-row b {
+			font-size: 10px;
+		}
 	}
 </style>
