@@ -382,16 +382,22 @@
 					{@const from = diagram.stages.find((stage) => stage.id === edge.from)!}
 					{@const to = diagram.stages.find((stage) => stage.id === edge.to)!}
 					<path
-						d={edgePath(from, to)}
+						d={edge.path ?? edgePath(from, to)}
 						class="flow-ribbon"
 						class:illuminated={replayStage === edge.from || replayStage === edge.to}
 					/>
-					<path d={edgePath(from, to)} class="flow-line" marker-end="url(#architecture-arrow)" />
+					<path
+						d={edge.path ?? edgePath(from, to)}
+						class="flow-line"
+						marker-end="url(#architecture-arrow)"
+					/>
 					{#if edge.label}<text
-							x={from.x === to.x ? from.x + from.w / 2 + 16 : (from.x + from.w + to.x) / 2}
-							y={from.x === to.x
-								? (from.y + from.h + to.y) / 2
-								: (from.y + from.h / 2 + to.y + to.h / 2) / 2 - 26}
+							x={edge.labelPosition?.x ??
+								(from.x === to.x ? from.x + from.w / 2 + 16 : (from.x + from.w + to.x) / 2)}
+							y={edge.labelPosition?.y ??
+								(from.x === to.x
+									? (from.y + from.h + to.y) / 2
+									: (from.y + from.h / 2 + to.y + to.h / 2) / 2 - 26)}
 							text-anchor={from.x === to.x ? 'start' : 'middle'}
 							class="edge-label">{edge.label}</text
 						>{/if}

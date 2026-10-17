@@ -17,6 +17,8 @@ interface Edge {
 	to: string;
 	label?: string;
 	color?: string;
+	path?: string;
+	labelPosition?: { x: number; y: number };
 }
 export interface Diagram {
 	title: string;
@@ -111,7 +113,13 @@ export const diagrams: Record<ArchitectureId, Diagram> = {
 			{ from: 'compress', to: 'expand', label: 'latent cᴷⱽ' },
 			{ from: 'compress', to: 'rope', label: 'shared positional K' },
 			{ from: 'query', to: 'rope', label: '64D rotary Q' },
-			{ from: 'query', to: 'attention', label: '128D content Q' },
+			{
+				from: 'query',
+				to: 'attention',
+				label: '128D content Q',
+				path: 'M 664 514 C 688 514, 688 400, 712 400 L 970 400 C 996 400, 996 377, 1020 377',
+				labelPosition: { x: 842, y: 386 }
+			},
 			{ from: 'expand', to: 'attention' },
 			{ from: 'rope', to: 'attention' },
 			{ from: 'attention', to: 'output' }
