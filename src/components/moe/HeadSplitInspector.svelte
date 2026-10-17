@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { attentionHeadIdx, blockIdx, moeModel } from '~/store';
+	import PlainHeadFlow from '../vit/PlainHeadFlow.svelte';
+	export let plain = false;
 	import HeadFlow from './HeadFlow.svelte';
-	const dispatch = createEventDispatcher<{ close: void; rope: void }>();
+	const dispatch = createEventDispatcher<{ close: void; rope: void; projections: void }>();
 	let panel: HTMLDivElement;
 	$: queryHeads = $moeModel?.attentionHeads ?? 16;
 	$: keyValueHeads = $moeModel?.keyValueHeads ?? 8;
@@ -44,15 +46,20 @@
 		>
 	</header>
 	<div class="body">
-		<HeadFlow {queryHeads} {keyValueHeads} {headSize} on:inspect={() => dispatch('rope')} />
+		{#if plain}<PlainHeadFlow on:inspect={() => dispatch('projections')} />{:else}<HeadFlow
+				{queryHeads}
+				{keyValueHeads}
+				{headSize}
+				on:inspect={() => dispatch('rope')}
+			/>{/if}
 		<p>
 			Each token’s Q projection splits into {queryHeads} heads of {headSize} coordinates. K and V each
 			split into {keyValueHeads} heads. Splitting reshapes the projected values; it does not change them.
 		</p>
-		<p>
-			RoPE then rotates Q and K into <strong>Q′ and K′</strong>. These rotated values enter the
-			attention dot product. <strong>V stays unchanged.</strong>
-		</p>
+		{#if !plain}<p>
+				RoPE then rotates Q and K into <strong>Q′ and K′</strong>. These rotated values enter the
+				attention dot product. <strong>V stays unchanged.</strong>
+			</p>{/if}
 	</div>
 </div>
 

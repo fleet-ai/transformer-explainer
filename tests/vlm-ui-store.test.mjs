@@ -18,10 +18,11 @@ function loadModule(path, dependencies) {
   }});
   return exports;
 }
+const inspectors = loadModule('../src/lib/inspectors.ts', { 'svelte/store': svelte });
 const tensors = loadModule('../src/lib/vit/types.ts', {});
 const blockIdx = svelte.writable(0);
 const stores = loadModule('../src/lib/vlm/store.ts', {
-  'svelte/store': svelte, '~/store': { blockIdx }, '$lib/vit/types': tensors
+  '$lib/inspectors': inspectors, 'svelte/store': svelte, '~/store': { blockIdx }, '$lib/vit/types': tensors
 });
 const root = new URL('../static/traces/vlm/', import.meta.url);
 const document = JSON.parse(readFileSync(new URL('manifest.json', root)));

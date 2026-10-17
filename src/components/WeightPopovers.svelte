@@ -5,10 +5,9 @@
 	import { hybridInspector } from '$lib/hybrid/store';
 	import { vitInspectorStage } from '$lib/vit/store';
 	import { t5Inspector } from '$lib/seq2seq/store';
-	import LatentInspector from './mla/LatentInspector.svelte';
-	import RoPEInspector from './moe/RoPEInspector.svelte';
+	import { attentionInspector } from '$lib/inspectors';
 	import RecordedLMHead from './moe/RecordedLMHead.svelte';
-	import { weightPopover, tooltip, moeModel, expandedBlock } from '~/store';
+	import { weightPopover, tooltip, moeModel } from '~/store';
 	import { fade } from 'svelte/transition';
 	import AttentionWeightPopover from './Popovers/AttentionWeightPopover.svelte';
 	import MLPWeightPopover from './Popovers/MLPWeightPopover.svelte';
@@ -23,6 +22,10 @@
 		removeAttentionPathHighlight,
 		removePathHighlight
 	} from '~/utils/textbook';
+
+	$: if ($moeModel?.architecture === 'mla' && $weightPopover === 'qkv') {
+		attentionInspector.set({ kind: 'mla', stage: 'query' });
+	}
 
 	$: if ($moeModel?.architecture === 'vit' && $weightPopover) {
 		const stages: Record<string, string> = {
@@ -74,7 +77,6 @@
 	let softmaxPos = { left: 0, top: 0 };
 
 	let popoverEl: HTMLElement = null;
-	let showMLARope = false;
 
 	function handleOutsideClick(e) {
 		if (
@@ -185,17 +187,7 @@
 	</div>
 {/if}
 
-{#if $weightPopover === 'qkv' && $moeModel?.architecture === 'mla'}
-	<LatentInspector
-		stage="query"
-		on:close={() => ($weightPopover = null)}
-		on:rope={() => {
-			$weightPopover = null;
-			showMLARope = true;
-		}}
-		on:attention={() => ($weightPopover = 'attention')}
-	/>
-{:else if $weightPopover === 'qkv'}
+{#if $weightPopover === 'qkv'}
 	<div
 		bind:this={popoverEl}
 		class="qkv-weight-popover weight-popover"
@@ -250,14 +242,6 @@
 		{#if $moeModel?.architecture === 'mla'}<RecordedLMHead />{:else}<LogitWeightPopover />{/if}
 	</div>
 {/if}
-
-{#if showMLARope}<RoPEInspector
-		on:close={() => (showMLARope = false)}
-		on:attention={() => {
-			showMLARope = false;
-			$expandedBlock = { id: 'attention' };
-		}}
-	/>{/if}
 
 <style lang="scss">
 	.weight-popover {

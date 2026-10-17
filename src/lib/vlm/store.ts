@@ -1,3 +1,4 @@
+import { createInspector } from '$lib/inspectors';
 import { writable, derived } from 'svelte/store';
 import { blockIdx } from '~/store';
 import { row } from '$lib/vit/types';
@@ -6,7 +7,7 @@ export const vlmRecording = writable<VlmRecording | null>(null);
 export const vlmPhase = writable<VlmPhase>('vision');
 export const vlmVisiblePositions = writable<number[]>([0, 1, 2, 3, 4, 5, 6, 7]);
 export const vlmSelectedPosition = writable(0);
-export const vlmInspectorStage = writable<string | null>(null);
+export const vlmInspectorStage = createInspector<string | null>();
 export const vlmLoading = writable(false);
 export const vlmError = writable('');
 export const vlmLayer = derived(

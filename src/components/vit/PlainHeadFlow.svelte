@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { attentionHeadIdx, attentionHeadIdxTemp, moeModel, weightPopover } from '~/store';
+	import { createEventDispatcher } from 'svelte';
+	const dispatch = createEventDispatcher<{ inspect: void }>();
+	import { attentionHeadIdx, attentionHeadIdxTemp, moeModel } from '~/store';
 	$: heads = $moeModel?.attentionHeads ?? 3;
 	$: size = $moeModel?.attentionHeadSize ?? 64;
 	function selectHead(head: number) {
@@ -11,7 +13,7 @@
 <div class="plain-head-flow">
 	<div class="heading">
 		<span>Split into {heads} heads · {size}D each</span><button
-			on:click={() => weightPopover.set('qkv')}>Inspect projections ↗</button
+			on:click|stopPropagation={() => dispatch('inspect')}>Inspect projections ↗</button
 		>
 	</div>
 	{#each ['Q', 'K', 'V'] as label}<div

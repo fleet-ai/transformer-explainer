@@ -1,3 +1,4 @@
+import { createInspector } from '$lib/inspectors';
 import { writable, derived } from 'svelte/store';
 import { blockIdx } from '~/store';
 import type { HybridRecording } from './types';
@@ -7,7 +8,7 @@ export const hybridLayer = derived(
 	[hybridRecording, blockIdx],
 	([$recording, $block]) => $recording?.layers.get($block) ?? null
 );
-export const hybridInspector = writable<string | null>(null);
+export const hybridInspector = createInspector<string | null>();
 export const hybridLoading = writable(false);
 export const hybridError = writable('');
 export const hybridHeadOperations = derived(

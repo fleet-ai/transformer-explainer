@@ -1,3 +1,4 @@
+import { createInspector } from '$lib/inspectors';
 import { writable, derived, readable } from 'svelte/store';
 import type * as ort from 'onnxruntime-web';
 import tailwindConfig from '../../tailwind.config';
@@ -124,7 +125,7 @@ export const predictedColor = theme.colors.purple[600];
 // Interactivity
 export const hoveredPath = writable();
 export const hoveredMatrixCell = writable({ row: null, col: null });
-export const weightPopover = writable();
+export const weightPopover = createInspector<any>();
 export const tooltip = writable();
 
 export const isMobile = readable(false, (set) => {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import HeadSplitInspector from './moe/HeadSplitInspector.svelte';
-	import PlainHeadFlow from './vit/PlainHeadFlow.svelte';
+	import { attentionInspector } from '$lib/inspectors';
 	import { hybridHeadOperations, hybridInspector } from '$lib/hybrid/store';
 	import { vitHeadOperations } from '$lib/vit/store';
 	import { vlmHeadOperations, vlmInspectorStage } from '$lib/vlm/store';
@@ -26,7 +26,8 @@
 	import classNames from 'classnames';
 	import AttentionMatrix from '~/components/AttentionMatrix.svelte';
 
-	import { setContext, getContext } from 'svelte';
+	import { setContext, getContext, onDestroy } from 'svelte';
+	onDestroy(() => attentionInspector.set(null));
 	import { Tooltip } from 'flowbite-svelte';
 	import { onClickReadMore } from '~/utils/event';
 	import TextbookTooltip from './common/TextbookTooltip.svelte';
@@ -44,20 +45,9 @@
 	const outputVectorColor = 'bg-purple-500';
 
 	let isHovered = false;
-	let showRoPE = false;
-	let showHeadSplit = false;
-	// Projection, head split, and RoPE are successive inspectors, never stacked.
-	$: if ($weightPopover) {
-		showHeadSplit = false;
-		showRoPE = false;
-	}
 	function inspectHeadSplit() {
-		$weightPopover = null;
-		showRoPE = false;
-		showHeadSplit = true;
+		attentionInspector.set({ kind: 'heads' });
 	}
-	let ropeKind: 'query' | 'key' = 'query';
-	let mlaStage: string | null = null;
 	$: isMLA = $moeModel?.architecture === 'mla';
 	$: isVit = $moeModel?.architecture === 'vit';
 	$: isHybrid = $moeModel?.architecture === 'hybrid';
@@ -67,12 +57,9 @@
 		(isVlm && $moeModel?.maskMode === 'bidirectional');
 	$: usesRoPE = !isPlain && !isMLA;
 	function inspectRoPE(kind: 'query' | 'key' = 'query') {
-		$weightPopover = null;
-		showHeadSplit = false;
-		ropeKind = kind;
 		if (isVlm) vlmInspectorStage.set('rope');
 		else if (isHybrid) hybridInspector.set('rope');
-		else showRoPE = true;
+		else attentionInspector.set({ kind: 'rope', vector: kind });
 	}
 	$: valueSize = $moeModel?.valueHeadSize ?? headSize;
 	$: kvHead = Math.floor(
@@ -131,9 +118,13 @@
 		<div class="heads">
 			<HeadStack>
 				<div class="head-flow-wrap">
-					{#if isPlain}<PlainHeadFlow />{:else if isMLA}<LatentHeadFlow
-							on:inspect={(event) => (mlaStage = event.detail)}
-							on:rope={() => (showRoPE = true)}
+					{#if isPlain}<div class="rotary-sequence">
+							<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button><span
+								aria-hidden="true">→</span
+							><span>Attention</span>
+						</div>{:else if isMLA}<LatentHeadFlow
+							on:inspect={(event) => attentionInspector.set({ kind: 'mla', stage: event.detail })}
+							on:rope={() => inspectRoPE()}
 						/>{:else}
 						<div class="rotary-sequence">
 							<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button>
@@ -304,32 +295,24 @@
 		</div>
 	</div>
 </div>
-{#if showHeadSplit}<HeadSplitInspector
-		on:close={() => (showHeadSplit = false)}
-		on:rope={() => {
-			showHeadSplit = false;
-			inspectRoPE();
-		}}
-	/>{/if}
-
-{#if showRoPE}<RoPEInspector
-		kind={ropeKind}
-		on:close={() => (showRoPE = false)}
+{#if $attentionInspector?.kind === 'heads'}<HeadSplitInspector
+		plain={isPlain}
+		on:close={() => attentionInspector.set(null)}
+		on:projections={() => weightPopover.set('qkv')}
+		on:rope={() => inspectRoPE()}
+	/>{:else if $attentionInspector?.kind === 'rope'}<RoPEInspector
+		kind={$attentionInspector.vector}
+		on:close={() => attentionInspector.set(null)}
 		on:attention={() => {
-			showRoPE = false;
+			attentionInspector.set(null);
 			$expandedBlock = { id: 'attention' };
 		}}
-	/>{/if}
-
-{#if mlaStage}<LatentInspector
-		stage={mlaStage}
-		on:close={() => (mlaStage = null)}
-		on:rope={() => {
-			mlaStage = null;
-			showRoPE = true;
-		}}
+	/>{:else if $attentionInspector?.kind === 'mla'}<LatentInspector
+		stage={$attentionInspector.stage}
+		on:close={() => attentionInspector.set(null)}
+		on:rope={() => inspectRoPE()}
 		on:attention={() => {
-			mlaStage = null;
+			attentionInspector.set(null);
 			$expandedBlock = { id: 'attention' };
 		}}
 	/>{/if}
