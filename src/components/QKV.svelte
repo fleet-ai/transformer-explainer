@@ -10,6 +10,10 @@
 	} from '~/store';
 	import classNames from 'classnames';
 	import { onDestroy } from 'svelte';
+	import type { AttentionOperationsLayer } from '$lib/moe/attention';
+	import { vlmHeadOperations } from '$lib/vlm/store';
+	import { hybridHeadOperations } from '$lib/hybrid/store';
+	import { vitHeadOperations } from '$lib/vit/store';
 	import { loadAttentionOperations } from '$lib/moe/attention';
 	import VectorCanvas from './common/VectorCanvas.svelte';
 	import OperationGroup from './OperationGroup.svelte';
@@ -33,9 +37,27 @@
 	$: queryHeads = $moeModel?.attentionHeads ?? 16;
 	$: keyValueHeads = $moeModel?.keyValueHeads ?? 8;
 	$: headSize = $moeModel?.attentionHeadSize ?? 64;
+	$: isMLA = $moeModel?.architecture === 'mla';
+	$: isPlain = ['vit', 'encoder-decoder'].includes($moeModel?.architecture ?? '');
+	$: valueSize = $moeModel?.valueHeadSize ?? headSize;
 	$: kvHead = Math.floor($attentionHeadIdx / (queryHeads / keyValueHeads));
-	$: layer = recording?.example.id === $moeExample?.id ? recording?.layers[$blockIdx] : undefined;
-	$: if ($moeExample) load($moeExample.id);
+	$: layer = (
+		$moeModel?.architecture === 'vit'
+			? $vitHeadOperations
+			: $moeModel?.architecture === 'vision-language'
+				? $vlmHeadOperations
+				: $moeModel?.architecture === 'hybrid'
+					? $hybridHeadOperations
+					: recording?.example.id === $moeExample?.id
+						? recording?.layers[$blockIdx]
+						: undefined
+	) as AttentionOperationsLayer | undefined;
+	$: if (
+		$moeExample &&
+		!isPlain &&
+		!['vision-language', 'hybrid'].includes($moeModel?.architecture ?? '')
+	)
+		load($moeExample.id);
 	async function load(id: string) {
 		const current = ++request;
 		try {
@@ -49,7 +71,14 @@
 	onDestroy(() => request++);
 </script>
 
-<div class={classNames('qkv', className)} role="none" data-click="qkv-step">
+<div
+	class={classNames('qkv', className)}
+	class:latent={isMLA}
+	class:plain={isPlain}
+	role="none"
+	data-click="qkv-step"
+	style={`--q-ratio:${(3 * queryHeads * headSize) / (queryHeads * headSize + keyValueHeads * (headSize + valueSize))};--k-ratio:${(3 * keyValueHeads * headSize) / (queryHeads * headSize + keyValueHeads * (headSize + valueSize))};--v-ratio:${(3 * keyValueHeads * valueSize) / (queryHeads * headSize + keyValueHeads * (headSize + valueSize))};`}
+>
 	<div class="content relative">
 		<div
 			class="vector-column block-start-column relative flex"
@@ -61,7 +90,10 @@
 						class={`vector ${$blockIdx !== 0 ? 'bg-blue-200' : embeddingVectorColor}`}
 						class:last={index === $tokens.length - 1}
 					>
-						<VectorCanvas colorScale={$blockIdx !== 0 ? 'blue' : 'gray'} />
+						<VectorCanvas
+							colorScale={$blockIdx !== 0 ? 'blue' : 'gray'}
+							data={$moeExample?.layers[$blockIdx]?.residualInputPreview?.[index]}
+						/>
 					</div>
 				{/each}
 			</div>
@@ -91,7 +123,9 @@
 					<div class={`sub-vector query relative flex flex-col ${queryVectorColor}`}>
 						<VectorCanvas
 							colorScale="blue"
-							data={layer?.queryBefore.flatMap((head) => head[index])}
+							data={(isMLA ? layer?.queryProjection : layer?.queryBefore)?.flatMap(
+								(head) => head[index]
+							)}
 							label={layer
 								? `Recorded QUERY projection before head split, ${queryHeads * headSize} coordinates. Colors normalized within this vector.`
 								: 'Loading recorded projection values.'}
@@ -108,9 +142,14 @@
 					<div class={`sub-vector key relative flex flex-col ${keyVectorColor}`}>
 						<VectorCanvas
 							colorScale="red"
-							data={layer?.keyBefore.flatMap((head) => head[index])}
+							data={isMLA
+								? layer?.keyContent?.flatMap((head) => [
+										...head[index],
+										...(layer?.rawKeyRotary?.[0]?.[index] ?? [])
+									])
+								: layer?.keyBefore.flatMap((head) => head[index])}
 							label={layer
-								? `Recorded KEY projection before head split, ${keyValueHeads * headSize} coordinates. Colors normalized within this vector.`
+								? `Recorded ${isMLA ? 'expanded content KEY plus shared rotary key' : 'KEY projection before head split'}, ${keyValueHeads * headSize} coordinates. Colors normalized within this vector.`
 								: 'Loading recorded projection values.'}
 							active={vectorHoverIdx === index}
 						/>
@@ -127,7 +166,7 @@
 							colorScale="green"
 							data={layer?.value.flatMap((head) => head[index])}
 							label={layer
-								? `Recorded VALUE projection before head split, ${keyValueHeads * headSize} coordinates. Colors normalized within this vector.`
+								? `Recorded ${isMLA ? 'expanded latent VALUE' : 'VALUE projection before head split'}, ${keyValueHeads * valueSize} coordinates. Colors normalized within this vector.`
 								: 'Loading recorded projection values.'}
 							active={vectorHoverIdx === index}
 						/>
@@ -142,14 +181,28 @@
 				</div>
 			{/each}
 			<Tooltip class="popover" triggeredBy={'.qkv .qkv-column .vector'} placement="right"
-				>Before head split: Q {queryHeads * headSize}, K {keyValueHeads * headSize}, V {keyValueHeads *
-					headSize}. Highlighted slices are {headSize}D.</Tooltip
+				>{isMLA
+					? 'MLA projections: content and rotary Q/K; expanded latent V.'
+					: 'Before head split:'} Q {queryHeads * headSize}, K {keyValueHeads * headSize}, V {keyValueHeads *
+					valueSize}. Highlighted head: Q/K {headSize}D, V {valueSize}D.</Tooltip
 			>
 		</div>
 	</div>
 </div>
 
 <style lang="scss">
+	.qkv.plain .content .qkv-column .sub-vector.query,
+	.qkv.plain .content .qkv-column .sub-vector.key,
+	.qkv.plain .content .qkv-column .sub-vector.value {
+		height: var(--vector-height);
+	}
+	.qkv.latent .content .qkv-column .sub-vector.query,
+	.qkv.latent .content .qkv-column .sub-vector.key {
+		height: calc(var(--vector-height) * 1.125);
+	}
+	.qkv.latent .content .qkv-column .sub-vector.value {
+		height: calc(var(--vector-height) * var(--v-ratio));
+	}
 	.qkv {
 		.content {
 			display: grid;
@@ -182,15 +235,15 @@
 						opacity: 0.45;
 					}
 					&.query {
-						height: calc(var(--vector-height) * 1.5);
+						height: calc(var(--vector-height) * var(--q-ratio));
 						color: theme('colors.blue.600');
 					}
 					&.key {
-						height: calc(var(--vector-height) * 0.75);
+						height: calc(var(--vector-height) * var(--k-ratio));
 						color: theme('colors.red.600');
 					}
 					&.value {
-						height: calc(var(--vector-height) * 0.75);
+						height: calc(var(--vector-height) * var(--v-ratio));
 						color: theme('colors.green.600');
 					}
 

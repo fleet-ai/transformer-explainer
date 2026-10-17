@@ -20,6 +20,11 @@
 	const visibleDimension = 18;
 	$: logitsScaling = $moeModel?.logitsScaling ?? 6;
 	$: vocabularySize = $moeModel?.vocabSize ?? 49152;
+	$: hiddenSize = $moeModel?.hiddenSize ?? $modelMeta.dimension;
+	$: projectionDescription =
+		logitsScaling === 1
+			? 'Bias-free projection of the final RMSNorm output into vocabulary scores, before temperature and softmax.'
+			: `Bias-free projection of the final RMSNorm output into vocabulary scores. This model divides these scores by ${logitsScaling} before temperature and softmax.`;
 	$: tokenLen = $tokens.length;
 	$: inputData = Array(1)
 		.fill(0)
@@ -167,7 +172,6 @@
 					},
 					'<50%'
 				);
-
 			}
 			//out
 			timeline
@@ -224,7 +228,6 @@
 					.selectAll('.weight-popover-content .lm-head-weights g.g-col rect')
 					.nodes();
 				timeline.set(weightColRects, { opacity: 0.1 });
-
 			}
 
 			outputCells.forEach((d, colIdx) => {
@@ -293,9 +296,7 @@
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
 				Output Projection Weights
-				<HelpPopover id="lm-head-weights"
-					>{`Bias-free projection of the final RMSNorm output into vocabulary scores.\nGranite divides these scores by 6 before temperature and softmax.`}</HelpPopover
-				>
+				<HelpPopover id="lm-head-weights">{projectionDescription}</HelpPopover>
 			</div>
 			<div class="flex gap-0">
 				<Matrix
@@ -313,7 +314,9 @@
 
 			<div class="size">({$modelMeta.dimension}, {vocabularySize.toLocaleString()})</div>
 		</div>
-		<div class="operator"><div class="symbol divide">÷ {logitsScaling}</div></div>
+		{#if logitsScaling !== 1}<div class="operator">
+				<div class="symbol divide">÷ {logitsScaling}</div>
+			</div>{/if}
 		<div class="operator"><div class="symbol equal">=</div></div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
@@ -346,26 +349,40 @@
 				<Katex
 					displayMode
 					math={`
-	(Hidden_{1}×Weights_{1,1} + \\cdots + Hidden_{1024}×Weights_{1024,1})`}
+	(Hidden_{1}×Weights_{1,1} + \\cdots + Hidden_{${hiddenSize}}×Weights_{${hiddenSize},1})`}
 				/>
 			</span>
 			<span class="part2">
-				<Katex displayMode math={`\\div ${logitsScaling} = Logits_{1}`} />
+				<Katex
+					displayMode
+					math={`${logitsScaling === 1 ? '' : `\\div ${logitsScaling}`} = Logits_{1}`}
+				/>
 			</span>
 		</div>
 		<div class="total">
 			<Katex
 				displayMode
 				math={`
-	\\frac{1}{${logitsScaling}} \\sum_{d=1}^{1024} Hidden_{d} \\cdot Weights_{di} = Logits_{i}
+	${logitsScaling === 1 ? '' : `\\frac{1}{${logitsScaling}}`} \\sum_{d=1}^{${hiddenSize}} Hidden_{d} \\cdot Weights_{di} = Logits_{i}
 	`}
 			/>
 		</div>
 	</div>
-	<div class="recording-note">All cells in this animation are schematic, not recorded values. The bias-free output projection acts on the final RMSNorm output; its scores are divided by {logitsScaling} before the temperature control. Recorded logits appear in the main diagram.</div>
+	<div class="recording-note">
+		All cells in this animation are schematic, not recorded values. The bias-free output projection
+		acts on the final RMSNorm output{#if logitsScaling !== 1}; its scores are divided by {logitsScaling}
+			before the temperature control{/if}. Recorded logits appear in the main diagram.
+	</div>
 </WeightPopoverCard>
+
 <style lang="scss">
- .recording-note { max-width: 42rem; padding: .5rem 1rem; color: #6b7280; font-size: .75rem; line-height: 1.5; }
+	.recording-note {
+		max-width: 42rem;
+		padding: 0.5rem 1rem;
+		color: #6b7280;
+		font-size: 0.75rem;
+		line-height: 1.5;
+	}
 	.weight-popover-content {
 		padding: 3rem 2rem 1.5rem 3.5rem;
 		gap: 0.5rem;

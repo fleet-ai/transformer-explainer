@@ -17,7 +17,7 @@ function writable(value) {
 const storeNames = ['attentionHeadIdx', 'attentionHeadIdxTemp', 'blockIdx',
   'expandedBlock', 'highlightedToken', 'hoveredMatrixCell', 'inputText', 'isFetchingModel',
   'isLoaded', 'isModelRunning', 'isTextbookOpen', 'modelData', 'moeDocument', 'moeExample',
-  'moeModel', 'moeTokenIndex', 'predictedToken', 'sampling', 'selectedExampleIdx',
+  'moeModel', 'moeTokenIndex', 'moeAttentionOperations', 'predictedToken', 'sampling', 'selectedExampleIdx',
   'selectedModel', 'temperature', 'tokenIds', 'tokens'];
 const stores = Object.fromEntries(storeNames.map(name => [name, writable(undefined)]));
 stores.modelMetaMap = {};

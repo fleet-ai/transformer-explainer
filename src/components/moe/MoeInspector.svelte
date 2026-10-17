@@ -15,14 +15,26 @@
 	let request = 0;
 	let panel: HTMLDivElement;
 	$: trace = $moeExample?.layers[$blockIdx]?.tokens[$moeTokenIndex];
+	$: isMLA = $moeModel?.architecture === 'mla';
+	$: isDense = $moeExample?.layers[$blockIdx]?.feedForwardType === 'dense';
+	$: isShared = isMLA && expert === $moeModel?.numExperts;
+	$: expertLabel = isDense
+		? 'Dense feed-forward'
+		: isShared
+			? 'Shared experts'
+			: `Expert ${expert}`;
+	$: evaluated = isDense || isShared || rank >= 0;
 	$: rank = expert !== null && trace ? trace.selectedExperts.indexOf(expert) : -1;
-	$: sum = trace ? sumCoordinate(trace, coordinate, $moeModel?.residualMultiplier ?? 0.22) : null;
+	$: sum =
+		trace && !isDense
+			? sumCoordinate(trace, coordinate, $moeModel?.residualMultiplier ?? 0.22)
+			: null;
 	$: operationToken =
 		recording?.example.id === $moeExample?.id
 			? recording?.layers[$blockIdx]?.tokens[$moeTokenIndex]
 			: undefined;
 	$: operation = operationToken?.experts.find((item) => item.id === expert) ?? null;
-	$: if (expert !== null && rank >= 0 && $moeExample) load($moeExample.id);
+	$: if (expert !== null && evaluated && $moeExample) load($moeExample.id);
 
 	async function load(exampleId: string) {
 		const current = ++request;
@@ -71,12 +83,12 @@
 	class="moe-inspector"
 	role="dialog"
 	aria-modal="false"
-	aria-label={expert === null ? 'Weighted sum operations' : `Expert ${expert} operations`}
+	aria-label={expert === null ? 'Weighted sum operations' : `${expertLabel} operations`}
 	tabindex="-1"
 >
 	<header>
 		<div>
-			<h2>{expert === null ? 'Σ · Weighted sum' : `Expert ${expert} · SwiGLU`}</h2>
+			<h2>{expert === null ? 'Σ · Weighted sum' : `${expertLabel} · SwiGLU`}</h2>
 			<p>
 				Block {$blockIdx + 1} · token {$moeTokenIndex}
 				<b>“{tokenLabel($moeExample?.tokens[$moeTokenIndex]?.text ?? '')}”</b>
@@ -89,12 +101,20 @@
 	<div class="inspector-body" class:expert-mode={expert !== null}>
 		{#if expert !== null && trace}
 			<div class="expert-meta">
-				<span>Router probability <b>{percent(trace.routerProbabilities[expert], 2)}</b></span>
-				<span>Mixing weight <b>{rank >= 0 ? percent(trace.routingWeights[rank], 2) : '0%'}</b></span
-				>
-				<button class="text-button" on:click={() => dispatch('sum')}>See Σ weighted sum →</button>
+				{#if isDense}<span>Block 1 · every token uses this dense network</span><span
+						>{$moeModel?.denseIntermediateSize} intermediate coordinates</span
+					>
+				{:else if isShared}<span>{$moeModel?.sharedExperts} always-active shared experts</span><span
+						>Added with weight <b>1</b></span
+					><button class="text-button" on:click={() => dispatch('sum')}>See Σ weighted sum →</button
+					>
+				{:else}<span>Router probability <b>{percent(trace.routerProbabilities[expert], 2)}</b></span
+					><span
+						>Mixing weight <b>{rank >= 0 ? percent(trace.routingWeights[rank], 2) : '0%'}</b></span
+					><button class="text-button" on:click={() => dispatch('sum')}>See Σ weighted sum →</button
+					>{/if}
 			</div>
-			{#if rank < 0}
+			{#if !evaluated}
 				<p class="message">
 					This expert is outside the top-{$moeModel?.topK}. It was not evaluated for this token.
 				</p>
@@ -112,16 +132,24 @@
 					<ExpertOperations
 						{operation}
 						{expert}
+						label={expertLabel}
 						inputPreview={operationToken.inputPreview}
 						hiddenSize={$moeModel?.hiddenSize ?? 1024}
-						intermediateSize={$moeModel?.intermediateSize ?? 512}
+						intermediateSize={operation.intermediateSize ??
+							(isDense
+								? $moeModel?.denseIntermediateSize
+								: isShared
+									? $moeModel?.sharedIntermediateSize
+									: $moeModel?.intermediateSize) ??
+							512}
 					/>
 				{/key}
 			{:else}<p class="message" role="alert">No operations recorded for this expert.</p>{/if}
 		{:else if trace && sum}
 			<div class="sum-formula">
 				<span>y<sub>j</sub> =</span><strong>Σ</strong><span
-					>w<sub>e</sub> × Expert<sub>e</sub>(x)<sub>j</sub></span
+					>w<sub>e</sub> × Expert<sub>e</sub>(x)<sub>j</sub>{#if isMLA}
+						+ Shared(x)<sub>j</sub>{/if}</span
 				>
 			</div>
 			<div class="coordinate-picker">
@@ -150,7 +178,7 @@
 					>{#each sum.terms as term}<tr
 							><td
 								><button class="text-button" on:click={() => dispatch('expert', term.expert)}
-									>E{term.expert.toString().padStart(2, '0')} ↗</button
+									>{term.shared ? 'Shared experts' : `E${term.expert.toString().padStart(2, '0')}`} ↗</button
 								></td
 							>
 							<td>{number(term.weight)}</td><td
@@ -170,15 +198,21 @@
 				<span>Recorded MoE output [{coordinate}]</span><strong>{number(sum.recorded)}</strong>
 			</div>
 			<div class="residual-equation">
-				<span>Then residual scaling</span><b
+				<span
+					>{($moeModel?.residualMultiplier ?? 0.22) === 1
+						? 'Then add to the residual stream'
+						: 'Then residual scaling'}</span
+				><b
 					>{number(sum.recorded)} × {$moeModel?.residualMultiplier ?? 0.22} = {number(
 						sum.scaled
 					)}</b
 				>
 			</div>
 			<p class="footnote">
-				This scaled value is added to the residual stream. Values above are rounded for display; the
-				sum uses recorded precision. Reconstruction difference: {Math.abs(
+				{isMLA
+					? 'Routed weights are selected from the full router softmax without renormalization. The shared branch is added once with weight 1.'
+					: 'This scaled value is added to the residual stream.'} Values above are rounded for display;
+				the sum uses recorded precision. Reconstruction difference: {Math.abs(
 					sum.difference
 				).toExponential(2)}.
 			</p>

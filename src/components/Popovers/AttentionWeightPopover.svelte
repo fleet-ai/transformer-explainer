@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { modelMeta, tokens, rootRem, modelData, attentionHeadIdx, blockIdx, moeExample } from '~/store';
+	import {
+		modelMeta,
+		tokens,
+		rootRem,
+		modelData,
+		attentionHeadIdx,
+		blockIdx,
+		moeExample,
+		moeModel
+	} from '~/store';
 	import * as d3 from 'd3';
 	import { gsap } from '~/utils/gsap';
 	import Matrix from '~/components/common/Matrix.svelte';
@@ -20,13 +29,36 @@
 		.map((col) => Array($tokens.length).fill(-Infinity));
 
 	// generate data
-	$: softmaxed = $modelData?.outputs?.[`block_${$blockIdx}_attn_head_${$attentionHeadIdx}_attn_dropout`]?.data || placeHolderData;
+	$: softmaxed =
+		$modelData?.outputs?.[`block_${$blockIdx}_attn_head_${$attentionHeadIdx}_attn_dropout`]?.data ||
+		placeHolderData;
 
-	const visibleDimension = 8;
 	$: tokenLen = $tokens.length;
-	$: capturedValues = $moeExample?.layers[$blockIdx].valuePreview[$attentionHeadIdx] ?? [];
-	$: valueData = Array.from({length: visibleDimension}, (_, dimension) => capturedValues.map(row => row[dimension]));
-	$: outData = softmaxed.map(row => Array.from({length: visibleDimension}, (_, dimension) => row.reduce((sum, weight, token) => sum + weight * (capturedValues[token]?.[dimension] ?? 0), 0)));
+	$: valueHeadSize =
+		$moeModel?.valueHeadSize ??
+		$moeModel?.attentionHeadSize ??
+		$modelMeta.dimension / $modelMeta.attention_head_num;
+	$: capturedValues = $moeExample?.layers[$blockIdx]?.valuePreview?.[$attentionHeadIdx] ?? [];
+	$: visibleDimension = Math.min(8, valueHeadSize, ...capturedValues.map((row) => row.length));
+	$: hasRecordedValues =
+		tokenLen > 0 &&
+		capturedValues.length === tokenLen &&
+		visibleDimension > 0 &&
+		capturedValues.every((row) => row.slice(0, visibleDimension).every(Number.isFinite)) &&
+		softmaxed.length === tokenLen &&
+		softmaxed.every((row) => row.length === tokenLen && row.every(Number.isFinite));
+	$: valueData = hasRecordedValues
+		? Array.from({ length: visibleDimension }, (_, dimension) =>
+				capturedValues.map((row) => row[dimension])
+			)
+		: [];
+	$: outData = hasRecordedValues
+		? softmaxed.map((row) =>
+				Array.from({ length: visibleDimension }, (_, dimension) =>
+					row.reduce((sum, weight, token) => sum + weight * capturedValues[token][dimension], 0)
+				)
+			)
+		: [];
 
 	// color scale
 	const valueColorScale = (d, i) => {
@@ -66,6 +98,10 @@
 	});
 
 	const draw = () => {
+		if (!hasRecordedValues) {
+			isAnimationActive = false;
+			return;
+		}
 		const attentionRows = d3
 			.selectAll('.attention-weight-popover .attention-matrix g.g-row')
 			.nodes();
@@ -250,108 +286,121 @@
 	bind:isAnimationActive
 	{timeline}
 >
-	<div class="attention-weight-poover weight-popover-content flex items-center justify-start">
-		<div class="matrix flex flex-col items-center">
-			<div class="title">Attention</div>
-			<Matrix
-				className="attention-matrix"
-				data={maskArray(softmaxed)}
-				showSize={false}
-				cellHeight={12}
-				cellWidth={12}
-				rowGap={3}
-				colGap={3}
-				shape={'circle'}
-				colorScale={softmaxColorScale}
-				{highlightRow}
-			/>
-			<div class="size">({tokenLen}, {tokenLen})</div>
-		</div>
-		<div class="operator"><div class="symbol mul">&times;</div></div>
-		<div class="matrix flex flex-col items-center">
-			<div class="tokens" style={`gap:${tokenGap}px`}>
-				{#each $tokens as token, index}
-					<div class="token-label"><span>{token}</span></div>
-				{/each}
-			</div>
-		</div>
-		<div class="matrix flex flex-col items-center">
-			<div class="title flex items-center gap-1">Value</div>
-			<div class="flex gap-0">
+	{#if hasRecordedValues}
+		<div class="attention-weight-poover weight-popover-content flex items-center justify-start">
+			<div class="matrix flex flex-col items-center">
+				<div class="title">Attention</div>
 				<Matrix
-					className="value-matrix"
-					data={valueData}
+					className="attention-matrix"
+					data={maskArray(softmaxed)}
 					showSize={false}
-					groupBy={'col'}
-					cellHeight={rootRem * 0.7}
-					cellWidth={2}
-					rowGap={tokenGap}
-					colorScale={valueColorScale}
-					{highlightCol}
-				/>
-			</div>
-
-			<div class="size">
-				({tokenLen}, {$modelMeta.dimension / $modelMeta.attention_head_num})
-			</div>
-		</div>
-		<div class="operator"><div class="symbol equal">=</div></div>
-		<div class="matrix flex flex-col items-center">
-			<div class="tokens" style={`gap:${tokenGap}px`}>
-				{#each $tokens as token, index}
-					<div class="token-label"><span>{token}</span></div>
-				{/each}
-			</div>
-		</div>
-		<div class="matrix flex flex-col items-center">
-			<div class="title">Out</div>
-			<div class="flex">
-				<Matrix
-					className="head-out-matrix"
-					data={outData}
-					showSize={false}
-					cellHeight={rootRem * 0.7}
-					cellWidth={2}
-					rowGap={tokenGap}
-					colorScale={outColorScale}
-					{onMouseOverCell}
-					{onMouseOutSvg}
-					{highlightCol}
+					cellHeight={12}
+					cellWidth={12}
+					rowGap={3}
+					colGap={3}
+					shape={'circle'}
+					colorScale={softmaxColorScale}
 					{highlightRow}
 				/>
+				<div class="size">({tokenLen}, {tokenLen})</div>
 			</div>
-			<div class="size">
-				({tokenLen}, {$modelMeta.dimension / $modelMeta.attention_head_num})
+			<div class="operator"><div class="symbol mul">&times;</div></div>
+			<div class="matrix flex flex-col items-center">
+				<div class="tokens" style={`gap:${tokenGap}px`}>
+					{#each $tokens as token, index}
+						<div class="token-label"><span>{token}</span></div>
+					{/each}
+				</div>
+			</div>
+			<div class="matrix flex flex-col items-center">
+				<div class="title flex items-center gap-1">Value</div>
+				<div class="flex gap-0">
+					<Matrix
+						className="value-matrix"
+						data={valueData}
+						showSize={false}
+						groupBy={'col'}
+						cellHeight={rootRem * 0.7}
+						cellWidth={2}
+						rowGap={tokenGap}
+						colorScale={valueColorScale}
+						{highlightCol}
+					/>
+				</div>
+
+				<div class="size">
+					({tokenLen}, {valueHeadSize})
+				</div>
+			</div>
+			<div class="operator"><div class="symbol equal">=</div></div>
+			<div class="matrix flex flex-col items-center">
+				<div class="tokens" style={`gap:${tokenGap}px`}>
+					{#each $tokens as token, index}
+						<div class="token-label"><span>{token}</span></div>
+					{/each}
+				</div>
+			</div>
+			<div class="matrix flex flex-col items-center">
+				<div class="title">Out</div>
+				<div class="flex">
+					<Matrix
+						className="head-out-matrix"
+						data={outData}
+						showSize={false}
+						cellHeight={rootRem * 0.7}
+						cellWidth={2}
+						rowGap={tokenGap}
+						colorScale={outColorScale}
+						{onMouseOverCell}
+						{onMouseOutSvg}
+						{highlightCol}
+						{highlightRow}
+					/>
+				</div>
+				<div class="size">
+					({tokenLen}, {valueHeadSize})
+				</div>
 			</div>
 		</div>
-	</div>
-	<div class="formula">
-		<div class="first-row flex items-center justify-center gap-1">
-			<span class="part1">
+		<div class="formula">
+			<div class="first-row flex items-center justify-center gap-1">
+				<span class="part1">
+					<Katex
+						displayMode
+						math={`
+	Attention_{1,1} \\cdot Value_{1,1} + \\cdots + Attention_{1,${tokenLen}} \\cdot Value_{${tokenLen},1}`}
+					/>
+				</span>
+				<span class="part2">
+					<Katex displayMode math={`= Out_{1,1}`} />
+				</span>
+			</div>
+			<div class="total">
 				<Katex
 					displayMode
 					math={`
-	Attention_{1,1} \\cdot Value_{1,1} + \\cdots + Attention_{1,${tokenLen}} \\cdot Value_{${tokenLen},1}`}
-				/>
-			</span>
-			<span class="part2">
-				<Katex displayMode math={`= Out_{1,1}`} />
-			</span>
-		</div>
-		<div class="total">
-			<Katex
-				displayMode
-				math={`
 	\\sum_{k=1}^{${tokenLen}} Attention_{ik} \\cdot Value_{kj}= Out_{ij} 
 	`}
-			/>
+				/>
+			</div>
 		</div>
-	</div>
+		<div class="recording-note">
+			First {visibleDimension} of {valueHeadSize} recorded Value coordinates. Output coordinates are
+			derived from the recorded attention × Value product.
+		</div>
+	{:else}
+		<div class="recording-note" role="status">
+			Recorded Value coordinates for this head are not available.
+		</div>
+	{/if}
 </WeightPopoverCard>
 
-<div class="recording-note">First 8 recorded Value coordinates. Output coordinates are derived from the recorded attention × Value product.</div>
 <style lang="scss">
- .recording-note { padding: .5rem 1rem; color: #9ca3af; font-size: .75rem; }
+	.recording-note {
+		padding: 0.5rem 1rem;
+		color: #9ca3af;
+		font-size: 0.75rem;
+	}
 	.weight-popover-content {
 		padding: 3rem 3rem 1.5rem 2.5rem;
 		gap: 1rem;

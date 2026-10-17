@@ -10,6 +10,7 @@
 	export let isAnimationActive: boolean = false;
 	export let timeline;
 	export let isOpen: boolean = true;
+	export let showReplay = true;
 
 	let startTime;
 
@@ -48,7 +49,7 @@
 	>
 		<h3 class="font-semibold text-gray-900">{title}</h3>
 		<div class="controls">
-			{#if isAnimationActive}
+			{#if showReplay && isAnimationActive}
 				<button
 					class="play-control forward"
 					data-click="matrix-calc-forward-btn"
@@ -73,7 +74,7 @@
 						/>
 					</svg>
 				</button>
-			{:else}
+			{:else if showReplay}
 				<button
 					class="play-control restart"
 					data-click="matrix-calc-restart-btn"

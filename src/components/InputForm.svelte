@@ -11,7 +11,10 @@
 		expandedBlock,
 		weightPopover,
 		moeDocument,
-		moeExample
+		moeExample,
+		moeModel,
+		selectedExampleIdx,
+		recordedControls
 	} from '~/store';
 	import { hydrateRecordedExample } from '$lib/moe/adapter';
 	import {
@@ -53,20 +56,31 @@
 	}
 	$: if ($moeDocument && !$moeDocument.examples.some((example) => isLiveTrace(example.id)))
 		presetDocument = $moeDocument;
+	$: isMLA = $moeModel?.architecture === 'mla';
+	$: recordedOnly = !!$moeModel?.architecture && $moeModel.architecture !== 'moe';
 	$: completion = resolvePromptCompletion(
 		$inputText,
 		$moeDocument?.vocabulary,
 		$predictedToken?.tokenId
 	);
 	$: dirty = editing || draft !== $inputText;
-	$: editorText = preparePromptSubmission(draft, completion, dirty);
-	$: showPrediction = !busy && !dirty && !!completion.token;
+	$: sourcePromptOnly =
+		$moeModel?.architecture === 'encoder-decoder' || $moeModel?.outputKind === 'classification';
+	$: editorText = sourcePromptOnly ? draft : preparePromptSubmission(draft, completion, dirty);
+	$: showPrediction = !sourcePromptOnly && !busy && !dirty && !!completion.token;
 	$: if (inputRef && editorText && !dirty) revealCompletion(editorText);
 	$: disabled = !$moeDocument || busy;
-	$: parameterDisabled = !$moeDocument || !!$weightPopover || busy;
-	$: invalidPrompt = promptError(editorText) || (!dirty ? completion.error : '');
+	$: parameterDisabled =
+		!$moeDocument || !!$weightPopover || busy || $moeModel?.outputKind === 'classification';
+	$: invalidPrompt = recordedOnly
+		? ''
+		: promptError(editorText) || (!dirty ? completion.error : '');
 	$: finished = !dirty && completion.finished;
-	$: traceUrl = traceAssetUrl($moeExample?.id ?? '', 'main', base);
+	$: traceUrl =
+		$recordedControls?.traceUrl ??
+		(isMLA
+			? `${base}/traces/deepseek-mla.json`
+			: traceAssetUrl($moeExample?.id ?? '', 'main', base));
 	$: currentIsLive = isLiveTrace($moeExample?.id ?? '');
 	function closeDiagramDetails() {
 		$expandedBlock = { id: null };
@@ -79,11 +93,26 @@
 		editing = false;
 		draft = presetDocument.examples[index].prompt;
 		closeDiagramDetails();
-		hydrateRecordedExample(presetDocument, index);
+		if ($recordedControls?.selectExample) $recordedControls.selectExample(index);
+		else hydrateRecordedExample(presetDocument, index);
 	}
 	async function handleSubmit(event: Event) {
 		event.preventDefault();
-		if (disabled || finished) return;
+		if (disabled || (!recordedOnly && finished)) return;
+		if (recordedOnly) {
+			const index = dirty
+				? (presetDocument?.examples.findIndex(
+						(example) => example.prompt.trim() === draft.trim()
+					) ?? -1)
+				: $selectedExampleIdx;
+			if (index < 0) {
+				error = `This ${$moeModel?.name ?? 'model'} view contains complete recorded forward passes. Choose a saved example to replay every layer.`;
+				return;
+			}
+			if (!dirty && $recordedControls?.replay) $recordedControls.replay();
+			else onSelectExample(index);
+			return;
+		}
 		if (invalidPrompt) {
 			error = invalidPrompt;
 			return;
@@ -138,7 +167,7 @@
 	}
 	function onFocusInput() {
 		closeDiagramDetails();
-		if (!dirty) draft = completion.text;
+		if (!dirty) draft = recordedOnly ? $inputText : completion.text;
 		editing = true;
 	}
 	function syncPreviewScroll() {
@@ -206,7 +235,9 @@
 						class="text-box"
 						class:has-prediction={showPrediction}
 						placeholder="Type your own prompt…"
-						title="Enter a prompt. Enter generates; Shift+Enter inserts a line break. Up to 32 tokens."
+						title={recordedOnly
+							? 'Choose a recorded prompt from Examples. Replay returns to its first transformer block.'
+							: 'Enter a prompt. Enter generates; Shift+Enter inserts a line break. Up to 32 tokens.'}
 						aria-label="Prompt"
 						aria-invalid={!!invalidPrompt}
 						aria-describedby="prompt-status"
@@ -222,6 +253,9 @@
 				{#if busy}<div class="loading"><LoadingDots /></div>{/if}
 				<div class="helper-text" id="prompt-status" aria-live="polite">
 					{#if busy}{progressLabels[progress]}
+					{:else if recordedOnly}{$recordedControls?.status ??
+							`${$moeModel?.name} · full ${$moeModel?.numLayers}-block inference`} ·
+						<a href={traceUrl} download>trace JSON ↓</a>
 					{:else if invalidPrompt}<span class="draft-status">{invalidPrompt}</span>
 					{:else if finished}End of text · edit the prompt to continue
 					{:else if dirty}<span class="draft-status"
@@ -231,14 +265,14 @@
 							? 'Fresh Granite trace'
 							: 'Recorded Granite MoE'} ·
 						<a href={traceUrl} download>trace JSON ↓</a>{/if}
-					<span class="local-status">
-						· Local Granite: {serviceState} ·
-						<button
-							type="button"
-							on:click|stopPropagation={() => (showSetup = !showSetup)}
-							aria-expanded={showSetup}>setup</button
-						></span
-					>
+					{#if !recordedOnly}<span class="local-status">
+							· Local Granite: {serviceState} ·
+							<button
+								type="button"
+								on:click|stopPropagation={() => (showSetup = !showSetup)}
+								aria-expanded={showSetup}>setup</button
+							></span
+						>{/if}
 				</div>
 				{#if error || showSetup}
 					<div class="prompt-feedback" on:click|stopPropagation role="none">
@@ -275,21 +309,26 @@
 		</ButtonGroup>
 		<button
 			data-click="generate-btn"
-			disabled={disabled || !!invalidPrompt || finished}
+			disabled={disabled || !!invalidPrompt || (!recordedOnly && finished)}
 			class={classNames('generate-button rounded-lg text-center text-sm shadow-sm', {
-				disabled: disabled || !!invalidPrompt || finished,
-				active: !(disabled || invalidPrompt || finished)
+				disabled: disabled || !!invalidPrompt || (!recordedOnly && finished),
+				active: !(disabled || invalidPrompt || (!recordedOnly && finished))
 			})}
-			title={invalidPrompt ||
-				(finished
-					? 'End of text. Edit the prompt to continue.'
-					: 'Continue this text on Local Granite and record its trace')}
-			type="submit">{busy ? 'Running…' : 'Generate'}</button
+			title={recordedOnly
+				? 'Replay the full recorded model forward pass'
+				: invalidPrompt ||
+					(finished
+						? 'End of text. Edit the prompt to continue.'
+						: 'Continue this text on Local Granite and record its trace')}
+			type="submit">{busy ? 'Running…' : recordedOnly ? 'Replay' : 'Generate'}</button
 		>
 	</form>
-	<div class="parameters" data-click="input-parameters">
-		<Temperature disabled={parameterDisabled} /><Sampling disabled={parameterDisabled} />
-	</div>
+	{#if $moeModel?.outputKind !== 'classification'}<div
+			class="parameters"
+			data-click="input-parameters"
+		>
+			<Temperature disabled={parameterDisabled} /><Sampling disabled={parameterDisabled} />
+		</div>{/if}
 </div>
 
 <style lang="scss">

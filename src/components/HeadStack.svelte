@@ -1,20 +1,23 @@
 <script lang="ts">
 	import {
 		modelMeta,
+		moeModel,
 		headGap,
 		attentionHeadIdx,
 		attentionHeadIdxTemp,
 		isOnAnimation,
 		userId
 	} from '~/store';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { gsap, Power1 } from '~/utils/gsap';
 	import { AngleLeftOutline, AngleRightOutline } from 'flowbite-svelte-icons';
 	import TextbookTooltip from './common/TextbookTooltip.svelte';
 	import { textPages } from '~/utils/textbookPages';
 
+	let attentionTimer: ReturnType<typeof setTimeout>;
 	const asyncUpdateAttentionIdx = () => {
-		setTimeout(() => {
+		clearTimeout(attentionTimer);
+		attentionTimer = setTimeout(() => {
 			$attentionHeadIdx = $attentionHeadIdxTemp;
 		}, 850);
 	};
@@ -53,8 +56,19 @@
 
 	let currentHeadIdx = $attentionHeadIdxTemp;
 
-	attentionHeadIdxTemp.subscribe((newIdx) => {
+	const unsubscribeHead = attentionHeadIdxTemp.subscribe((newIdx) => {
 		if (newIdx === currentHeadIdx) return;
+
+		// Recorded views can jump directly to any head or switch between stacks
+		// with different head counts. Keep their geometry fixed while swapping
+		// tensors; the original carousel reorders stale cards during those jumps.
+		if ($moeModel) {
+			clearTimeout(attentionTimer);
+			tl?.kill();
+			currentHeadIdx = newIdx;
+			$attentionHeadIdx = newIdx;
+			return;
+		}
 
 		// 12->1
 		if (currentHeadIdx === $modelMeta.attention_head_num - 1 && newIdx === 0) {
@@ -91,8 +105,14 @@
 	});
 
 	let tl;
+	onDestroy(() => {
+		unsubscribeHead();
+		clearTimeout(attentionTimer);
+		tl?.kill();
+	});
 
 	const animateForwardTransition = () => {
+		if (!container || heads.length < 2) return;
 		if (tl) {
 			tl.progress(1).kill();
 		}
@@ -182,6 +202,7 @@
 	};
 
 	const animateBackwardTransition = () => {
+		if (!container || heads.length < 2) return;
 		if (tl) {
 			tl.progress(1).kill();
 		}
@@ -320,7 +341,11 @@
 	<div class={'head-content'} bind:this={headContent}>
 		<slot></slot>
 	</div>
-	<div class="head-card-container absolute" bind:this={container}>
+	<div
+		class="head-card-container absolute"
+		style={`z-index:${Math.min(10, Math.max(0, $modelMeta.attention_head_num - 1))};`}
+		bind:this={container}
+	>
 		{#each headStyles as head, index}
 			<div
 				class={`head-${index} head-card absolute`}
@@ -372,9 +397,6 @@
 		}
 	}
 
-	.head-card-container {
-		z-index: 11;
-	}
 	.head-card {
 		background-color: white;
 		border: 1px solid #f9fafb;

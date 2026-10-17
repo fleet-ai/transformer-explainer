@@ -8,6 +8,7 @@
 	import ArchitectureTabs from './common/ArchitectureTabs.svelte';
 
 	export let isActive;
+	export let architecture = 'moe';
 
 	// Check if current page is about page
 	$: isAboutPage = $page.url.pathname === '/about';
@@ -92,7 +93,7 @@
 	</div>
 </div>
 
-<div class="architecture-row"><ArchitectureTabs active="moe" /></div>
+<div class="architecture-row"><ArchitectureTabs active={architecture} /></div>
 
 <style lang="scss">
 	.architecture-row {

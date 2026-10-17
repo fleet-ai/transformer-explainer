@@ -15,14 +15,19 @@
 		textbookCurrentPageId,
 		userId
 	} from '~/store';
-	import { expandedBlock, predictedToken, highlightedIndex, modelData } from '~/store';
+	import { expandedBlock, predictedToken, highlightedIndex, modelData, moeModel } from '~/store';
 	import ProbabilityBars from './ProbabilityBars.svelte';
 	import Katex from '~/utils/Katex.svelte';
 	import { ga } from '~/utils/event';
 	import { EyeOutline, ZoomInOutline } from 'flowbite-svelte-icons';
 	import { fade } from 'svelte/transition';
 	import SoftmaxPopover from './Popovers/SoftmaxPopover.svelte';
+	import { vitInspectorStage } from '$lib/vit/store';
+	import { vlmInspectorStage } from '$lib/vlm/store';
+	import { hybridInspector } from '$lib/hybrid/store';
+	import { t5Inspector } from '$lib/seq2seq/store';
 	import LogitWeightPopover from './Popovers/LogitWeightPopover.svelte';
+	import RecordedLMHead from './moe/RecordedLMHead.svelte';
 	import { textPages } from '~/utils/textbookPages';
 	import TextbookTooltip from '~/components/common/TextbookTooltip.svelte';
 
@@ -186,6 +191,22 @@
 	const onClickLogits = (e) => {
 		e.stopPropagation();
 		e.preventDefault();
+		if ($moeModel?.architecture === 'hybrid') {
+			hybridInspector.set('classifier');
+			return;
+		}
+		if ($moeModel?.architecture === 'vit') {
+			vitInspectorStage.set('classifier');
+			return;
+		}
+		if ($moeModel?.architecture === 'vision-language') {
+			vlmInspectorStage.set('output');
+			return;
+		}
+		if ($moeModel?.architecture === 'encoder-decoder') {
+			t5Inspector.set('output');
+			return;
+		}
 		showLogitPopover = !showLogitPopover;
 	};
 </script>
@@ -200,6 +221,7 @@
 	on:click={onClickSoftmax}
 	on:keydown={onClickSoftmax}
 	data-click="prob-step"
+	class:classification={$moeModel?.outputKind === 'classification'}
 >
 	<div
 		class="title expandable"
@@ -211,7 +233,11 @@
 		data-click="prob-step-title"
 	>
 		<div class="title-text flex w-max items-center gap-1">
-			Probabilities
+			{$moeModel?.architecture === 'encoder-decoder'
+				? 'Next decoder token'
+				: $moeModel?.outputKind === 'classification'
+					? 'Class probabilities'
+					: 'Probabilities'}
 			<ZoomInOutline></ZoomInOutline>
 		</div>
 	</div>
@@ -233,7 +259,7 @@
 						class:sample_highlight={$highlightedIndex === idx}
 						class:final_token_highlight={$predictedToken?.rank === idx}
 					>
-						<span>{item.token.trim() === '' ? '\u00A0' : item.token}</span>
+						<span title={item.token}>{item.token.trim() === '' ? '\u00A0' : item.token}</span>
 						<Tooltip class="softmax-tooltip" type="light">
 							Token ID: <span class="number">{tokenIds[idx]}</span>
 						</Tooltip>
@@ -386,13 +412,24 @@
 		{/if}
 		{#if isSoftmaxExpanded && showLogitPopover}
 			<div class="softmax-weight-popover weight-popover logit-popover" in:fade={{ duration: 300 }}>
-				<LogitWeightPopover bind:isOpen={showLogitPopover}></LogitWeightPopover>
+				{#if $moeModel?.architecture === 'mla'}
+					<RecordedLMHead bind:isOpen={showLogitPopover} />
+				{:else}
+					<LogitWeightPopover bind:isOpen={showLogitPopover} />
+				{/if}
 			</div>
 		{/if}
 	</div>
 </div>
 
 <style lang="scss">
+	.classification .token-string .text-box > span {
+		white-space: nowrap;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		display: block;
+	}
 	.softmax-popover {
 		position: absolute;
 		top: 0;

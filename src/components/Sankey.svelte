@@ -6,7 +6,8 @@
 		weightPopover,
 		tooltip,
 		attentionHeadIdx,
-		blockIdx
+		blockIdx,
+		moeModel
 	} from '~/store';
 	import * as d3 from 'd3';
 	import { onMount, tick } from 'svelte';
@@ -23,6 +24,8 @@
 		TRANSFORMER_BLOCKS
 	} from '~/constants/opacity';
 	import { textPages } from '~/utils/textbookPages';
+	import { hybridRecording, hybridInspector } from '$lib/hybrid/store';
+	import { t5Inspector } from '$lib/seq2seq/store';
 	import { getRenderedEndpointPairs } from '~/utils/sankeyGeometry';
 
 	const { theme } = resolveConfig(tailwindConfig);
@@ -52,7 +55,11 @@
 		}[]
 	>;
 
-	const backPaths = [
+	$: isT5Decoder = $moeModel?.architecture === 'encoder-decoder' && $moeModel?.stack === 'decoder';
+	$: isMambaOnly =
+		$moeModel?.architecture === 'hybrid' &&
+		$hybridRecording?.document.layers[$blockIdx].type === 'mamba';
+	$: backPaths = [
 		{
 			from: '.qkv .qkv-column .query',
 			to: '.head-block .query .vector',
@@ -75,13 +82,15 @@
 			opacity: ATTENTION_HEAD_BACK
 		},
 		{
-			from: '.attention .head-out .vector',
+			from: isT5Decoder
+				? '.cross-attention .cross-head-out .vector'
+				: '.attention .head-out .vector',
 			to: '.mlp .initial .vector',
 			gradientId: 'transparent-purple',
 			opacity: ATTENTION_HEAD_BACK
 		}
 	];
-	const backPathMap: PathMap = {
+	$: backPathMap = {
 		attention: backPaths.map((d) => ({
 			...d,
 			from: `.block-steps.main ${d.from}`,
@@ -130,7 +139,7 @@
 			}
 		}
 	];
-	$: attentionPaths = [
+	$: selfAttentionPaths = [
 		{
 			from: '.qkv .qkv-column .query .sub-vector.head1',
 			to: '.head-block .query .vector',
@@ -153,7 +162,9 @@
 			opacity: ATTENTION_HEAD_1
 		},
 		{
-			from: '.attention .head-out .vector',
+			from: isT5Decoder
+				? '.cross-attention .cross-head-out .vector'
+				: '.attention .head-out .vector',
 			to: '.mlp .initial .head1',
 			gradientId: 'purple-purple',
 			opacity: ATTENTION_HEAD_1
@@ -300,6 +311,52 @@
 			}
 		}
 	];
+	$: attentionPaths = [
+		...selfAttentionPaths,
+		...(isT5Decoder
+			? [
+					{
+						from: '.attention .head-out .vector',
+						to: '.cross-attention .cross-input .vector',
+						gradientId: 'purple-purple',
+						opacity: ATTENTION_HEAD_1
+					},
+					{
+						...selfAttentionPaths[4],
+						from: '.cross-attention .cross-key .vector',
+						to: `.cross-attention .cross-matrix g.g-row-${$tokens.length - 1} rect`,
+						id: 'cross-key-to-attention'
+					},
+					{
+						...selfAttentionPaths[5],
+						from: '.cross-attention .cross-query .vector',
+						to: '.cross-attention .cross-matrix g.g-row',
+						id: 'cross-query-to-attention'
+					},
+					{
+						...selfAttentionPaths[6],
+						from: '.cross-attention .cross-matrix svg',
+						to: '.cross-attention .cross-head-out',
+						id: 'cross-to-attention-out',
+						onMouseClick: (e) => {
+							e.stopPropagation();
+							t5Inspector.set('cross');
+						}
+					},
+					{
+						...selfAttentionPaths[7],
+						from: '.cross-attention .cross-value',
+						to: '.cross-attention .cross-head-out',
+						id: 'cross-value-to-out',
+						onMouseClick: (e) => {
+							e.stopPropagation();
+							t5Inspector.set('cross');
+						}
+					}
+				]
+			: [])
+	];
+
 	$: mlpUpPaths = [
 		{
 			from: '.mlp .column.initial .vector',
@@ -385,6 +442,29 @@
 	];
 
 	$: pathMap = {
+		mamba: isMambaOnly
+			? [
+					{
+						from: '.hybrid-projection .column.vectors .vector',
+						to: '.mamba-core .state-input',
+						gradientId: 'blue-blue',
+						opacity: ATTENTION_HEAD_1
+					},
+					{
+						from: '.mamba-core .gated',
+						to: '.hybrid-output .column.initial .vector',
+						gradientId: 'purple-purple',
+						opacity: ATTENTION_HEAD_1
+					},
+					{
+						from: '.hybrid-output .column.initial .vector',
+						to: '.hybrid-output .out .vector',
+						gradientId: 'purple-purple',
+						opacity: ATTENTION_HEAD_BACK,
+						onMouseClick: () => hybridInspector.set('output')
+					}
+				]
+			: [],
 		embedding: [
 			{
 				from: '.embedding .vector-column .column.vectors .vector',

@@ -24,7 +24,8 @@
 	const dispatch = createEventDispatcher<{ close: void; attention: void }>();
 	let kind: 'query' | 'key' = 'query';
 	let selectedCoordinate = 0;
-	$: headSize = $moeModel?.attentionHeadSize ?? 64;
+	$: isMLA = $moeModel?.architecture === 'mla';
+	$: headSize = isMLA ? ($moeModel?.rotarySize ?? 64) : ($moeModel?.attentionHeadSize ?? 64);
 	$: pairCount = headSize / 2;
 	$: if (!Number.isInteger(selectedCoordinate) || selectedCoordinate < 0) selectedCoordinate = 0;
 	else if (selectedCoordinate >= pairCount) selectedCoordinate %= pairCount;
@@ -51,7 +52,7 @@
 	$: mapping = headMapping(
 		$attentionHeadIdx,
 		$moeModel?.attentionHeads ?? 16,
-		$moeModel?.keyValueHeads ?? 8
+		(isMLA ? 1 : $moeModel?.keyValueHeads) ?? 8
 	);
 	$: layer = recording?.example.id === $moeExample?.id ? recording?.layers[$blockIdx] : undefined;
 	$: before =
@@ -69,7 +70,7 @@
 		before && after && cosine && sine && coordinate
 			? ropePairWindow(before, after, cosine, sine, coordinate.coordinate)
 			: null;
-	$: value = layer?.value[mapping.keyValueHead][$moeTokenIndex];
+	$: value = layer?.value[isMLA ? $attentionHeadIdx : mapping.keyValueHead][$moeTokenIndex];
 	$: if ($moeExample) load($moeExample.id);
 	async function load(id: string) {
 		const current = ++request;
@@ -124,8 +125,8 @@
 		<div>
 			<h2>RoPE · Rotate Q and K</h2>
 			<p>
-				Granite · Block {$blockIdx + 1} · Query head {$attentionHeadIdx + 1} · Shared K/V head {mapping.keyValueHead +
-					1}
+				{isMLA ? 'DeepSeek · MLA' : 'Granite'} · Block {$blockIdx + 1} · Query head {$attentionHeadIdx +
+					1} · {isMLA ? 'Shared rotary key' : `Shared K/V head ${mapping.keyValueHead + 1}`}
 			</p>
 		</div>
 		<button class="close" aria-label="Close RoPE inspector" on:click={() => dispatch('close')}
@@ -143,7 +144,8 @@
 				<button
 					class:chosen={kind === 'key'}
 					aria-pressed={kind === 'key'}
-					on:click={() => (kind = 'key')}>Shared Key {mapping.keyValueHead + 1}</button
+					on:click={() => (kind = 'key')}
+					>{isMLA ? 'Shared rotary key' : `Shared Key ${mapping.keyValueHead + 1}`}</button
 				>
 			</div>
 			<div class="selector-row token-selector">
@@ -176,7 +178,8 @@
 		{:else if pairs && value}
 			<div class="rotation-summary">
 				<span
-					>{kind === 'query' ? 'Q' : 'K'} head · {headSize}D → RoPE · position {position} → {headSize}D</span
+					>{kind === 'query' ? 'Q' : 'K'}
+					{isMLA ? 'rotary branch' : 'head'} · {headSize}D → RoPE · position {position} → {headSize}D</span
 				>
 				<span aria-live="polite"
 					>Selected {coordinate.coordinate} ↔ fixed partner {coordinate.partner} · j = i + {pairCount}</span
@@ -269,10 +272,14 @@
 			</div>
 			<div class="model-notes">
 				<div class="shared-note">
-					<strong
-						>Q {mapping.sharedQueryHeads.map((head) => head + 1).join(' + ')} share K/V {mapping.keyValueHead +
-							1}</strong
-					><span>Both query heads use the same rotated K and unchanged V.</span>
+					{#if isMLA}<strong>All {$moeModel?.attentionHeads} heads share this rotary key</strong
+						><span
+							>Only 64 rotary coordinates rotate; 128 content coordinates bypass RoPE. DeepSeek
+							reorders adjacent projection pairs into this half-split view before rotation.</span
+						>{:else}<strong
+							>Q {mapping.sharedQueryHeads.map((head) => head + 1).join(' + ')} share K/V {mapping.keyValueHead +
+								1}</strong
+						><span>Both query heads use the same rotated K and unchanged V.</span>{/if}
 				</div>
 				<div class="value-bypass">
 					<strong>V bypasses RoPE</strong><span
@@ -284,7 +291,10 @@
 			</div>
 			<div class="next-operation">
 				<span>After RoPE</span>
-				<p>Q′K′ᵀ × 1/64 → causal mask → softmax → × V</p>
+				<p>
+					{isMLA ? '(QᶜKᶜᵀ + QʳKʳᵀ)' : 'Q′K′ᵀ'} × {$moeModel?.attentionMultiplier?.toPrecision(5) ??
+						'1/64'} → causal mask → softmax → × V
+				</p>
 				<button class="text-button" on:click={() => dispatch('attention')}
 					>See attention operations →</button
 				>

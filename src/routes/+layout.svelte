@@ -9,11 +9,14 @@
 	import Topbar from '~/components/Topbar.svelte';
 	import { predictedColor, rootRem } from '~/store';
 	let topBarHeight = 0;
-	let minScreenWidth = 1600;
-	let minColumnWidth = Math.floor(minScreenWidth / 24) - rootRem * 2;
+	$: originalArchitecture =
+		!architecture ||
+		['mla', 'vit', 'encoder-decoder', 'vision-language', 'hybrid'].includes(architecture);
+	$: minScreenWidth = architecture === 'encoder-decoder' ? 1900 : 1600;
+	$: minColumnWidth = Math.floor(minScreenWidth / 24) - rootRem * 2;
 </script>
 
-{#if architecture}
+{#if !originalArchitecture}
 	<div class="architecture-app">
 		<ArchitectureHeader active={architecture} />
 		<main class="architecture-main"><slot /></main>
@@ -24,7 +27,9 @@
 		style={`--min-screen-width:${minScreenWidth}px;--min-column-width:${minColumnWidth}px;--predicted-color:${predictedColor};`}
 	>
 		<div id="landing">
-			<header bind:offsetHeight={topBarHeight}><Topbar isActive={true} /></header>
+			<header bind:offsetHeight={topBarHeight}>
+				<Topbar isActive={true} architecture={architecture ?? 'moe'} />
+			</header>
 			<main id="main" style={`padding-top:${topBarHeight}px`}><slot /></main>
 		</div>
 	</div>

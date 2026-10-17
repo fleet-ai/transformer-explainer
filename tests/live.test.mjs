@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { readRecordedJson } from '../src/lib/recorded-json.js';
 
 const captured = JSON.parse(readFileSync(new URL('../static/traces/granite-moe.json', import.meta.url), 'utf8'));
 const capturedAttention = JSON.parse(readFileSync(new URL('../static/traces/attention-operations-language.json', import.meta.url), 'utf8'));
@@ -32,6 +33,7 @@ function production(fetch = () => { throw new Error('Unexpected fetch'); }) {
       exports, fetch, AbortController, DOMException, setTimeout, clearTimeout, Error, TypeError,
       require(dependency) {
         if (dependency === '$app/paths') return { base: '/moe' };
+        if (dependency === '$lib/recorded-json.js') return { readRecordedJson };
         if (dependency === './live') return load('live');
         throw new Error(`Unexpected dependency: ${dependency}`);
       }

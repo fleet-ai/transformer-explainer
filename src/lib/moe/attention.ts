@@ -1,4 +1,5 @@
 import { base } from '$app/paths';
+import { readRecordedJson } from '$lib/recorded-json.js';
 import type { TraceToken } from './types';
 import { traceAssetUrl, trimLiveRecordings } from './live';
 
@@ -10,12 +11,34 @@ export interface AttentionOperationsLayer {
 	keyBefore: number[][][];
 	keyAfter: number[][][];
 	value: number[][][];
+	/** MLA keeps content coordinates separate from its rotary subspace. */
+	queryContent?: number[][][];
+	keyContent?: number[][][];
+	queryProjection?: number[][][];
+	rawQueryRotary?: number[][][];
+	rawKeyRotary?: number[][][];
+	kvLatent?: number[][];
+	rawLatent?: number[][];
+	attentionInput?: number[][];
+	attentionContext?: number[][][];
+	attentionOutput?: number[][];
+}
+
+export interface RecordedLMHead {
+	tokenIndex: number;
+	inputSize: number;
+	tokenIds: number[];
+	weights: number[][];
+	input: number[];
+	omittedContribution: number[];
+	output: number[];
 }
 
 export interface AttentionOperationsDocument {
 	schemaVersion: 1;
 	kind: 'attention-operations';
 	model: {
+		architecture?: 'moe' | 'mla';
 		id: string;
 		revision: string;
 		attentionHeads: number;
@@ -23,6 +46,11 @@ export interface AttentionOperationsDocument {
 		headSize: number;
 		ropeTheta: number;
 		attentionMultiplier: number;
+		valueHeads?: number;
+		valueHeadSize?: number;
+		contentKeySize?: number;
+		rotarySize?: number;
+		kvLatentSize?: number;
 	};
 	capture: {
 		timestamp: string;
@@ -45,6 +73,7 @@ export interface AttentionOperationsDocument {
 	/** Token × headSize/2. The model's identical second halves are omitted. */
 	rotary: { cos: number[][]; sin: number[][] };
 	layers: AttentionOperationsLayer[];
+	lmHead?: RecordedLMHead;
 	validation: Record<string, unknown>;
 }
 
@@ -106,8 +135,10 @@ export interface RopeExampleDocument {
 
 /** All indices are zero-based. Contiguous query groups share one K/V head. */
 export function headMapping(queryHead: number, queryHeads = 16, keyValueHeads = 8): HeadMapping {
-	if (![queryHeads, keyValueHeads].every((count) => Number.isInteger(count) && count > 0)
-		|| queryHeads % keyValueHeads !== 0) {
+	if (
+		![queryHeads, keyValueHeads].every((count) => Number.isInteger(count) && count > 0) ||
+		queryHeads % keyValueHeads !== 0
+	) {
 		throw new RangeError('Query head count must be a positive multiple of key/value head count.');
 	}
 	if (!Number.isInteger(queryHead) || queryHead < 0 || queryHead >= queryHeads) {
@@ -118,7 +149,10 @@ export function headMapping(queryHead: number, queryHeads = 16, keyValueHeads = 
 	return {
 		queryHead,
 		keyValueHead,
-		sharedQueryHeads: Array.from({ length: groupSize }, (_, index) => keyValueHead * groupSize + index)
+		sharedQueryHeads: Array.from(
+			{ length: groupSize },
+			(_, index) => keyValueHead * groupSize + index
+		)
 	};
 }
 
@@ -157,12 +191,23 @@ export function ropeCoordinate(coordinate: number, headSize = 64): RotaryCoordin
 
 /** Inspect the model's half-split rotation pair (i, i + headSize/2). */
 export function ropePair(
-	before: number[], after: number[], cos: number[], sin: number[], pairIndex: number
+	before: number[],
+	after: number[],
+	cos: number[],
+	sin: number[],
+	pairIndex: number
 ): RotaryPair {
 	const half = before.length / 2;
-	if (!Number.isInteger(half) || half < 1 || after.length !== before.length
-		|| cos.length !== half || sin.length !== half) {
-		throw new RangeError('RoPE requires equal even-sized head vectors and half-sized cosine/sine arrays.');
+	if (
+		!Number.isInteger(half) ||
+		half < 1 ||
+		after.length !== before.length ||
+		cos.length !== half ||
+		sin.length !== half
+	) {
+		throw new RangeError(
+			'RoPE requires equal even-sized head vectors and half-sized cosine/sine arrays.'
+		);
 	}
 	if (!Number.isInteger(pairIndex) || pairIndex < 0 || pairIndex >= half) {
 		throw new RangeError('RoPE pair is outside the captured head range.');
@@ -174,19 +219,35 @@ export function ropePair(
 	const sine = sin[pairIndex];
 	const reconstructed: [number, number] = [a * cosine - b * sine, b * cosine + a * sine];
 	const recorded: [number, number] = [after[pairIndex], after[second]];
-	const difference: [number, number] = [reconstructed[0] - recorded[0], reconstructed[1] - recorded[1]];
+	const difference: [number, number] = [
+		reconstructed[0] - recorded[0],
+		reconstructed[1] - recorded[1]
+	];
 	if (![a, b, cosine, sine, ...recorded, ...reconstructed, ...difference].every(Number.isFinite)) {
 		throw new Error('RoPE coordinates and arithmetic must be finite.');
 	}
-	return { indices: [pairIndex, second], before: [a, b], cosine, sine, reconstructed, recorded, difference };
+	return {
+		indices: [pairIndex, second],
+		before: [a, b],
+		cosine,
+		sine,
+		reconstructed,
+		recorded,
+		difference
+	};
 }
 
 /** Four distinct coordinates: the selected pair and an adjacent frequency pair. */
 export function ropePairWindow(
-	before: number[], after: number[], cos: number[], sin: number[], coordinate: number
+	before: number[],
+	after: number[],
+	cos: number[],
+	sin: number[],
+	coordinate: number
 ): [RotaryPair, RotaryPair] {
 	const selected = ropeCoordinate(coordinate, before.length);
-	if (before.length < 4) throw new RangeError('Two RoPE pairs require at least four head coordinates.');
+	if (before.length < 4)
+		throw new RangeError('Two RoPE pairs require at least four head coordinates.');
 	// Keep the last pair visible without wrapping, duplicating, or leaving the head.
 	const firstPair = Math.min(selected.pairIndex, before.length / 2 - 2);
 	return [
@@ -199,31 +260,124 @@ function isFiniteVector(value: unknown, length: number): value is number[] {
 	return Array.isArray(value) && value.length === length && value.every(Number.isFinite);
 }
 
-function checkRecording(value: unknown, exampleId: string): AttentionOperationsDocument {
+export function checkRecording(value: unknown, exampleId: string): AttentionOperationsDocument {
 	const data = value as AttentionOperationsDocument;
-	if (data?.schemaVersion !== 1 || data.kind !== 'attention-operations' || data.example?.id !== exampleId) {
+	if (
+		data?.schemaVersion !== 1 ||
+		data.kind !== 'attention-operations' ||
+		data.example?.id !== exampleId
+	) {
 		throw new Error('The attention recording does not match this prompt or schema.');
 	}
 	const { attentionHeads, keyValueHeads, headSize } = data.model ?? {};
 	headMapping(0, attentionHeads, keyValueHeads);
+	if (
+		![data.model.valueHeads ?? keyValueHeads, data.model.valueHeadSize ?? headSize].every(
+			(value) => Number.isInteger(value) && value > 0
+		)
+	) {
+		throw new Error('The attention recording has invalid value dimensions.');
+	}
 	const count = data.example.tokens?.length;
-	if (!Number.isInteger(headSize) || headSize < 2 || headSize % 2 !== 0 || !count
-		|| !isFiniteVector(data.positions, count) || !Array.isArray(data.layers) || !data.layers.length
-		|| !Array.isArray(data.rotary?.cos) || !Array.isArray(data.rotary?.sin)
-		|| data.rotary.cos.length !== count || data.rotary.sin.length !== count
-		|| !data.rotary.cos.every((row) => isFiniteVector(row, headSize / 2))
-		|| !data.rotary.sin.every((row) => isFiniteVector(row, headSize / 2))) {
+	if (
+		!Number.isInteger(headSize) ||
+		headSize < 2 ||
+		headSize % 2 !== 0 ||
+		!count ||
+		!isFiniteVector(data.positions, count) ||
+		!Array.isArray(data.layers) ||
+		!data.layers.length ||
+		!Array.isArray(data.rotary?.cos) ||
+		!Array.isArray(data.rotary?.sin) ||
+		data.rotary.cos.length !== count ||
+		data.rotary.sin.length !== count ||
+		!data.rotary.cos.every((row) => isFiniteVector(row, headSize / 2)) ||
+		!data.rotary.sin.every((row) => isFiniteVector(row, headSize / 2))
+	) {
 		throw new Error('The attention recording has invalid rotary dimensions or values.');
 	}
 	for (const [index, layer] of data.layers.entries()) {
 		if (layer.index !== index) throw new Error('The attention recording has misaligned layers.');
 		for (const field of ['queryBefore', 'queryAfter', 'keyBefore', 'keyAfter', 'value'] as const) {
-			const heads = field.startsWith('query') ? attentionHeads : keyValueHeads;
-			if (!Array.isArray(layer[field]) || layer[field].length !== heads
-				|| !layer[field].every((head) => Array.isArray(head) && head.length === count
-					&& head.every((row) => isFiniteVector(row, headSize)))) {
+			const heads = field.startsWith('query')
+				? attentionHeads
+				: field === 'value'
+					? (data.model.valueHeads ?? keyValueHeads)
+					: keyValueHeads;
+			const width = field === 'value' ? (data.model.valueHeadSize ?? headSize) : headSize;
+			if (
+				!Array.isArray(layer[field]) ||
+				layer[field].length !== heads ||
+				!layer[field].every(
+					(head) =>
+						Array.isArray(head) &&
+						head.length === count &&
+						head.every((row) => isFiniteVector(row, width))
+				)
+			) {
 				throw new Error(`The attention recording has invalid ${field} dimensions or values.`);
 			}
+		}
+		if (data.model.architecture === 'mla') {
+			const contentWidth = data.model.contentKeySize;
+			const latentWidth = data.model.kvLatentSize;
+			if (
+				typeof contentWidth !== 'number' ||
+				!Number.isInteger(contentWidth) ||
+				contentWidth <= 0 ||
+				typeof latentWidth !== 'number' ||
+				!Number.isInteger(latentWidth) ||
+				latentWidth <= 0
+			) {
+				throw new Error('MLA content and latent widths must be recorded.');
+			}
+			for (const field of ['queryContent', 'keyContent', 'queryProjection'] as const) {
+				const width = field === 'queryProjection' ? contentWidth + headSize : contentWidth;
+				if (
+					!Array.isArray(layer[field]) ||
+					layer[field]!.length !== attentionHeads ||
+					!layer[field]!.every(
+						(head) =>
+							Array.isArray(head) &&
+							head.length === count &&
+							head.every((row) => isFiniteVector(row, width))
+					)
+				) {
+					throw new Error(`The MLA recording has invalid ${field} dimensions or values.`);
+				}
+			}
+			for (const field of ['kvLatent', 'rawLatent'] as const) {
+				if (
+					!Array.isArray(layer[field]) ||
+					layer[field]!.length !== count ||
+					!layer[field]!.every((row) => isFiniteVector(row, latentWidth))
+				) {
+					throw new Error(`The MLA recording has invalid ${field} dimensions or values.`);
+				}
+			}
+		}
+	}
+	if (data.lmHead) {
+		const head = data.lmHead;
+		const rows = head.tokenIds?.length;
+		if (
+			!Number.isInteger(head.tokenIndex) ||
+			head.tokenIndex < 0 ||
+			head.tokenIndex >= count ||
+			!Number.isInteger(head.inputSize) ||
+			head.inputSize < 4 ||
+			!rows ||
+			!head.tokenIds.every((id) => Number.isInteger(id) && id >= 0) ||
+			!Array.isArray(head.input) ||
+			head.input.length < 4 ||
+			!head.input.every(Number.isFinite) ||
+			!Array.isArray(head.weights) ||
+			head.weights.length !== rows ||
+			!head.weights.every((row) => isFiniteVector(row, 4)) ||
+			!isFiniteVector(head.omittedContribution, rows) ||
+			!isFiniteVector(head.output, rows)
+		) {
+			throw new Error('The vocabulary projection has invalid dimensions or values.');
 		}
 	}
 	return data;
@@ -238,7 +392,7 @@ export function loadAttentionOperations(exampleId: string): Promise<AttentionOpe
 		recording = fetch(traceAssetUrl(exampleId, 'attention', base))
 			.then(async (response) => {
 				if (!response.ok) throw new Error(`Attention recording returned HTTP ${response.status}.`);
-				return checkRecording(await response.json(), exampleId);
+				return checkRecording(await readRecordedJson(response), exampleId);
 			})
 			.catch((error) => {
 				recordings.delete(exampleId);
@@ -252,17 +406,30 @@ export function loadAttentionOperations(exampleId: string): Promise<AttentionOpe
 
 function checkRopeExample(value: unknown): RopeExampleDocument {
 	const data = value as RopeExampleDocument;
-	if (data?.schemaVersion !== 1 || data.kind !== 'rope-example'
-		|| data.example?.id !== 'qwen3-128' || data.model?.headSize !== 128) {
+	if (
+		data?.schemaVersion !== 1 ||
+		data.kind !== 'rope-example' ||
+		data.example?.id !== 'qwen3-128' ||
+		data.model?.headSize !== 128
+	) {
 		throw new Error('The RoPE example does not match the recorded 128-dimensional model.');
 	}
 	const { headSize, attentionHeads, keyValueHeads, numLayers } = data.model;
-	if (![attentionHeads, keyValueHeads, numLayers].every((count) => Number.isInteger(count) && count > 0)) {
+	if (
+		![attentionHeads, keyValueHeads, numLayers].every(
+			(count) => Number.isInteger(count) && count > 0
+		)
+	) {
 		throw new Error('The RoPE example has invalid model dimensions.');
 	}
 	const scope = data.scope;
-	if (!scope || !Number.isInteger(scope.layer) || scope.layer < 0 || scope.layer >= numLayers
-		|| headMapping(scope.queryHead, attentionHeads, keyValueHeads).keyValueHead !== scope.keyValueHead) {
+	if (
+		!scope ||
+		!Number.isInteger(scope.layer) ||
+		scope.layer < 0 ||
+		scope.layer >= numLayers ||
+		headMapping(scope.queryHead, attentionHeads, keyValueHeads).keyValueHead !== scope.keyValueHead
+	) {
 		throw new Error('The RoPE example has an invalid layer or head selection.');
 	}
 	const count = data.example.tokens?.length;
@@ -270,14 +437,20 @@ function checkRopeExample(value: unknown): RopeExampleDocument {
 		throw new Error('The RoPE example has invalid token positions.');
 	}
 	for (const field of ['queryBefore', 'queryAfter', 'keyBefore', 'keyAfter', 'value'] as const) {
-		if (!Array.isArray(data[field]) || data[field].length !== count
-			|| !data[field].every((row) => isFiniteVector(row, headSize))) {
+		if (
+			!Array.isArray(data[field]) ||
+			data[field].length !== count ||
+			!data[field].every((row) => isFiniteVector(row, headSize))
+		) {
 			throw new Error(`The RoPE example has invalid ${field} dimensions or values.`);
 		}
 	}
 	for (const field of ['cos', 'sin'] as const) {
-		if (!Array.isArray(data.rotary?.[field]) || data.rotary[field].length !== count
-			|| !data.rotary[field].every((row) => isFiniteVector(row, headSize / 2))) {
+		if (
+			!Array.isArray(data.rotary?.[field]) ||
+			data.rotary[field].length !== count ||
+			!data.rotary[field].every((row) => isFiniteVector(row, headSize / 2))
+		) {
 			throw new Error('The RoPE example has invalid rotary dimensions or values.');
 		}
 	}

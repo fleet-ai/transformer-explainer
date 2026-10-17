@@ -2,7 +2,11 @@
 	import classNames from 'classnames';
 	import Operation from './Operation.svelte';
 	import DropoutPopover from './Popovers/DropoutPopover.svelte';
-	import { tokens } from '~/store';
+	import { vlmInspectorStage } from '$lib/vlm/store';
+	import { t5Inspector } from '$lib/seq2seq/store';
+	import { hybridInspector } from '$lib/hybrid/store';
+	import { vitInspectorStage } from '$lib/vit/store';
+	import { tokens, moeModel } from '~/store';
 	import LayerNormPopover from './Popovers/LayerNormPopover.svelte';
 	import ActivationPopover from './Popovers/ActivationPopover.svelte';
 	import ResidualPopover from './Popovers/ResidualPopover.svelte';
@@ -19,6 +23,8 @@
 	export let id: string;
 	export let className: string | undefined = undefined;
 	export let type: string | undefined = undefined;
+
+	$: noDropout = !!$moeModel?.architecture && $moeModel.architecture !== 'moe';
 
 	const { drawLine, removeLine } = drawResidualLine(id);
 	let isHovered = false;
@@ -47,6 +53,22 @@
 		e.preventDefault();
 		e.stopPropagation();
 
+		if ($moeModel?.architecture === 'hybrid') {
+			hybridInspector.set(type === 'ln' ? 'projection' : 'output');
+			return;
+		}
+		if ($moeModel?.architecture === 'vision-language') {
+			vlmInspectorStage.set(type === 'ln' ? (id.includes('mlp') ? 'norm2' : 'norm1') : 'residual');
+			return;
+		}
+		if ($moeModel?.architecture === 'encoder-decoder') {
+			t5Inspector.set(id.includes('mlp') ? 'ffn' : 'self');
+			return;
+		}
+		if ($moeModel?.architecture === 'vit') {
+			vitInspectorStage.set(type === 'ln' ? (id.includes('mlp') ? 'norm2' : 'norm1') : 'residual');
+			return;
+		}
 		const pageId = typeToPageIdMap[type];
 		if (!pageId) return;
 
@@ -91,7 +113,7 @@
 		{/each}
 	</div>
 	<!-- <ActivationPopover triggeredBy={`#${id}`} offset={1} /> -->
-{:else if type === 'dropout'}
+{:else if type === 'dropout' && !noDropout}
 	<div
 		{id}
 		data-click="dropout"

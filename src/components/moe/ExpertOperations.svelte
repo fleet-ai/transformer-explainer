@@ -6,6 +6,7 @@
 	export let hiddenSize = 1024;
 	export let intermediateSize = 512;
 	export let expert: number;
+	export let label: string | undefined = undefined;
 	let step: Step = 'up';
 	let coordinate = 0;
 	const steps: Array<{ id: Step; title: string }> = [
@@ -47,7 +48,7 @@
 
 <div class="expert-operations">
 	<div class="operation-heading">
-		<strong>Inside expert {expert}</strong><span>SwiGLU feed-forward network</span>
+		<strong>{label ?? `Inside expert ${expert}`}</strong><span>SwiGLU feed-forward network</span>
 	</div>
 	<div class="architecture-chain">
 		<svg

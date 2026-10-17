@@ -1,7 +1,7 @@
 <script lang="ts">
 	import classNames from 'classnames';
 	import { Popover } from 'flowbite-svelte';
-	import { vectorHeight, expandedBlock } from '~/store';
+	import { vectorHeight, expandedBlock, moeModel } from '~/store';
 	import { onMount } from 'svelte';
 
 	export let id: string | undefined = undefined;
@@ -10,6 +10,10 @@
 	export let head: boolean = false;
 	export let tail: boolean = false;
 	export let active: boolean = false;
+
+	$: noDropout = !!$moeModel?.architecture && $moeModel.architecture !== 'moe';
+	$: isMla = $moeModel?.architecture === 'mla';
+	$: activationLabel = isMla ? 'SiLU' : 'GeLU';
 
 	let width = 50;
 	let textElement: SVGTextElement;
@@ -36,11 +40,11 @@
 				<!-- <svg>
 					<path d="M0,0 Q0,-16 30,-16"></path>
 				</svg> -->
-				<div class="guide-text gelu-text">GeLU</div>
+				<div class="guide-text gelu-text">{activationLabel}</div>
 			</div>
 		{/if}
 	</div>
-{:else if type === 'dropout'}
+{:else if type === 'dropout' && !noDropout}
 	<div class={classNames(`cell dropout`, className)} class:active>
 		<div class="cursor"></div>
 		<svg class="main">
@@ -81,7 +85,9 @@
 					/> -->
 					<path d="M0,50 Q0,0 24,0"></path>
 				</svg>
-				<div class="guide-text ln-text">RMS Normalization</div>
+				<div class="guide-text ln-text">
+					{$moeModel?.normalization === 'layernorm' ? 'Layer Normalization' : 'RMS Normalization'}
+				</div>
 			</div>
 		{/if}
 	</div>

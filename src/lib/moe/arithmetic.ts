@@ -5,6 +5,7 @@ export interface CoordinateTerm {
 	weight: number;
 	value: number;
 	contribution: number;
+	shared?: boolean;
 }
 
 export interface CoordinateSum {
@@ -47,6 +48,12 @@ export function sumCoordinate(
 		}
 		return { expert, weight, value, contribution };
 	});
+	if (trace.sharedExpertOutputPreview) {
+		const value = trace.sharedExpertOutputPreview[coordinate];
+		if (!Number.isFinite(value)) throw new Error('Shared expert output must be finite.');
+		// The always-active shared branch is added once, without a router weight.
+		terms.push({ expert: trace.routerProbabilities.length, weight: 1, value, contribution: value, shared: true });
+	}
 	const reconstructed = terms.reduce((sum, term) => sum + term.contribution, 0);
 	const difference = reconstructed - recorded;
 	const scaled = recorded * residualMultiplier;

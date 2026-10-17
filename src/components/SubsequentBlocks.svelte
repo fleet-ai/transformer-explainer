@@ -1,5 +1,13 @@
 <script lang="ts">
-	import { tokens, modelMeta, isBoundingBoxActive, expandedBlock, blockIdx } from '~/store';
+	import {
+		tokens,
+		modelMeta,
+		isBoundingBoxActive,
+		expandedBlock,
+		blockIdx,
+		moeModel,
+		moeExample
+	} from '~/store';
 	import classNames from 'classnames';
 	import { Tooltip } from 'flowbite-svelte';
 	import VectorCanvas from './common/VectorCanvas.svelte';
@@ -29,8 +37,10 @@
 			>
 				<div class="text" class:highlight={$isBoundingBoxActive}>
 					<TextbookTooltip id="blocks">
-						<span class="strong">{$modelMeta.layer_num - $blockIdx - 1}</span> more identical<br
-						/><span class="strong">Transformer<br />Blocks</span>
+						<span class="strong">{$modelMeta.layer_num - $blockIdx - 1}</span>
+						more{$moeModel?.architecture && $moeModel.architecture !== 'moe' ? '' : ' identical'}<br /><span class="strong"
+							>{$moeModel?.stack === 'encoder' ? 'Encoder' : $moeModel?.stack === 'decoder' ? 'Decoder' : 'Transformer'}<br />Blocks</span
+						>
 					</TextbookTooltip>
 				</div>
 
@@ -51,10 +61,10 @@
 				<div class="cell" class:last={index === $tokens.length - 1}>
 					<div
 						class={classNames(`vector shrink-0 bg-blue-200`, {
-							'last-token': index === $tokens.length - 1
+							'last-token': index === ($moeModel?.outputTokenIndex ?? $tokens.length - 1)
 						})}
 					>
-						<VectorCanvas colorScale="blue" />
+						<VectorCanvas colorScale="blue" data={$moeExample?.finalHiddenPreview[index]} />
 					</div>
 				</div>
 			{/each}

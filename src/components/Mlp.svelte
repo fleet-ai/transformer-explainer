@@ -13,6 +13,7 @@
 		moeTokenIndex
 	} from '~/store';
 	import OperationGroup from './OperationGroup.svelte';
+	import VectorCanvas from './common/VectorCanvas.svelte';
 	import MoeInspector from './moe/MoeInspector.svelte';
 	import { percent, tokenLabel } from '$lib/moe/format';
 
@@ -28,12 +29,19 @@
 	let showHelp = false;
 	$: layer = $moeExample?.layers[$blockIdx];
 	$: trace = layer?.tokens[$moeTokenIndex];
+	$: isMLA = $moeModel?.architecture === 'mla';
+	$: isDense = layer?.feedForwardType === 'dense';
+	$: expertColumns = isMLA ? 8 : 4;
+	$: bankHeight = Math.ceil(($moeModel?.numExperts ?? 32) / expertColumns) * 30 - 5;
+	$: sharedExperts = isMLA && !isDense ? ($moeModel?.sharedExperts ?? 0) : 0;
 	$: rowHeight = $tokens.length * $vectorHeight + Math.max(0, $tokens.length - 1) * rowGap;
-	$: networkHeight = Math.max(rowHeight, 235);
-	$: bankWidth = Math.min(184, Math.max(152, networkWidth * 0.56));
+	$: networkHeight = Math.max(rowHeight, bankHeight + (sharedExperts ? 58 : 0));
+	$: bankWidth = isMLA
+		? Math.min(264, Math.max(224, networkWidth * 0.67))
+		: Math.min(184, Math.max(152, networkWidth * 0.56));
 	$: bankLeft = (networkWidth - bankWidth) / 2;
-	$: bankTop = Math.max(0, (rowHeight - 235) / 2);
-	$: expertWidth = (bankWidth - 15) / 4;
+	$: bankTop = Math.max(0, (rowHeight - bankHeight - (sharedExperts ? 58 : 0)) / 2);
+	$: expertWidth = (bankWidth - (expertColumns - 1) * 5) / expertColumns;
 	$: if ($moeExample || $blockIdx || $moeTokenIndex) {
 		selectedExpert = null;
 		showSum = false;
@@ -55,10 +63,10 @@
 		return height / 2 + index * (height + gap);
 	}
 	function expertX(expert: number, left: number, width: number) {
-		return left + (expert % 4) * (width + 5);
+		return left + (expert % expertColumns) * (width + 5);
 	}
 	function expertY(expert: number, top: number) {
-		return top + Math.floor(expert / 4) * 30 + 12.5;
+		return top + Math.floor(expert / expertColumns) * 30 + 12.5;
 	}
 	function wire(x1: number, y1: number, x2: number, y2: number) {
 		const bend = Math.max(15, Math.abs(x2 - x1) * 0.5);
@@ -75,6 +83,11 @@
 		await tick();
 		showSum = true;
 	}
+	async function chooseDense(index: number) {
+		chooseToken(index);
+		await tick();
+		selectedExpert = -1;
+	}
 	function chooseToken(index: number) {
 		moeTokenIndex.set(index);
 		selectedExpert = null;
@@ -90,10 +103,13 @@
 		data-click="mlp-step-title"
 	>
 		<button class="moe-title" aria-expanded={showHelp} on:click={() => (showHelp = !showHelp)}
-			>Mixture of Experts <span aria-hidden="true">ⓘ</span></button
+			>{isDense ? 'Dense Feed-forward' : 'Mixture of Experts'}
+			<span aria-hidden="true">ⓘ</span></button
 		>
 		<span class="moe-subtitle"
-			>{$moeModel?.topK ?? 8} of {$moeModel?.numExperts ?? 32} experts per token</span
+			>{isDense
+				? 'SwiGLU · every token uses the same MLP'
+				: `${$moeModel?.topK ?? 8} of ${$moeModel?.numExperts ?? 32} routed experts${sharedExperts ? ` + ${sharedExperts} shared` : ' per token'}`}</span
 		>
 	</div>
 	<!-- Keep the explanation outside the title's stacking context, above the diagram. -->
@@ -102,9 +118,16 @@
 			<button class="close" aria-label="Close MoE explanation" on:click={() => (showHelp = false)}
 				>×</button
 			>
-			The router selects the top {$moeModel?.topK ?? 8} logits, then softmax gives their mixing weights.
-			Only those experts run. Their weighted outputs are added, scaled, and joined to the residual stream.
-			Expert IDs are local to this layer.
+			{#if isDense}This first DeepSeek block uses a dense SwiGLU network. Every token passes through
+				the same up and gate projections, elementwise product, and down projection, followed by
+				residual addition.
+			{:else if isMLA}The router computes softmax over all 64 experts, then selects the top 6
+				probabilities without renormalizing them. Their weighted outputs are added to two
+				always-active shared experts, then to the residual stream. Expert IDs are local to this
+				layer.
+			{:else}The router selects the top {$moeModel?.topK ?? 8} logits, then softmax gives their mixing
+				weights. Only those experts run. Their weighted outputs are added, scaled, and joined to the
+				residual stream. Expert IDs are local to this layer.{/if}
 		</section>
 	{/if}
 
@@ -118,7 +141,7 @@
 						<button
 							class="vector initial-vector"
 							class:chosen={index === $moeTokenIndex}
-							aria-label={`Inspect MoE routing for token ${index}: ${token}`}
+							aria-label={`Inspect ${isDense ? 'dense feed-forward' : 'MoE routing'} for token ${index}: ${token}`}
 							aria-pressed={index === $moeTokenIndex}
 							on:click={() => chooseToken(index)}
 							title={`Attention output, token ${index}. Select to inspect its expert routes.`}
@@ -147,105 +170,180 @@
 		</div>
 
 		<div class="moe-network" bind:this={network} style={`height:${networkHeight}px;`}>
-			<svg class="moe-paths" width={networkWidth} height={networkHeight} aria-hidden="true">
-				{#each layer?.tokens ?? [] as tokenTrace, index}
-					{#if index !== $moeTokenIndex}
-						{#each tokenTrace.selectedExperts as expert}<path
+			{#if isDense}
+				<div class="dense-network" style={`height:${rowHeight}px;`}>
+					<svg class="dense-wires" width={networkWidth} height={rowHeight} aria-hidden="true"
+						>{#each $tokens as _, index}<path
 								d={wire(
-									17,
+									0,
 									rowY(index, $vectorHeight, rowGap),
-									expertX(expert, bankLeft, expertWidth),
-									expertY(expert, bankTop)
-								)}
-								class="context-path"
-							/><path
-								d={wire(
-									expertX(expert, bankLeft, expertWidth) + expertWidth,
-									expertY(expert, bankTop),
-									networkWidth - 12,
+									networkWidth / 2 - 52,
 									rowY(index, $vectorHeight, rowGap)
 								)}
-								class="context-path"
-							/>{/each}
-					{/if}
-				{/each}
-				{#each trace?.selectedExperts ?? [] as expert, rank}<path
-						d={wire(
-							17,
-							rowY($moeTokenIndex, $vectorHeight, rowGap),
-							expertX(expert, bankLeft, expertWidth),
-							expertY(expert, bankTop)
-						)}
-						class="selected-path"
-						style={`stroke-width:${1.5 + trace!.routingWeights[rank] * 12};opacity:${selectedExpert === null || selectedExpert === expert ? 0.8 : 0.2}`}
-					/><path
-						d={wire(
-							expertX(expert, bankLeft, expertWidth) + expertWidth,
-							expertY(expert, bankTop),
-							networkWidth - 12,
-							rowY($moeTokenIndex, $vectorHeight, rowGap)
-						)}
-						class="selected-path"
-						style={`stroke-width:${1.5 + trace!.routingWeights[rank] * 12};opacity:${selectedExpert === null || selectedExpert === expert ? 0.8 : 0.2}`}
-					/>{/each}
-			</svg>
-			<div class="column routing-column" bind:this={routingColumn}>
-				<span class="subtitle">Router</span>{#each $tokens as token, index}<div
-						class="cell"
-						class:last={index === $tokens.length - 1}
+							/><path
+								d={wire(
+									networkWidth / 2 + 52,
+									rowY(index, $vectorHeight, rowGap),
+									networkWidth,
+									rowY(index, $vectorHeight, rowGap)
+								)}
+							/>{/each}</svg
 					>
-						<button
-							class="router-dot"
-							class:chosen={index === $moeTokenIndex}
-							aria-label={`Select router token ${index}: ${token}`}
-							aria-pressed={index === $moeTokenIndex}
-							on:click={() => chooseToken(index)}>R</button
+					<div class="column dense-column">
+						{#each $tokens as token, index}<div class="cell">
+								<button
+									class="dense-operation"
+									class:chosen={index === $moeTokenIndex}
+									on:click={() => chooseDense(index)}
+									aria-label={`Inspect dense SwiGLU for token ${index}: ${token}`}
+									><span>SwiGLU</span><small
+										>{$moeModel?.hiddenSize} → {$moeModel?.denseIntermediateSize ?? 10944} → {$moeModel?.hiddenSize}</small
+									></button
+								>
+							</div>{/each}
+					</div>
+				</div>
+			{:else}
+				<svg class="moe-paths" width={networkWidth} height={networkHeight} aria-hidden="true">
+					{#each layer?.tokens ?? [] as tokenTrace, index}
+						{#if index !== $moeTokenIndex}
+							{#each tokenTrace.selectedExperts as expert}<path
+									d={wire(
+										17,
+										rowY(index, $vectorHeight, rowGap),
+										expertX(expert, bankLeft, expertWidth),
+										expertY(expert, bankTop)
+									)}
+									class="context-path"
+								/><path
+									d={wire(
+										expertX(expert, bankLeft, expertWidth) + expertWidth,
+										expertY(expert, bankTop),
+										networkWidth - 12,
+										rowY(index, $vectorHeight, rowGap)
+									)}
+									class="context-path"
+								/>{/each}
+						{/if}
+					{/each}
+					{#each trace?.selectedExperts ?? [] as expert, rank}<path
+							d={wire(
+								17,
+								rowY($moeTokenIndex, $vectorHeight, rowGap),
+								expertX(expert, bankLeft, expertWidth),
+								expertY(expert, bankTop)
+							)}
+							class="selected-path"
+							style={`stroke-width:${1.5 + trace!.routingWeights[rank] * 12};opacity:${selectedExpert === null || selectedExpert === expert ? 0.8 : 0.2}`}
+						/><path
+							d={wire(
+								expertX(expert, bankLeft, expertWidth) + expertWidth,
+								expertY(expert, bankTop),
+								networkWidth - 12,
+								rowY($moeTokenIndex, $vectorHeight, rowGap)
+							)}
+							class="selected-path"
+							style={`stroke-width:${1.5 + trace!.routingWeights[rank] * 12};opacity:${selectedExpert === null || selectedExpert === expert ? 0.8 : 0.2}`}
+						/>{/each}
+
+					{#if sharedExperts}<path
+							class="shared-path"
+							d={wire(
+								17,
+								rowY($moeTokenIndex, $vectorHeight, rowGap),
+								bankLeft + bankWidth / 2,
+								bankTop + bankHeight + 32
+							)}
+						/><path
+							class="shared-path"
+							d={wire(
+								bankLeft + bankWidth / 2,
+								bankTop + bankHeight + 32,
+								networkWidth - 12,
+								rowY($moeTokenIndex, $vectorHeight, rowGap)
+							)}
+						/>{/if}
+				</svg>
+				<div class="column routing-column" bind:this={routingColumn}>
+					<span class="subtitle">Router</span>{#each $tokens as token, index}<div
+							class="cell"
+							class:last={index === $tokens.length - 1}
 						>
-					</div>{/each}
-			</div>
-			<div class="expert-bank" style={`left:${bankLeft}px;top:${bankTop}px;width:${bankWidth}px;`}>
-				<span class="bank-label">Experts</span
-				>{#each Array($moeModel?.numExperts ?? 32) as _, expert}{@const rank =
-						trace?.selectedExperts.indexOf(expert) ?? -1}<button
-						class="expert"
-						class:active={rank >= 0}
-						class:inspected={selectedExpert === expert}
-						aria-label={`Expert ${expert}, ${rank >= 0 ? `selected, mixing weight ${percent(trace!.routingWeights[rank], 2)}` : 'skipped'}. Inspect expert.`}
-						aria-pressed={selectedExpert === expert}
+							<button
+								class="router-dot"
+								class:chosen={index === $moeTokenIndex}
+								aria-label={`Select router token ${index}: ${token}`}
+								aria-pressed={index === $moeTokenIndex}
+								on:click={() => chooseToken(index)}>R</button
+							>
+						</div>{/each}
+				</div>
+				<div
+					class="expert-bank"
+					style={`left:${bankLeft}px;top:${bankTop}px;width:${bankWidth}px;grid-template-columns:repeat(${expertColumns},1fr);`}
+				>
+					<span class="bank-label">Experts</span
+					>{#each Array($moeModel?.numExperts ?? 32) as _, expert}{@const rank =
+							trace?.selectedExperts.indexOf(expert) ?? -1}<button
+							class="expert"
+							class:active={rank >= 0}
+							class:inspected={selectedExpert === expert}
+							aria-label={`Expert ${expert}, ${rank >= 0 ? `selected, mixing weight ${percent(trace!.routingWeights[rank], 2)}` : 'skipped'}. Inspect expert.`}
+							aria-pressed={selectedExpert === expert}
+							on:click={() => {
+								showSum = false;
+								selectedExpert = selectedExpert === expert ? null : expert;
+							}}
+							title={`Expert ${expert} · ${rank >= 0 ? percent(trace!.routingWeights[rank], 2) : 'not selected'}`}
+							><span>E{expert.toString().padStart(2, '0')}</span><small
+								>{rank >= 0 ? percent(trace!.routingWeights[rank], 0) : '—'}</small
+							></button
+						>{/each}
+				</div>
+				{#if sharedExperts}<button
+						class="shared-experts"
+						class:inspected={selectedExpert === $moeModel?.numExperts}
+						style={`left:${bankLeft}px;top:${bankTop + bankHeight + 12}px;width:${bankWidth}px;`}
 						on:click={() => {
 							showSum = false;
-							selectedExpert = selectedExpert === expert ? null : expert;
+							selectedExpert = $moeModel?.numExperts ?? 64;
 						}}
-						title={`Expert ${expert} · ${rank >= 0 ? percent(trace!.routingWeights[rank], 2) : 'not selected'}`}
-						><span>E{expert.toString().padStart(2, '0')}</span><small
-							>{rank >= 0 ? percent(trace!.routingWeights[rank], 0) : '—'}</small
-						></button
-					>{/each}
-			</div>
-			<div class="column sum-column">
-				<span class="subtitle">Sum</span>{#each $tokens as _, index}<div
-						class="cell"
-						class:last={index === $tokens.length - 1}
-					>
-						<button
-							class="sum-dot"
-							class:chosen={index === $moeTokenIndex}
-							aria-label={`Inspect weighted sum for token ${index}: ${$tokens[index]}`}
-							aria-pressed={showSum && index === $moeTokenIndex}
-							on:click={() => chooseSum(index)}
-							title="Inspect the weighted sum of expert outputs">Σ</button
+						aria-label="Inspect the two always-active shared experts"
+						>{sharedExperts} shared experts <small>always active · weight 1</small></button
+					>{/if}
+				<div class="column sum-column">
+					<span class="subtitle">Sum</span>{#each $tokens as _, index}<div
+							class="cell"
+							class:last={index === $tokens.length - 1}
 						>
-					</div>{/each}
-			</div>
+							<button
+								class="sum-dot"
+								class:chosen={index === $moeTokenIndex}
+								aria-label={`Inspect weighted sum for token ${index}: ${$tokens[index]}`}
+								aria-pressed={showSum && index === $moeTokenIndex}
+								on:click={() => chooseSum(index)}
+								title="Inspect the weighted sum of expert outputs">Σ</button
+							>
+						</div>{/each}
+				</div>
+			{/if}
 			<div class="selection-note" style={`top:${networkHeight + 10}px;`}>
-				<strong>{tokenLabel($tokens[$moeTokenIndex] ?? '')}</strong> → top-{$moeModel?.topK ??
-					8}<span>Click an expert or Σ to see its operations</span>
+				<strong>{tokenLabel($tokens[$moeTokenIndex] ?? '')}</strong> → {isDense
+					? 'dense SwiGLU'
+					: `top-${$moeModel?.topK ?? 8}${sharedExperts ? ' + shared' : ''}`}<span
+					>{isDense
+						? 'Click a SwiGLU block to see its multiplications'
+						: 'Click an expert or Σ to see its operations'}</span
+				>
 			</div>
 		</div>
 
 		<div class="out-layer layer flex">
-			<div class="column raw-sum">
-				<span class="subtitle">×{$moeModel?.residualMultiplier ?? 0.22}</span
+			<div class="column raw-sum" class:unscaled={($moeModel?.residualMultiplier ?? 0.22) === 1}>
+				<span class="subtitle"
+					>{($moeModel?.residualMultiplier ?? 0.22) === 1
+						? 'Output'
+						: `×${$moeModel?.residualMultiplier ?? 0.22}`}</span
 				>{#each $tokens as _, index}<div class="cell" class:last={index === $tokens.length - 1}>
 						<div
 							class="raw-vector"
@@ -264,8 +362,10 @@
 				{#each $tokens as token, index}<div class="cell" class:last={index === $tokens.length - 1}>
 						<div
 							class="vector output-vector"
-							title={`Block output after residual addition, token ${index}; schematic vector`}
-						></div>
+							title={`Block output after residual addition, token ${index}${layer?.blockOutputPreview ? '; recorded coordinates' : '; schematic vector'}`}
+						>
+							<VectorCanvas colorScale="blue" data={layer?.blockOutputPreview?.[index]} />
+						</div>
 					</div>{/each}
 			</div>
 		</div>
@@ -291,6 +391,83 @@
 {/if}
 
 <style>
+	.dense-network {
+		position: relative;
+		min-height: 100px;
+	}
+	.dense-wires {
+		position: absolute;
+		inset: 0;
+		fill: none;
+		stroke: #d8c1eb;
+		stroke-width: 2;
+	}
+	.dense-column {
+		align-items: center;
+	}
+	.dense-operation {
+		position: relative;
+		z-index: 103;
+		background: #fbf7fd;
+		border: 1px solid #dfcdec;
+		border-radius: 4px;
+		width: 104px;
+		height: calc(var(--vector-height) + 2px);
+		min-height: 26px;
+		color: #9672b2;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		font:
+			10px Arial,
+			sans-serif;
+		cursor: pointer;
+	}
+	.dense-operation small {
+		font:
+			6px Arial,
+			sans-serif;
+		color: #a792b6;
+		margin-top: 2px;
+	}
+	.dense-operation.chosen {
+		background: #e9d8f4;
+		border-color: #ba97d3;
+	}
+	.shared-experts {
+		position: absolute;
+		z-index: 104;
+		border: 1px solid #b6a2cc;
+		border-radius: 4px;
+		background: #eee7f8;
+		color: #8b70a4;
+		height: 38px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-direction: column;
+		font:
+			10px Arial,
+			sans-serif;
+		cursor: pointer;
+	}
+	.shared-experts small {
+		font-size: 8px;
+		color: #a08aaf;
+		margin-top: 3px;
+	}
+	.shared-experts.inspected {
+		border-color: #9670b6;
+		box-shadow: 0 0 0 1px #e9ddf3;
+	}
+	.shared-path {
+		fill: none;
+		stroke: #ac90c6;
+		stroke-width: 2;
+		stroke-dasharray: 3 2;
+	}
+
 	.mlp.moe {
 		position: relative;
 		min-width: 420px;
@@ -526,6 +703,10 @@
 		width: 40px;
 		left: -13px;
 		font-size: 0.55rem;
+	}
+	.raw-sum.unscaled .subtitle {
+		top: 100%;
+		transform: translateY(8px);
 	}
 	.raw-vector {
 		position: relative;

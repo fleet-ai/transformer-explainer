@@ -206,7 +206,7 @@
 						<div class="cell">
 							<span
 								class="position-value"
-								title={`Token position ${index}; used later to rotate Q and K in attention.`}
+								title={`Token position ${index}; ${$moeModel?.architecture === 'encoder-decoder' ? 'relative position bias is added inside attention' : 'used later to rotate Q and K in attention'}.`}
 								>{index}</span
 							>
 						</div>

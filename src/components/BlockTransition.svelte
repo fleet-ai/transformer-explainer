@@ -3,6 +3,7 @@
 	import { onMount, tick } from 'svelte';
 	import {
 		blockIdx,
+		moeModel,
 		rootRem,
 		modelMeta,
 		isBoundingBoxActive,
@@ -108,7 +109,7 @@
 	class:active={$isBoundingBoxActive}
 >
 	<TextbookTooltip id="blocks">
-		<span class="title-text">Transformer Block {$blockIdx + 1}</span>
+		<span class="title-text">{$moeModel?.stack === 'encoder' ? 'Encoder' : $moeModel?.stack === 'decoder' ? 'Decoder' : 'Transformer'} Block {$blockIdx + 1}</span>
 	</TextbookTooltip>
 	<button
 		aria-label="Previous transformer block"

@@ -4,7 +4,8 @@
 		textbookCurrentPage,
 		textbookCurrentPageId,
 		textbookPreviousPage,
-		userId
+		userId,
+		moeModel
 	} from '~/store';
 	import { textPages } from '~/utils/textbookPages';
 
@@ -26,26 +27,31 @@
 			event: `open-textbook`,
 			page_id: id,
 			open_via: 'tooltip',
-			user_id: $userId
+			user_id: $userId,
+			moeModel
 		});
 	}
 </script>
 
-<div
-	{id}
-	class="textbook-tooltip"
-	data-click={`textbook-tooltip`}
-	on:click={openTextbook}
-	role="button"
-	tabindex="0"
-	on:keydown={(e) => {
-		if (e.key === 'Enter' || e.key === ' ') {
-			openTextbook(e);
-		}
-	}}
->
-	<slot></slot>
-</div>
+{#if $moeModel?.architecture && $moeModel.architecture !== 'moe'}
+	<span class="recorded-label"><slot /></span>
+{:else}
+	<div
+		{id}
+		class="textbook-tooltip"
+		data-click={`textbook-tooltip`}
+		on:click={openTextbook}
+		role="button"
+		tabindex="0"
+		on:keydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				openTextbook(e);
+			}
+		}}
+	>
+		<slot></slot>
+	</div>
+{/if}
 
 <style lang="scss">
 	.textbook-tooltip {

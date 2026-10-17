@@ -7,6 +7,9 @@ export interface TokenTrace {
 	weightedOutputNorms: number[];
 	expertOutputPreview: number[][];
 	combinedOutputPreview: number[];
+	/** Routed experts and the always-active shared branch, before residual addition. */
+	routedCombinedOutputPreview?: number[];
+	sharedExpertOutputPreview?: number[];
 	inputNorm: number;
 	outputNorm: number;
 	reconstructionMaxAbsError: number;
@@ -26,6 +29,12 @@ export interface TraceExample {
 	tokens: TraceToken[];
 	layers: Array<{
 		index: number;
+		feedForwardType?: 'dense' | 'moe';
+		hiddenInputPreview?: number[][];
+		residualInputPreview?: number[][];
+		residualAfterAttentionPreview?: number[][];
+		feedForwardInputPreview?: number[][];
+		blockOutputPreview?: number[][];
 		tokens: TokenTrace[];
 		expertTokenCounts: number[];
 		attentionInputPreview: number[][];
@@ -54,6 +63,17 @@ export interface TraceExample {
 export interface TraceDocument {
 	schemaVersion: number;
 	model: {
+		architecture?: 'moe' | 'mla' | 'vit' | 'encoder-decoder' | 'vision-language' | 'hybrid';
+		maskMode?: 'causal' | 'bidirectional';
+		attentionBias?: 'relative';
+		encoderLayers?: number;
+		decoderLayers?: number;
+		visionLayers?: number;
+		outputTokenIndex?: number;
+		stack?: 'encoder' | 'decoder';
+		activation?: string;
+		normalization?: 'rmsnorm' | 'layernorm';
+		outputKind?: 'language' | 'classification';
 		id: string;
 		name: string;
 		revision: string;
@@ -70,6 +90,16 @@ export interface TraceDocument {
 		attentionHeads: number;
 		keyValueHeads: number;
 		attentionHeadSize: number;
+		contentKeySize?: number;
+		rotarySize?: number;
+		valueHeadSize?: number;
+		kvLatentSize?: number;
+		sharedExperts?: number;
+		denseLayers?: number;
+		denseIntermediateSize?: number;
+		sharedIntermediateSize?: number;
+		normalizeRoutingWeights?: boolean;
+		rmsNormEps?: number;
 		attentionMultiplier: number;
 		embeddingMultiplier: number;
 		logitsScaling: number;

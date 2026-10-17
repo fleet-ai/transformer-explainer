@@ -3,6 +3,7 @@
 		expandedBlock,
 		tokens,
 		modelData,
+		moeModel,
 		rootRem,
 		attentionHeadIdx,
 		hoveredMatrixCell,
@@ -41,6 +42,21 @@
 	$: softmaxed =
 		$modelData?.outputs?.[`block_${$blockIdx}_attn_head_${$attentionHeadIdx}_attn_dropout`]?.data ||
 		placeHolderData;
+
+	$: attentionMultiplier = $moeModel?.attentionMultiplier ?? 1 / 64;
+	$: bidirectional = $moeModel?.maskMode === 'bidirectional';
+	$: hasRelativeBias = $moeModel?.attentionBias === 'relative';
+	$: isMla = $moeModel?.architecture === 'mla';
+	$: scaledScoreFormula = hasRelativeBias
+		? `QK^T + B_{relative}${bidirectional ? '' : ' + M'}`
+		: bidirectional
+			? 's\\,QK^T'
+			: isMla
+				? 's\\,(Q^{C}(K^{C})^T + Q^{R}(K^{R})^T) + M'
+				: attentionMultiplier === 1 / 64
+					? '\\frac{QK^T}{64} + M'
+					: 's\\,QK^T + M';
+	$: scaleDescription = `s = ${attentionMultiplier}${isMla ? ' · recorded model scale, including YaRN' : ''}`;
 
 	let factor = 1; //todo
 	let maxCellSize = 20 * factor;
@@ -288,11 +304,13 @@
 	}
 	$: qkColorScaleDomain = finiteExtent(queryKey);
 	$: maskedColorScaleDomain = finiteExtent(masked);
-	$: qkColorScale = d3.scaleLinear<string>()
+	$: qkColorScale = d3
+		.scaleLinear<string>()
 		.domain(qkColorScaleDomain)
 		.range(['white', theme.colors['purple'][700]])
 		.clamp(true);
-	$: maskedColorScale = d3.scaleLinear<string>()
+	$: maskedColorScale = d3
+		.scaleLinear<string>()
 		.domain(maskedColorScaleDomain)
 		.range(['white', theme.colors['purple'][700]])
 		.clamp(true);
@@ -409,7 +427,7 @@
 				/>
 				<Matrix
 					className="main opacity-0"
-					data={maskArray(masked)}
+					data={bidirectional ? masked : maskArray(masked)}
 					showSize={false}
 					cellHeight={cellSize}
 					cellWidth={cellSize}
@@ -423,11 +441,18 @@
 				/>
 			</div>
 			<TextbookTooltip id="masked-self-attention">
-				<div class="matrix-label">Scaling · Mask</div>
+				<div class="matrix-label">
+					{hasRelativeBias
+						? `Relative bias${bidirectional ? '' : ' · Mask'}`
+						: bidirectional
+							? 'Scaling'
+							: 'Scaling · Mask'}
+				</div>
 			</TextbookTooltip>
 
 			<Tooltip class="popover tooltip">
-				<Katex math={'\\frac{QK^T}{64} + M'}></Katex>
+				<Katex math={scaledScoreFormula}></Katex>
+				<div>{scaleDescription}</div>
 			</Tooltip>
 			<div class="color-scale">
 				<span class="val">{maskedColorScaleDomain[0].toFixed(1)}</span>
@@ -463,7 +488,7 @@
 			<div>
 				<Matrix
 					className="prev absolute top-0 left-0  pointer-events-none"
-					data={maskArray(masked)}
+					data={bidirectional ? masked : maskArray(masked)}
 					showSize={false}
 					cellHeight={cellSize}
 					cellWidth={cellSize}
@@ -477,7 +502,7 @@
 				/>
 				<Matrix
 					className="main opacity-0"
-					data={maskArray(softmaxed)}
+					data={bidirectional ? softmaxed : maskArray(softmaxed)}
 					showSize={false}
 					cellHeight={cellSize}
 					cellWidth={cellSize}
@@ -495,7 +520,8 @@
 				<div class="matrix-label">Softmax</div>
 			</TextbookTooltip>
 			<Tooltip class="popover tooltip">
-				<Katex math={'\\text{softmax}(\\frac{QK^T}{64} + M)'}></Katex>
+				<Katex math={`\\operatorname{softmax}(${scaledScoreFormula})`}></Katex>
+				<div>{scaleDescription}</div>
 			</Tooltip>
 			<div class="color-scale">
 				<span class="val">0.0</span>
@@ -513,7 +539,7 @@
 		>
 			<Matrix
 				className="main"
-				data={maskArray(softmaxed)}
+				data={bidirectional ? softmaxed : maskArray(softmaxed)}
 				showSize={false}
 				cellHeight={cellSize}
 				cellWidth={cellSize}

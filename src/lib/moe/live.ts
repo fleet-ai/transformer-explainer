@@ -45,7 +45,7 @@ export function traceAssetUrl(exampleId: string, kind: TraceAsset, base = ''): s
 	if (isLiveTrace(exampleId))
 		throw new Error('This live trace is no longer connected. Generate the prompt again.');
 	return kind === 'main'
-		? `${base}/traces/granite-moe.json`
+		? `${base}/traces/${exampleId.startsWith('deepseek-') ? 'deepseek-mla' : 'granite-moe'}.json`
 		: `${base}/traces/${kind}-operations-${encodeURIComponent(exampleId)}.json`;
 }
 

@@ -9,6 +9,8 @@ export interface ProjectionOperation {
 
 export interface ExpertOperation {
 	id: number;
+	/** Dense and fused shared experts can have different intermediate widths. */
+	intermediateSize?: number;
 	gate: ProjectionOperation;
 	up: ProjectionOperation;
 	siluGate: number[];
@@ -36,6 +38,8 @@ export interface ExpertOperationsDocument {
 			routingWeights: number[];
 			experts: ExpertOperation[];
 			combinedOutput: number[];
+			routedCombinedOutput?: number[];
+			sharedExpertOutput?: number[];
 		}>;
 	}>;
 }

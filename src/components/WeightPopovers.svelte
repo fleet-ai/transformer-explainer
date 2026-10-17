@@ -1,7 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import QkvWeightPopover from './Popovers/QKVWeightPopover.svelte';
-	import { weightPopover, tooltip } from '~/store';
+	import { vlmInspectorStage } from '$lib/vlm/store';
+	import { hybridInspector } from '$lib/hybrid/store';
+	import { vitInspectorStage } from '$lib/vit/store';
+	import { t5Inspector } from '$lib/seq2seq/store';
+	import LatentInspector from './mla/LatentInspector.svelte';
+	import RoPEInspector from './moe/RoPEInspector.svelte';
+	import RecordedLMHead from './moe/RecordedLMHead.svelte';
+	import { weightPopover, tooltip, moeModel, expandedBlock } from '~/store';
 	import { fade } from 'svelte/transition';
 	import AttentionWeightPopover from './Popovers/AttentionWeightPopover.svelte';
 	import MLPWeightPopover from './Popovers/MLPWeightPopover.svelte';
@@ -17,6 +24,48 @@
 		removePathHighlight
 	} from '~/utils/textbook';
 
+	$: if ($moeModel?.architecture === 'vit' && $weightPopover) {
+		const stages: Record<string, string> = {
+			qkv: 'qkv',
+			attention: 'attention',
+			mlpUp: 'up',
+			mlpDown: 'down',
+			softmax: 'classifier'
+		};
+		vitInspectorStage.set(stages[String($weightPopover)] ?? 'attention');
+		$weightPopover = null;
+	}
+	$: if ($moeModel?.architecture === 'encoder-decoder' && $weightPopover) {
+		t5Inspector.set(
+			$weightPopover === 'softmax'
+				? 'output'
+				: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
+					? 'ffn'
+					: 'self'
+		);
+		$weightPopover = null;
+	}
+	$: if ($moeModel?.architecture === 'vision-language' && $weightPopover) {
+		const stages: Record<string, string> = {
+			qkv: 'qkv',
+			attention: 'attention',
+			mlpUp: 'up',
+			mlpDown: 'down',
+			softmax: 'output'
+		};
+		vlmInspectorStage.set(stages[String($weightPopover)] ?? 'attention');
+		$weightPopover = null;
+	}
+	$: if ($moeModel?.architecture === 'hybrid' && $weightPopover) {
+		hybridInspector.set(
+			$weightPopover === 'softmax'
+				? 'classifier'
+				: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
+					? 'ffn'
+					: 'attention'
+		);
+		$weightPopover = null;
+	}
 	let resizeObserver: ResizeObserver;
 	let qkvPos = { left: 0, top: 0 };
 	let mlpPos = { left: 0, top: 0 };
@@ -25,9 +74,14 @@
 	let softmaxPos = { left: 0, top: 0 };
 
 	let popoverEl: HTMLElement = null;
+	let showMLARope = false;
 
 	function handleOutsideClick(e) {
-		if (!!$weightPopover && !popoverEl.contains(e.target)) {
+		if (
+			!!$weightPopover &&
+			!popoverEl?.contains(e.target) &&
+			!(e.target instanceof Element && e.target.closest('.latent-inspector'))
+		) {
 			weightPopover.set(null);
 		}
 	}
@@ -131,7 +185,17 @@
 	</div>
 {/if}
 
-{#if $weightPopover === 'qkv'}
+{#if $weightPopover === 'qkv' && $moeModel?.architecture === 'mla'}
+	<LatentInspector
+		stage="query"
+		on:close={() => ($weightPopover = null)}
+		on:rope={() => {
+			$weightPopover = null;
+			showMLARope = true;
+		}}
+		on:attention={() => ($weightPopover = 'attention')}
+	/>
+{:else if $weightPopover === 'qkv'}
 	<div
 		bind:this={popoverEl}
 		class="qkv-weight-popover weight-popover"
@@ -183,9 +247,17 @@
 		in:fade={{ duration: 300 }}
 		role="group"
 	>
-		<LogitWeightPopover></LogitWeightPopover>
+		{#if $moeModel?.architecture === 'mla'}<RecordedLMHead />{:else}<LogitWeightPopover />{/if}
 	</div>
 {/if}
+
+{#if showMLARope}<RoPEInspector
+		on:close={() => (showMLARope = false)}
+		on:attention={() => {
+			showMLARope = false;
+			$expandedBlock = { id: 'attention' };
+		}}
+	/>{/if}
 
 <style lang="scss">
 	.weight-popover {

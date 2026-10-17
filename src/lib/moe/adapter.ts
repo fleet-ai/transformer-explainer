@@ -1,35 +1,68 @@
 import { get } from 'svelte/store';
 import {
-	attentionHeadIdx, attentionHeadIdxTemp, blockIdx, expandedBlock,
-	highlightedToken, hoveredMatrixCell, inputText, isFetchingModel, isLoaded,
-	isModelRunning, isTextbookOpen, modelData, modelMetaMap, moeDocument, moeExample, moeModel,
-	moeTokenIndex, predictedToken, sampling, selectedExampleIdx, selectedModel,
-	temperature, tokenIds, tokens
+	attentionHeadIdx,
+	attentionHeadIdxTemp,
+	blockIdx,
+	expandedBlock,
+	highlightedToken,
+	hoveredMatrixCell,
+	inputText,
+	isFetchingModel,
+	isLoaded,
+	isModelRunning,
+	isTextbookOpen,
+	modelData,
+	modelMetaMap,
+	moeDocument,
+	moeExample,
+	moeModel,
+	moeTokenIndex,
+	moeAttentionOperations,
+	predictedToken,
+	sampling,
+	selectedExampleIdx,
+	selectedModel,
+	temperature,
+	tokenIds,
+	tokens
 } from '~/store';
 import type { TraceDocument, TraceExample } from './types';
 
 function tensor(data: number[][]): ModelData['outputs'][string] {
-	return { data, dims: [data.length, data[0]?.length ?? 0], size: data.reduce((sum, row) => sum + row.length, 0) };
+	return {
+		data,
+		dims: [data.length, data[0]?.length ?? 0],
+		size: data.reduce((sum, row) => sum + row.length, 0)
+	};
 }
 
 /** Keep vocabulary IDs separate from these whitespace-only display substitutions. */
 function displayToken(text: string): string {
-	return text.replace(/\n/g, '[NEWLINE]').replace(/\t/g, '[TAB]').replace(/\r/g, '[CR]')
+	return text
+		.replace(/\n/g, '[NEWLINE]')
+		.replace(/\t/g, '[TAB]')
+		.replace(/\r/g, '[CR]')
 		.replace(/\s{2,}/g, (spaces) => `[${spaces.length} SPACES]`);
 }
 
 /** Recompute a distribution from actual full-vocabulary logits, without model inference. */
 export function recordedProbabilities(
-	logits: number[], vocabulary: string[], selectedTemperature: number, selectedSampling: Sampling,
+	logits: number[],
+	vocabulary: string[],
+	selectedTemperature: number,
+	selectedSampling: Sampling,
 	visibleCandidates = 16
 ): Probabilities {
 	if (!logits.length || logits.length !== vocabulary.length || !logits.every(Number.isFinite)) {
-		throw new Error('Recorded vocabulary logits are missing or do not match the tokenizer vocabulary.');
+		throw new Error(
+			'Recorded vocabulary logits are missing or do not match the tokenizer vocabulary.'
+		);
 	}
 	if (!(selectedTemperature > 0) || !Number.isFinite(selectedTemperature)) {
 		throw new Error('Temperature must be a finite number above zero.');
 	}
-	const ranked = logits.map((logit, tokenId) => ({ logit, tokenId }))
+	const ranked = logits
+		.map((logit, tokenId) => ({ logit, tokenId }))
 		.sort((a, b) => b.logit - a.logit || a.tokenId - b.tokenId);
 	const scaled = ranked.map(({ logit }) => logit / selectedTemperature);
 	const exp = scaled.map((value) => Math.exp(value - scaled[0]));
@@ -57,20 +90,28 @@ export function recordedProbabilities(
 	}
 	const retainedMass = exp.slice(0, cutoffIndex + 1).reduce((sum, value) => sum + value, 0);
 	return ranked.slice(0, visibleCandidates).map(({ logit, tokenId }, rank) => ({
-		rank, tokenId, token: displayToken(vocabulary[tokenId]), logit,
-		scaledLogit: scaled[rank], expLogit: exp[rank],
+		rank,
+		tokenId,
+		token: displayToken(vocabulary[tokenId]),
+		logit,
+		scaledLogit: scaled[rank],
+		expLogit: exp[rank],
 		probability: rank <= cutoffIndex ? exp[rank] / retainedMass : 0,
 		topKLogit: rank <= cutoffIndex ? scaled[rank] : -Infinity,
 		topPProbability: fullProbabilities[rank],
-		cumulativeProbability: cumulative[rank], cutoffIndex
+		cumulativeProbability: cumulative[rank],
+		cutoffIndex
 	}));
 }
 
 /** Adapt recorded tensors to the original components' names; never synthesize activations. */
 export function toOriginalModelData(
-	example: TraceExample, vocabulary: string[], selectedTemperature = 1,
+	example: TraceExample,
+	vocabulary: string[],
+	selectedTemperature = 1,
 	selectedSampling: Sampling = { type: 'top-p', value: 1 },
-	attentionMultiplier = 1 / 64
+	attentionMultiplier = 1 / 64,
+	maskMode: 'causal' | 'bidirectional' = 'causal'
 ): ModelData {
 	if (!(attentionMultiplier > 0) || !Number.isFinite(attentionMultiplier)) {
 		throw new Error('The recorded attention multiplier must be finite and positive.');
@@ -81,29 +122,54 @@ export function toOriginalModelData(
 			const prefix = `block_${layer}_attn_head_${head}`;
 			const scores = example.attentionScores[layer][head];
 			const masked = example.attentionMaskedScores[layer][head].map((row, query) =>
-				row.map((value, key) => key > query ? -Infinity : value));
+				row.map((value, key) => (maskMode === 'causal' && key > query ? -Infinity : value))
+			);
 			// The original first stage displays QKᵀ before scaling. These raw dot
 			// products are derived by undoing the captured model's multiplier.
 			// Granite's power-of-two factor makes this inverse exact before the
 			// capture's decimal serialization; no Q/K activations are fabricated.
-			outputs[`${prefix}_attn`] = tensor(scores.map((row) => row.map((value) => value / attentionMultiplier)));
+			outputs[`${prefix}_attn`] = tensor(
+				scores.map((row) => row.map((value) => value / attentionMultiplier))
+			);
 			outputs[`${prefix}_attn_scaled`] = tensor(scores);
 			outputs[`${prefix}_attn_masked`] = tensor(masked);
 			outputs[`${prefix}_attn_softmax`] = tensor(probabilities);
 			outputs[`${prefix}_attn_dropout`] = tensor(probabilities);
 		}
 	}
-	const probabilities = recordedProbabilities(example.nextTokenLogits, vocabulary, selectedTemperature, selectedSampling);
+	const probabilities = recordedProbabilities(
+		example.nextTokenLogits,
+		vocabulary,
+		selectedTemperature,
+		selectedSampling
+	);
 	// Highlight the highest-probability candidate. A replay never invents a continuation.
 	return { logits: example.nextTokenLogits, outputs, probabilities, sampled: probabilities[0] };
 }
 
 /** Bind a selected recording to the upstream layout and controls. */
-export function hydrateRecordedExample(document: TraceDocument, exampleIndex = 0): void {
+export function hydrateRecordedExample(
+	document: TraceDocument,
+	exampleIndex = 0,
+	options: { preserveSelection?: boolean } = {}
+): void {
 	const example = document.examples[exampleIndex];
 	if (!example) throw new Error(`Recorded example ${exampleIndex} does not exist.`);
-	const adapted = toOriginalModelData(example, document.vocabulary, get(temperature), get(sampling), document.model.attentionMultiplier);
-	modelMetaMap['granite-moe'] = {
+	const adapted = toOriginalModelData(
+		example,
+		document.vocabulary,
+		get(temperature),
+		get(sampling),
+		document.model.attentionMultiplier,
+		document.model.maskMode ?? 'causal'
+	);
+	const modelKey =
+		document.model.architecture === 'mla'
+			? 'deepseek-mla'
+			: document.model.architecture && document.model.architecture !== 'moe'
+				? `recorded-${document.model.architecture}`
+				: 'granite-moe';
+	modelMetaMap[modelKey] = {
 		layer_num: document.model.numLayers,
 		attention_head_num: document.model.attentionHeads,
 		dimension: document.model.hiddenSize
@@ -111,7 +177,8 @@ export function hydrateRecordedExample(document: TraceDocument, exampleIndex = 0
 	moeDocument.set(document);
 	moeModel.set(document.model);
 	moeExample.set(example);
-	selectedModel.set('granite-moe');
+	moeAttentionOperations.set(null);
+	selectedModel.set(modelKey);
 	selectedExampleIdx.set(exampleIndex);
 	inputText.set(example.prompt);
 	tokens.set(example.tokens.map((token) => token.text));
@@ -123,9 +190,11 @@ export function hydrateRecordedExample(document: TraceDocument, exampleIndex = 0
 	isTextbookOpen.set(false);
 	highlightedToken.set({ index: null, value: null, fix: false });
 	hoveredMatrixCell.set({ row: null, col: null });
-	blockIdx.set(0);
-	attentionHeadIdx.set(0);
-	attentionHeadIdxTemp.set(0);
+	if (!options.preserveSelection) {
+		blockIdx.set(0);
+		attentionHeadIdx.set(0);
+		attentionHeadIdxTemp.set(0);
+	}
 	isFetchingModel.set(false);
 	isModelRunning.set(false);
 	isLoaded.set(true);
@@ -136,7 +205,12 @@ export function applyRecordedSampling(): void {
 	const document = get(moeDocument);
 	const example = get(moeExample);
 	if (!document || !example) return;
-	const probabilities = recordedProbabilities(example.nextTokenLogits, document.vocabulary, get(temperature), get(sampling));
+	const probabilities = recordedProbabilities(
+		example.nextTokenLogits,
+		document.vocabulary,
+		get(temperature),
+		get(sampling)
+	);
 	modelData.update((current) => ({ ...current, probabilities, sampled: probabilities[0] }));
 	predictedToken.set(probabilities[0]);
 }

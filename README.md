@@ -15,33 +15,38 @@ base commit is `bfe50afba10b9b560b84143ee1107d977defa74f`.
   Projection illustrations are identified as schematic where values were not
   captured by the original model export.
 - **MoE** (`/`) retains the Granite trace explorer and local inference service.
-- **MLA** (`/architectures/mla/`) shows real DeepSeek-V2-Lite first-layer latent
-  compression, decoupled RoPE, K/V expansion and attention. This is a pretrained
-  layer capture, not full-model text generation.
+- **MLA** (`/architectures/mla/`) records the complete pretrained DeepSeek-V2-Lite:
+  all 27 blocks, 16 attention heads, latent compression, decoupled RoPE, expanded
+  content K/V, dense first block, routed and shared experts, final normalization,
+  and all 102,400 vocabulary logits.
 - **Encoder–decoder** (`/architectures/encoder-decoder/`) shows T5-small source
   attention, causal decoder attention and cross-attention for recorded translations.
-- **Mamba hybrid** (`/architectures/hybrid/`) shows Zamba2-1.2B's trained prefix
-  through its first hybrid layer, including convolution, selective state and attention.
-  This is a partial pretrained computation, not full-model text generation.
+- **Mamba hybrid** (`/architectures/hybrid/`) records all 38 Zamba2-1.2B blocks,
+  including all six shared Transformer calls and their distinct adapters, the
+  64-head selective-state computation in every block, and all 32,000 LM logits.
 - **Vision–language** (`/architectures/vision-language/`) shows SmolVLM-256M's
-  image encoder, pixel shuffle/projector and causal language decoder.
+  complete 12-block image encoder, pixel shuffle/projector and 30-block causal
+  language decoder, with every attention head and the actual generated completion.
 - **ViT** (`/architectures/vit/`) shows DeiT-tiny's image patches, class token,
   bidirectional attention and recorded ImageNet classification probabilities.
 
-The five new views replay captured examples. They do not run arbitrary inputs in
-browser. Each inspector identifies its checkpoint, capture scope, tensor shape and
-slice; **Trace JSON** downloads the actual saved numbers. See
+The five new views replay full pretrained-model captures in the original diagram
+components. They do not run arbitrary inputs in the browser. Each inspector
+identifies its checkpoint, tensor shape and displayed slice; trace downloads
+expose the saved numbers and binary tensor manifests. See
 [architecture capture notes](docs/architectures.md) for reproduction and limitations.
 
 Each architecture owns its model state and inference runtime. The navigation
 loads the corresponding application so GPT-2 tensors, tokenization, and layer
 counts cannot be mixed with Granite's. All seven views ship in the same static site.
 
-The MoE application directly imports the original `Embedding`, `QKV`, `Attention`,
+The recorded applications reuse the original `Embedding`, `QKV`, `Attention`,
 `Sankey`, `SubsequentBlocks`, `LinearSoftmax`, and `BlockTransition` components,
 along with the original input, temperature, and sampling controls. The visual
-replacement is inside `Mlp.svelte`: router → expert bank → weighted sum. Layout
-sizing accommodates the larger stage. No article or blog is rendered.
+replacement for MoE is inside `Mlp.svelte`: router → expert bank → weighted sum.
+Other architectures replace the stages their actual computation changes: MLA
+compression, encoder cross-attention, selective-state updates, and image embedding.
+Layout sizing accommodates those stages. No article or blog is rendered.
 
 The diagram uses **real recorded forward passes** of
 [IBM Granite 3.1 1B-A400M](https://huggingface.co/ibm-granite/granite-3.1-1b-a400m-base):

@@ -50,6 +50,7 @@ export const moeTokenIndex = writable(0);
 
 export const modelMetaMap: Record<string, ModelMetaData> = {
 	'granite-moe': { layer_num: 24, attention_head_num: 16, dimension: 1024 },
+	'deepseek-mla': { layer_num: 27, attention_head_num: 16, dimension: 2048 },
 	gpt2: { layer_num: 12, attention_head_num: 12, dimension: 768, chunkTotal: 63 },
 	'gpt2-medium': { layer_num: 24, attention_head_num: 16, dimension: 1024 },
 	'gpt2-large': { layer_num: 36, attention_head_num: 20, dimension: 1280 }
@@ -79,8 +80,14 @@ export const inputText = writable(inputTextExample[initialExIdx]);
 // selected model and meta data
 const initialSelectedModel = 'granite-moe';
 export const selectedModel = writable(initialSelectedModel);
+export const recordedControls = writable<{
+	status?: string;
+	traceUrl?: string;
+	selectExample?: (index: number) => void;
+	replay?: () => void;
+} | null>(null);
 export const modelMeta = derived([selectedModel, moeModel], ([$selectedModel, $moeModel]) =>
-	$selectedModel === 'granite-moe' && $moeModel
+	!$selectedModel.startsWith('gpt2') && $moeModel
 		? {
 				layer_num: $moeModel.numLayers,
 				attention_head_num: $moeModel.attentionHeads,

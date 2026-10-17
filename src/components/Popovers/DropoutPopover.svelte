@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PopoverProps } from 'flowbite-svelte/Popover.svelte';
 	import CommonPopover from './CommonPopover.svelte';
+	import { moeModel } from '~/store';
 
 	export let offset: PopoverProps['offset'] = undefined;
 	export let className: PopoverProps['class'] = undefined;
@@ -19,7 +20,12 @@
 	goTo="article-dropout"
 >
 	<div class="dropout-content">
-		Disables randomly selected neurons during training. It is inactive in these recorded evaluation passes.
+		{#if $moeModel?.architecture === 'mla'}
+			This recorded model evaluation does not drop attention weights or hidden-state coordinates.
+		{:else}
+			Disables randomly selected neurons during training. It is inactive in these recorded
+			evaluation passes.
+		{/if}
 	</div></CommonPopover
 >
 

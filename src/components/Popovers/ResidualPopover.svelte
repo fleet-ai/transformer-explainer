@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PopoverProps } from 'flowbite-svelte/Popover.svelte';
 	import CommonPopover from './CommonPopover.svelte';
+	import { moeModel } from '~/store';
 
 	export let offset: PopoverProps['offset'] = undefined;
 	export let className: PopoverProps['class'] = undefined;
@@ -21,7 +22,12 @@
 	goTo="article-residual"
 >
 	<div class="residual-content">
-		Adds the residual stream to the branch output multiplied by 0.22, the scale used by this Granite checkpoint.
+		{#if ($moeModel?.residualMultiplier ?? 0.22) === 1}
+			Adds the branch output directly to its input residual stream: output = input + branch.
+		{:else}
+			Adds the residual stream to the branch output multiplied by {$moeModel?.residualMultiplier ??
+				0.22}, the scale used by this checkpoint.
+		{/if}
 	</div></CommonPopover
 >
 

@@ -1,5 +1,11 @@
 <script lang="ts">
 	import HeadFlow from './moe/HeadFlow.svelte';
+	import PlainHeadFlow from './vit/PlainHeadFlow.svelte';
+	import { hybridHeadOperations, hybridInspector } from '$lib/hybrid/store';
+	import { vitHeadOperations } from '$lib/vit/store';
+	import { vlmHeadOperations, vlmInspectorStage } from '$lib/vlm/store';
+	import LatentHeadFlow from './mla/LatentHeadFlow.svelte';
+	import LatentInspector from './mla/LatentInspector.svelte';
 	import RoPEInspector from './moe/RoPEInspector.svelte';
 	import VectorCanvas from './common/VectorCanvas.svelte';
 	import HeadStack from '~/components/HeadStack.svelte';
@@ -13,6 +19,7 @@
 		attentionHeadIdx,
 		moeExample,
 		moeModel,
+		moeAttentionOperations,
 		blockIdx
 	} from '~/store';
 	import classNames from 'classnames';
@@ -37,11 +44,29 @@
 
 	let isHovered = false;
 	let showRoPE = false;
+	let mlaStage: string | null = null;
+	$: isMLA = $moeModel?.architecture === 'mla';
+	$: isVit = $moeModel?.architecture === 'vit';
+	$: isHybrid = $moeModel?.architecture === 'hybrid';
+	$: isVlm = $moeModel?.architecture === 'vision-language';
+	$: isPlain =
+		['vit', 'encoder-decoder'].includes($moeModel?.architecture ?? '') ||
+		(isVlm && $moeModel?.maskMode === 'bidirectional');
+	$: valueSize = $moeModel?.valueHeadSize ?? headSize;
 	$: kvHead = Math.floor(
 		$attentionHeadIdx / (($moeModel?.attentionHeads ?? 16) / ($moeModel?.keyValueHeads ?? 8))
 	);
 	$: headSize = $moeModel?.attentionHeadSize ?? 64;
 	$: layer = $moeExample?.layers[$blockIdx];
+	$: operations = isVit
+		? $vitHeadOperations
+		: isVlm
+			? $vlmHeadOperations
+			: isHybrid
+				? $hybridHeadOperations
+				: $moeAttentionOperations?.example.id === $moeExample?.id
+					? $moeAttentionOperations?.layers[$blockIdx]
+					: undefined;
 
 	function handleMouseEnter() {
 		isHovered = true;
@@ -66,7 +91,12 @@
 		data-click="attention-step-title"
 	>
 		<div class="w-max">
-			<TextbookTooltip id="self-attention">Multi-head Self Attention</TextbookTooltip>
+			{#if isMLA}Multi-head Latent Attention{:else if isPlain}{$moeModel?.maskMode ===
+				'bidirectional'
+					? 'Bidirectional'
+					: 'Causal'} Self Attention{:else}<TextbookTooltip id="self-attention"
+					>Multi-head Self Attention</TextbookTooltip
+				>{/if}
 		</div>
 	</div>
 	<div class="content relative">
@@ -77,7 +107,21 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
-				<div class="head-flow-wrap"><HeadFlow on:inspect={() => (showRoPE = true)} /></div>
+				<div class="head-flow-wrap">
+					{#if isPlain}<PlainHeadFlow />{:else if isMLA}<LatentHeadFlow
+							on:inspect={(event) => (mlaStage = event.detail)}
+							on:rope={() => (showRoPE = true)}
+						/>{:else}<HeadFlow
+							queryHeads={$moeModel?.attentionHeads ?? 16}
+							keyValueHeads={$moeModel?.keyValueHeads ?? 8}
+							{headSize}
+							on:inspect={() => {
+								if (isVlm) vlmInspectorStage.set('rope');
+								else if (isHybrid) hybridInspector.set('rope');
+								else showRoPE = true;
+							}}
+						/>{/if}
+				</div>
 				<div
 					class="head-block flex w-full items-center justify-between px-2"
 					style={`height:${Math.max($headContentHeight - 110, 320)}px;min-height:calc(var(--vector-height) * ${($tokens.length * 3) / 16} + ${($tokens.length - 1) * 1.5 + 14}rem);`}
@@ -86,7 +130,7 @@
 						<div class="column key">
 							<div class="head1 title">
 								<TextbookTooltip id="qkv">Key {kvHead + 1}</TextbookTooltip><small
-									>RoPE · {headSize}D</small
+									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'RoPE'} · {headSize}D</small
 								>
 							</div>
 
@@ -100,20 +144,22 @@
 									<div class={`vector x1-12 ${keyHeadVectorColor}`}>
 										<VectorCanvas
 											colorScale="red"
-											data={layer?.keyPreview[$attentionHeadIdx][index]}
+											data={layer?.keyPreview?.[$attentionHeadIdx]?.[index]}
 										/>
 									</div>
 								</div>
 							{/each}
 							<Tooltip class="popover" triggeredBy={'.step.attention .key .cell'} placement="right"
-								>Key, shared KV head {kvHead + 1}, after RoPE, vector({$modelMeta.dimension /
-									$modelMeta.attention_head_num})</Tooltip
+								>Key, {isPlain ? 'head' : isMLA ? 'content head' : 'shared KV head'}
+								{kvHead + 1}, {isMLA
+									? '128 content + 64 rotary coordinates'
+									: `${isPlain ? 'no RoPE' : 'after RoPE'}, vector(${headSize})`}</Tooltip
 							>
 						</div>
 						<div class="column query">
 							<div class="head1 title">
 								<TextbookTooltip id="qkv">Query {$attentionHeadIdx + 1}</TextbookTooltip><small
-									>RoPE · {headSize}D</small
+									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'RoPE'} · {headSize}D</small
 								>
 							</div>
 							{#each $tokens as token, index}
@@ -126,7 +172,7 @@
 									<div class={`vector x1-12 ${queryHeadVectorColor}`}>
 										<VectorCanvas
 											colorScale="blue"
-											data={layer?.queryPreview[$attentionHeadIdx][index]}
+											data={layer?.queryPreview?.[$attentionHeadIdx]?.[index]}
 										/>
 									</div>
 								</div>
@@ -135,14 +181,15 @@
 								class="popover"
 								triggeredBy={'.step.attention .query .cell'}
 								placement="right"
-								>Query, Head {$attentionHeadIdx + 1}, after RoPE, vector({$modelMeta.dimension /
-									$modelMeta.attention_head_num})</Tooltip
+								>Query, Head {$attentionHeadIdx + 1}, {isMLA
+									? '128 content + 64 rotary coordinates'
+									: `${isPlain ? 'no RoPE' : 'after RoPE'}, vector(${headSize})`}</Tooltip
 							>
 						</div>
 						<div class="column value">
 							<div class="head1 title">
 								<TextbookTooltip id="qkv">Value {kvHead + 1}</TextbookTooltip><small
-									>unchanged · {headSize}D</small
+									>{isMLA ? 'Expanded latent' : 'unchanged'} · {valueSize}D</small
 								>
 							</div>
 							{#each $tokens as token, index}
@@ -151,7 +198,7 @@
 									<div class={`vector x1-12 ${valHeadVectorColor}`}>
 										<VectorCanvas
 											colorScale="green"
-											data={layer?.valuePreview[$attentionHeadIdx][index]}
+											data={layer?.valuePreview?.[$attentionHeadIdx]?.[index]}
 										/>
 									</div>
 								</div>
@@ -160,8 +207,8 @@
 								class="popover"
 								triggeredBy={'.step.attention .value .cell'}
 								placement="right"
-								>Value, shared KV head {kvHead + 1}, no RoPE, vector({$modelMeta.dimension /
-									$modelMeta.attention_head_num})</Tooltip
+								>Value, {isPlain ? 'head' : isMLA ? 'expanded latent head' : 'shared KV head'}
+								{kvHead + 1}, no RoPE, vector({valueSize})</Tooltip
 							>
 						</div>
 					</div>
@@ -175,12 +222,16 @@
 							</div>
 							{#each $tokens as token, index}
 								<div class="head1 cell x1-12" class:last={index === $tokens.length - 1}>
-									<div class={`vector x1-12 ${outputVectorColor}`}></div>
+									<div class={`vector x1-12 ${outputVectorColor}`}>
+										<VectorCanvas
+											colorScale="purple"
+											data={operations?.attentionContext?.[$attentionHeadIdx]?.[index]}
+										/>
+									</div>
 								</div>
 							{/each}
 							<Tooltip class="popover" triggeredBy={'.step.attention .out .cell'} placement="right"
-								>Attention Out, Head {$attentionHeadIdx + 1}, vector({$modelMeta.dimension /
-									$modelMeta.attention_head_num})</Tooltip
+								>Attention Out, Head {$attentionHeadIdx + 1}, vector({valueSize})</Tooltip
 							>
 						</div>
 					</div>
@@ -193,6 +244,19 @@
 		on:close={() => (showRoPE = false)}
 		on:attention={() => {
 			showRoPE = false;
+			$expandedBlock = { id: 'attention' };
+		}}
+	/>{/if}
+
+{#if mlaStage}<LatentInspector
+		stage={mlaStage}
+		on:close={() => (mlaStage = null)}
+		on:rope={() => {
+			mlaStage = null;
+			showRoPE = true;
+		}}
+		on:attention={() => {
+			mlaStage = null;
 			$expandedBlock = { id: 'attention' };
 		}}
 	/>{/if}
@@ -239,12 +303,16 @@
 		.column {
 			.label {
 				font-size: 0.7rem;
+				white-space: nowrap;
+				max-width: 6rem;
+				overflow: hidden;
+				text-overflow: ellipsis;
 				color: theme('colors.gray.600');
 			}
 			.title {
 				z-index: $COLUMN_TITLE_INDEX;
 				position: absolute;
-				top: -2.1rem;
+				top: -2.65rem;
 				left: 50%;
 				transform: translateX(-50%);
 				font-size: 0.9rem;

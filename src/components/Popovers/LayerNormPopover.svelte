@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PopoverProps } from 'flowbite-svelte/Popover.svelte';
 	import CommonPopover from './CommonPopover.svelte';
+	import { moeModel } from '~/store';
 
 	export let offset: PopoverProps['offset'] = undefined;
 	export let className: PopoverProps['class'] = undefined;
@@ -11,7 +12,7 @@
 
 <CommonPopover
 	className="ln-popover"
-	title="RMS Normalization"
+	title={$moeModel?.normalization === 'layernorm' ? 'Layer Normalization' : 'RMS Normalization'}
 	{offset}
 	{triggeredBy}
 	{trigger}
@@ -19,7 +20,12 @@
 	goTo="article-ln"
 >
 	<div class="ln-content">
-		Scales each token vector by its root mean square and a learned weight. Granite uses RMSNorm without subtracting the mean.
+		{#if $moeModel?.normalization === 'layernorm'}Subtracts the mean, divides by √(variance + ε),
+			then applies a learned scale and bias to each coordinate.{:else}Scales each token vector by
+			its root mean square and a learned weight, without subtracting the mean.{/if}
+		{#if $moeModel?.rmsNormEps != null}
+			The recorded ε is {$moeModel.rmsNormEps}.
+		{/if}
 	</div></CommonPopover
 >
 
