@@ -1,10 +1,10 @@
-# Transformer Explainer · Dense and MoE
+# Transformer Explainer · Architecture Explorer
 
 [Live explainer](https://moe-trace-explainer.foamygenet33.chatgpt.site/) ·
 [Fleet fork](https://github.com/fleet-ai/transformer-explainer)
 
 The original [Polo Club Transformer Explainer](https://github.com/poloclub/transformer-explainer)
-interface, with Dense and MoE tabs beneath the title. The upstream
+interface, with seven architecture tabs beneath the title. The upstream
 base commit is `bfe50afba10b9b560b84143ee1107d977defa74f`.
 
 - **Dense** (`/dense/`) restores the original GPT-2 diagram from that commit.
@@ -15,10 +15,27 @@ base commit is `bfe50afba10b9b560b84143ee1107d977defa74f`.
   Projection illustrations are identified as schematic where values were not
   captured by the original model export.
 - **MoE** (`/`) retains the Granite trace explorer and local inference service.
+- **MLA** (`/architectures/mla/`) shows real DeepSeek-V2-Lite first-layer latent
+  compression, decoupled RoPE, K/V expansion and attention. This is a pretrained
+  layer capture, not full-model text generation.
+- **Encoder–decoder** (`/architectures/encoder-decoder/`) shows T5-small source
+  attention, causal decoder attention and cross-attention for recorded translations.
+- **Mamba hybrid** (`/architectures/hybrid/`) shows Zamba2-1.2B's trained prefix
+  through its first hybrid layer, including convolution, selective state and attention.
+  This is a partial pretrained computation, not full-model text generation.
+- **Vision–language** (`/architectures/vision-language/`) shows SmolVLM-256M's
+  image encoder, pixel shuffle/projector and causal language decoder.
+- **ViT** (`/architectures/vit/`) shows DeiT-tiny's image patches, class token,
+  bidirectional attention and recorded ImageNet classification probabilities.
+
+The five new views replay captured examples. They do not run arbitrary inputs in
+browser. Each inspector identifies its checkpoint, capture scope, tensor shape and
+slice; **Trace JSON** downloads the actual saved numbers. See
+[architecture capture notes](docs/architectures.md) for reproduction and limitations.
 
 Each architecture owns its model state and inference runtime. The navigation
 loads the corresponding application so GPT-2 tensors, tokenization, and layer
-counts cannot be mixed with Granite's. Both builds ship in the same static site.
+counts cannot be mixed with Granite's. All seven views ship in the same static site.
 
 The MoE application directly imports the original `Embedding`, `QKV`, `Attention`,
 `Sankey`, `SubsequentBlocks`, `LinearSoftmax`, and `BlockTransition` components,
@@ -48,7 +65,7 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 5178
 ```
 
-The root development server runs MoE at `http://127.0.0.1:5178/`. To develop
+The root development server runs the five architecture views and MoE at `http://127.0.0.1:5178/`. To develop
 Dense separately, run `npm --prefix dense run dev -- --host 127.0.0.1 --port 5179`
 and open `http://127.0.0.1:5179/dense/`. Use the combined preview below to test
 the architecture tabs on one origin.
@@ -63,7 +80,7 @@ npm run preview -- --host 127.0.0.1
 ```
 
 `npm run build` builds both applications and places the dense build in
-`build/dense/`. The preview serves this combined `build/` directory at
+`build/dense/`; the five recorded views are prerendered under `build/architectures/`. The preview serves this combined `build/` directory at
 `http://127.0.0.1:4173/` (MoE) and `http://127.0.0.1:4173/dense/` (Dense).
 Add `--port 4178` to use the local inference service's preauthorized preview
 origin, or add `--allow-origin http://127.0.0.1:4173` when starting that service.

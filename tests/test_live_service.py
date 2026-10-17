@@ -335,6 +335,21 @@ class TraceHTTPTests(ServiceCase):
                 self.assertNotIn(expected, body)
                 self.assertNotIn(b"UNREQUESTED INDEX", body)
 
+    def test_recorded_architecture_entries_serve_distinct_indexes(self):
+        for name in ("mla", "encoder-decoder", "hybrid", "vision-language", "vit"):
+            directory = self.web_root / "architectures" / name
+            directory.mkdir(parents=True)
+            expected = f"<!doctype html><title>{name}</title>".encode()
+            (directory / "index.html").write_bytes(expected)
+            for method in ("GET", "HEAD"):
+                status, headers, body = self.request(method, f"/architectures/{name}/")
+                self.assertEqual(status, 200)
+                self.assertEqual(int(headers["Content-Length"]), len(expected))
+                self.assertEqual(body, expected if method == "GET" else b"")
+        for path in ("/architectures/", "/architectures/unknown/", "/architectures/mla/../index.html"):
+            status, _, _ = self.request("GET", path)
+            self.assertEqual(status, 404)
+
     def test_dense_index_still_rejects_traversal_and_external_symlinks(self):
         for path in ("/dense/../index.html", "/dense/%2e%2e/index.html"):
             with self.subTest(path=path):

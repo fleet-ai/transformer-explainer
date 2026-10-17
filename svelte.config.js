@@ -21,7 +21,15 @@ const config = {
 		}),
 		prerender: {
 			// List the specific routes to prerender
-			entries: ['/' /* other routes if needed */]
+			crawl: false,
+			entries: [
+				'/',
+				'/architectures/mla/',
+				'/architectures/encoder-decoder/',
+				'/architectures/hybrid/',
+				'/architectures/vision-language/',
+				'/architectures/vit/'
+			]
 		},
 		alias: {
 			'~': './src'

@@ -18,7 +18,6 @@
 		<div class="logo text-bold text-gray-700" data-click="logo">
 			T<span class="small">RANSFORMER</span> E<span class="small">XPLAINER</span>
 		</div>
-		<ArchitectureTabs active="moe" />
 	</div>
 	<div class="inputs flex grow items-center">
 		<div class="input-wrapper w-full" class:active={isActive}>
@@ -93,7 +92,13 @@
 	</div>
 </div>
 
+<div class="architecture-row"><ArchitectureTabs active="moe" /></div>
+
 <style lang="scss">
+	.architecture-row {
+		padding: 0 40px 10px;
+		background: white;
+	}
 	.brand {
 		display: flex;
 		flex-direction: column;

@@ -176,12 +176,14 @@ class TraceHTTPServer(ThreadingHTTPServer):
     def static_file(self, path):
         if self.web_root is None:
             return None
-        # Only the two app entry points have directory indexes. Every other
+        # Only the architecture entry points have directory indexes. Every other
         # static route must name a file explicitly, including dense assets.
         if path == "/":
             parts = ["index.html"]
         elif path == "/dense/":
             parts = ["dense", "index.html"]
+        elif path in {f"/architectures/{name}/" for name in ("mla", "encoder-decoder", "hybrid", "vision-language", "vit")}:
+            parts = ["architectures", path.split("/")[2], "index.html"]
         else:
             parts = path.removeprefix("/").split("/")
         if any(not part or part.startswith(".") or "\\" in part or "\0" in part for part in parts):

@@ -1,31 +1,27 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	export let active: 'dense' | 'moe';
+	import { architectures, type ArchitectureId } from '../../lib/architecture-navigation';
+	export let active: ArchitectureId;
 	$: root = active === 'dense' ? base.replace(/\/dense$/, '') : base;
 </script>
 
 <nav class="architecture-tabs" aria-label="Transformer architecture">
-	<a
-		href={`${root}/dense/`}
-		data-sveltekit-reload
-		rel="external"
-		class:active={active === 'dense'}
-		aria-current={active === 'dense' ? 'page' : undefined}
-		title="Dense transformer · GPT-2">Dense</a
-	>
-	<a
-		href={`${root}/`}
-		data-sveltekit-reload
-		rel="external"
-		class:active={active === 'moe'}
-		aria-current={active === 'moe' ? 'page' : undefined}
-		title="Mixture of Experts · Granite">MoE</a
-	>
+	{#each architectures as architecture}
+		<a
+			href={`${root}${architecture.path}`}
+			data-sveltekit-reload
+			rel="external"
+			class:active={active === architecture.id}
+			aria-current={active === architecture.id ? 'page' : undefined}
+			title={architecture.title}>{architecture.label}</a
+		>
+	{/each}
 </nav>
 
 <style>
 	.architecture-tabs {
 		display: inline-flex;
+		flex-wrap: wrap;
 		align-self: flex-start;
 		gap: 3px;
 		padding: 3px;
@@ -37,8 +33,8 @@
 			sans-serif;
 	}
 	a {
-		min-width: 64px;
-		padding: 5px 14px;
+		min-width: 54px;
+		padding: 6px 13px;
 		border-radius: 4px;
 		color: #8b76a3;
 		text-align: center;
