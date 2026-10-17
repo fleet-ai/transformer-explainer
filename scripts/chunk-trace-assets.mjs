@@ -4,8 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-// Keep each public asset below the static host's 25 MiB limit. Source traces
-// remain unchanged; chunking only changes how the identical build bytes travel.
+// Keep each public asset below the static host's 25 MiB limit. This also
+// supports splitting source traces that exceed the source repository's limit.
+// The reconstructed trace bytes remain identical in either representation.
 export async function chunkTraceAssets(directory, limit = 24 * 1024 * 1024, partSize = 8 * 1024 * 1024) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);

@@ -36,7 +36,10 @@ descriptions. These examples illustrate architecture, not comparative model qual
 Production builds split JSON assets larger than 24 MiB into verified 8 MiB parts
 to fit the static host's per-file limit. The original URL then returns a
 `chunked-json` manifest; the browser verifies and reassembles the identical bytes
-before parsing them. Source captures and their provenance hashes stay unchanged.
+before parsing them. The largest MLA source trace uses this same format to fit
+the source repository's limit. Reassembled capture bytes and provenance hashes
+stay unchanged. After recapturing MLA, run
+`node scripts/chunk-trace-assets.mjs static/traces` before publishing its source.
 
 The diagrams can show a window of image/text positions, while attention inspectors
 retain the full sequence and full denominator. Cropped probabilities are never

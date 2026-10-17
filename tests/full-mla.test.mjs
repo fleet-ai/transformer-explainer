@@ -2,12 +2,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
+import { readRecordedJson } from '../src/lib/recorded-json.js';
 
 const root = new URL('../static/traces/', import.meta.url);
 const document = JSON.parse(readFileSync(new URL('deepseek-mla.json', root), 'utf8'));
 const example = document.examples[0];
 const operations = JSON.parse(readFileSync(new URL(`expert-operations-${example.id}.json`, root), 'utf8'));
-const attention = JSON.parse(readFileSync(new URL(`attention-operations-${example.id}.json`, root), 'utf8'));
+const attentionUrl = new URL(`attention-operations-${example.id}.json`, root);
+const attention = await readRecordedJson({
+  ok: true, url: attentionUrl.href,
+  json: async () => JSON.parse(readFileSync(attentionUrl, 'utf8')),
+}, async url => ({ ok: true, arrayBuffer: async () => Uint8Array.from(readFileSync(new URL(url))).buffer }));
 const near = (actual, expected, tolerance = 1e-5) => assert.ok(
   Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)),
   `${actual} differs from ${expected}`
