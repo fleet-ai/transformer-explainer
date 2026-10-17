@@ -49,6 +49,7 @@
 		attentionInspector.set({ kind: 'heads' });
 	}
 	$: isMLA = $moeModel?.architecture === 'mla';
+	$: isMoE = ($moeModel?.architecture ?? 'moe') === 'moe';
 	$: isVit = $moeModel?.architecture === 'vit';
 	$: isHybrid = $moeModel?.architecture === 'hybrid';
 	$: isVlm = $moeModel?.architecture === 'vision-language';
@@ -118,7 +119,7 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
-				{#if !isMLA}<div class="head-flow-wrap">
+				{#if !isMLA && !isMoE}<div class="head-flow-wrap">
 						{#if isPlain}<div class="rotary-sequence">
 								<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button><span
 									aria-hidden="true">→</span
