@@ -38,8 +38,9 @@ to fit the static host's per-file limit. The original URL then returns a
 `chunked-json` manifest; the browser verifies and reassembles the identical bytes
 before parsing them. The largest MLA source trace uses this same format to fit
 the source repository's limit. Reassembled capture bytes and provenance hashes
-stay unchanged. After recapturing MLA, run
-`node scripts/chunk-trace-assets.mjs static/traces` before publishing its source.
+stay unchanged. After recapturing MLA, call `chunkTraceAssets('static/traces',
+48 * 1024 * 1024)` from `scripts/chunk-trace-assets.mjs` before publishing its
+source; the production build independently applies its stricter 24 MiB limit.
 
 The diagrams can show a window of image/text positions, while attention inspectors
 retain the full sequence and full denominator. Cropped probabilities are never
