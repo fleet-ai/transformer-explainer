@@ -92,7 +92,7 @@
 	onMount(() => {
 		document.querySelector('.main-section').addEventListener('click', handleOutsideClick);
 		return () => {
-			document.querySelector('.main-section').removeEventListener('click', handleOutsideClick);
+			document.querySelector('.main-section')?.removeEventListener('click', handleOutsideClick);
 		};
 	});
 
@@ -281,17 +281,21 @@
 		);
 	};
 
-	// color scale
-	$: qkColorScaleDomain = d3.extent(queryKey.flat());
-	$: qkColorScale = (d, i) => {
-		return d3
-			.scaleLinear()
-			.domain(qkColorScaleDomain)
-			.range(['white', theme.colors['purple'][700]])(d);
-	};
-	const maskedColorScale = (d, i) => {
-		return d3.scaleLinear().domain([-3, 3]).range(['white', theme.colors['purple'][700]])(d);
-	};
+	// Masked future positions are -Infinity and must not set the color domain.
+	function finiteExtent(matrix: number[][]): [number, number] {
+		const values = matrix.flat().filter(Number.isFinite);
+		return values.length ? [Math.min(...values), Math.max(...values)] : [0, 1];
+	}
+	$: qkColorScaleDomain = finiteExtent(queryKey);
+	$: maskedColorScaleDomain = finiteExtent(masked);
+	$: qkColorScale = d3.scaleLinear<string>()
+		.domain(qkColorScaleDomain)
+		.range(['white', theme.colors['purple'][700]])
+		.clamp(true);
+	$: maskedColorScale = d3.scaleLinear<string>()
+		.domain(maskedColorScaleDomain)
+		.range(['white', theme.colors['purple'][700]])
+		.clamp(true);
 	const softmaxColorScale = (d, i) => {
 		return d3.interpolate('white', theme.colors['purple'][700])(d);
 	};
@@ -423,12 +427,12 @@
 			</TextbookTooltip>
 
 			<Tooltip class="popover tooltip">
-				<Katex math={'\\frac{QK^T}{\\sqrt{d_k}} + M'}></Katex>
+				<Katex math={'\\frac{QK^T}{64} + M'}></Katex>
 			</Tooltip>
 			<div class="color-scale">
-				<span class="val">-3.0</span>
+				<span class="val">{maskedColorScaleDomain[0].toFixed(1)}</span>
 				<div class="bar"></div>
-				<span class="val">3.0</span>
+				<span class="val">{maskedColorScaleDomain[1].toFixed(1)}</span>
 			</div>
 		</div>
 
@@ -491,7 +495,7 @@
 				<div class="matrix-label">Softmax</div>
 			</TextbookTooltip>
 			<Tooltip class="popover tooltip">
-				<Katex math={'\\text{softmax}(\\frac{QK^T}{\\sqrt{d_k}} + M)'}></Katex>
+				<Katex math={'\\text{softmax}(\\frac{QK^T}{64} + M)'}></Katex>
 			</Tooltip>
 			<div class="color-scale">
 				<span class="val">0.0</span>

@@ -7,13 +7,13 @@
 	import resolveConfig from 'tailwindcss/resolveConfig';
 	const { theme } = resolveConfig(tailwindConfig);
 
-	export let rowHeight;
-	export let rowGap;
+	export let rowHeight: number;
+	export let rowGap: number;
 	export let hoveredIndex: number | null = null;
 
 	const barHeight = 4;
 
-	let svgEl: HTMLOrSVGElement;
+	let svgEl: SVGSVGElement;
 
 	let percentPrecision = 2;
 
@@ -21,17 +21,17 @@
 	let hoverColor = theme.colors.purple[400];
 
 	export let drawBars = () => {
-		const data = $modelData?.probabilities;
+		const data = $modelData?.probabilities ?? [];
 
 		const svg = d3.select(svgEl);
 
 		let xScale = d3
 			.scaleLinear()
-			.domain([0, d3.max(data, (d) => d.probability)])
+			.domain([0, d3.max(data, (d) => d.probability) ?? 1])
 			.range([0, svgEl?.clientWidth - rootRem * 3]);
 
 		const groups = svg
-			.selectAll('g.probability')
+			.selectAll<SVGGElement, Probability>('g.probability')
 			.data(data)
 			.join('g')
 			.attr('class', 'probability')
@@ -42,7 +42,7 @@
 			});
 
 		groups
-			.selectAll('rect.bar')
+			.selectAll<SVGRectElement, Probability>('rect.bar')
 			.data((d) => [d])
 			.join('rect')
 			.classed('bar', true)
@@ -64,7 +64,7 @@
 
 		//label
 		groups
-			.selectAll('text.label')
+			.selectAll<SVGTextElement, Probability>('text.label')
 			.data((d) => [d])
 			.join('text')
 			.classed('label', true)
@@ -89,14 +89,14 @@
 						that.text(`0%`);
 					};
 				}
-				if (d.probability < 0.01) {
+				if (d.probability < 0.0001) {
 					return () => {
 						that.text(`<0.01%`);
 					};
 				}
 				const i = d3.interpolateNumber(
-					that.text().replace('%', '').replace('<', ''),
-					(d.probability * 100).toFixed(percentPrecision)
+					Number(that.text().replace('%', '').replace('<', '')),
+					Number((d.probability * 100).toFixed(percentPrecision))
 				);
 				return function (t) {
 					let text = i(t).toFixed(percentPrecision) + '%';
@@ -128,7 +128,7 @@
 	const updateColor = () => {
 		if (!svgEl) return;
 		const svg = d3.select(svgEl);
-		const groups = svg.selectAll('g.probability');
+		const groups = svg.selectAll<SVGGElement, Probability>('g.probability');
 
 		groups.each(function (d, i) {
 			let color;

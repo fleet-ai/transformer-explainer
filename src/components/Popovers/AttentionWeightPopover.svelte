@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { modelMeta, tokens, rootRem, modelData, attentionHeadIdx, blockIdx } from '~/store';
+	import { modelMeta, tokens, rootRem, modelData, attentionHeadIdx, blockIdx, moeExample } from '~/store';
 	import * as d3 from 'd3';
 	import { gsap } from '~/utils/gsap';
 	import Matrix from '~/components/common/Matrix.svelte';
@@ -24,20 +24,9 @@
 
 	const visibleDimension = 8;
 	$: tokenLen = $tokens.length;
-	$: valueData = Array(visibleDimension)
-		.fill(0)
-		.map((col) =>
-			Array(tokenLen)
-				.fill(0)
-				.map((d) => Math.random())
-		);
-	$: outData = Array(tokenLen)
-		.fill(0)
-		.map((col) =>
-			Array(visibleDimension)
-				.fill(0)
-				.map((d) => Math.random())
-		);
+	$: capturedValues = $moeExample?.layers[$blockIdx].valuePreview[$attentionHeadIdx] ?? [];
+	$: valueData = Array.from({length: visibleDimension}, (_, dimension) => capturedValues.map(row => row[dimension]));
+	$: outData = softmaxed.map(row => Array.from({length: visibleDimension}, (_, dimension) => row.reduce((sum, weight, token) => sum + weight * (capturedValues[token]?.[dimension] ?? 0), 0)));
 
 	// color scale
 	const valueColorScale = (d, i) => {
@@ -360,7 +349,9 @@
 	</div>
 </WeightPopoverCard>
 
+<div class="recording-note">First 8 recorded Value coordinates. Output coordinates are derived from the recorded attention × Value product.</div>
 <style lang="scss">
+ .recording-note { padding: .5rem 1rem; color: #9ca3af; font-size: .75rem; }
 	.weight-popover-content {
 		padding: 3rem 3rem 1.5rem 2.5rem;
 		gap: 1rem;

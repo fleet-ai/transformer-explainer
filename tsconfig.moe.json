@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/routes/**/*.ts",
+    "src/routes/**/*.svelte",
+    "src/lib/moe/**/*.ts",
+    "src/components/moe/**/*.svelte",
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    ".svelte-kit/types/**/*.d.ts",
+    "src/types/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "build"
+  ]
+}

@@ -9,7 +9,7 @@
 	export let disabled: boolean = false;
 
 	// TEMPERATURE
-	let temperatureIndex = 6; // Default to the value corresponding to 0.8 in the array
+	let temperatureIndex = 8; // Recorded logits use temperature 1 by default.
 	const temperatureArray = [
 		// 0.05, 0.1, // error in Math.exp()
 		0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0

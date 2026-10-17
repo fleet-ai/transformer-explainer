@@ -19,7 +19,7 @@
 	goTo="article-dropout"
 >
 	<div class="dropout-content">
-		Disables randomly selected neurons. Used only during training.
+		Disables randomly selected neurons during training. It is inactive in these recorded evaluation passes.
 	</div></CommonPopover
 >
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { modelMeta, tokens, rootRem } from '~/store';
+	import { modelMeta, tokens, rootRem, moeModel, weightPopover, expandedBlock } from '~/store';
 	import * as d3 from 'd3';
 	import { gsap } from '~/utils/gsap';
 	import Matrix from '~/components/common/Matrix.svelte';
@@ -8,44 +8,45 @@
 	import tailwindConfig from '../../../tailwind.config';
 	import HelpPopover from '../common/HelpPopover.svelte';
 	import WeightPopoverCard from '../common/WeightPopoverCard.svelte';
+	import HeadFlow from '../moe/HeadFlow.svelte';
+	import RoPEInspector from '../moe/RoPEInspector.svelte';
+	let showRoPE = false;
 	import Katex from '~/utils/Katex.svelte';
 
 	const { theme } = resolveConfig(tailwindConfig);
 
 	const tokenGap = 6;
 
-	// generate data
+	// Neutral placeholders show the matrix operation, not captured tensor values.
 	const visibleDimension = 18;
+	const visibleKeyValueDimension = visibleDimension / 2;
+	const visibleOutputDimension = visibleDimension + 2 * visibleKeyValueDimension;
+	$: queryDimension = ($moeModel?.attentionHeads ?? 16) * ($moeModel?.attentionHeadSize ?? 64);
+	$: keyValueDimension = ($moeModel?.keyValueHeads ?? 8) * ($moeModel?.attentionHeadSize ?? 64);
+	$: outputDimension = queryDimension + 2 * keyValueDimension;
 	$: tokenLen = $tokens.length;
 	$: embeddingData = Array(tokenLen)
 		.fill(0)
 		.map((col) =>
 			Array(visibleDimension)
 				.fill(0)
-				.map((d) => Math.random())
+				.map((d) => 0)
 		);
 
-	const qkvWeightData = Array(visibleDimension * 3)
+	const qkvWeightData = Array(visibleOutputDimension)
 		.fill(0)
 		.map((col) =>
 			Array(visibleDimension)
 				.fill(0)
-				.map((d) => Math.random())
-		);
-	const qkvBiasData = Array(1)
-		.fill(0)
-		.map((col) =>
-			Array(visibleDimension * 3)
-				.fill(0)
-				.map((d) => Math.random())
+				.map((d) => 0)
 		);
 
 	$: qkvOutData = Array(tokenLen)
 		.fill(0)
 		.map((col) =>
-			Array(visibleDimension * 3)
+			Array(visibleOutputDimension)
 				.fill(0)
-				.map((d) => Math.random())
+				.map((d) => 0)
 		);
 
 	// color scale
@@ -54,7 +55,12 @@
 	};
 
 	const qkvColorScale = (d, i) => {
-		let color = i < visibleDimension ? 'blue' : i < visibleDimension * 2 ? 'red' : 'green';
+		let color =
+			i < visibleDimension
+				? 'blue'
+				: i < visibleDimension + visibleKeyValueDimension
+					? 'red'
+					: 'green';
 		return d3.interpolate(theme.colors[color][100], theme.colors[color][400])(d);
 	};
 
@@ -62,6 +68,7 @@
 	let isAnimationActive = false;
 	let progress = 0;
 	let timeline = gsap.timeline();
+	let animationStart: ReturnType<typeof setTimeout>;
 
 	onMount(() => {
 		timeline.eventCallback('onUpdate', () => {
@@ -69,13 +76,14 @@
 			if (progress === 1) isAnimationActive = false;
 		});
 
-		setTimeout(() => {
+		animationStart = setTimeout(() => {
 			isAnimationActive = true;
 			draw();
 		}, 300);
 	});
 
 	onDestroy(() => {
+		clearTimeout(animationStart);
 		if (timeline) {
 			timeline.kill();
 			timeline = null;
@@ -85,18 +93,16 @@
 	const draw = () => {
 		const embeddingRows = d3.selectAll('.weight-popover-content .token-embedding g.g-row').nodes();
 		const weightCols = d3.selectAll('.weight-popover-content .qkv-weights g.g-col').nodes();
-		const weightBiasCells = d3.selectAll('.weight-popover-content .qkv-bias rect').nodes();
 
 		const outRows = d3.selectAll('.weight-popover-content .qkv-output g.g-row').nodes();
 
 		const mulSymbol = d3.select('.weight-popover-content .symbol.mul').node();
-		const plusSymbol = d3.select('.weight-popover-content .symbol.plus').node();
 		const equalSymbol = d3.select('.weight-popover-content .symbol.equal').node();
 
 		const highlight = '#94a3b8';
 
 		// first row detail animation
-		timeline.set(weightBiasCells, { opacity: 0.1 });
+
 		timeline.set('.formula .first-row', { opacity: 1 });
 		timeline.set('.formula .total', { opacity: 0 });
 
@@ -156,14 +162,7 @@
 			//symbol
 			if (isFirstOutCell) {
 				timeline.from(
-					[
-						mulSymbol,
-						equalSymbol,
-						plusSymbol,
-
-						'.formula .first-row .part1',
-						'.formula .first-row .part2'
-					],
+					[mulSymbol, equalSymbol, '.formula .first-row .part1', '.formula .first-row .part2'],
 					{
 						duration: 0.05,
 						opacity: 1
@@ -171,30 +170,6 @@
 					'<50%'
 				);
 			}
-			//bias
-			timeline
-				.fromTo(
-					weightBiasCells[outCellIdx],
-
-					{ opacity: 0.1, strokeWidth: 0 },
-					{
-						opacity: 1,
-						duration: isFirstOutCell ? 0.4 : 0.002,
-						strokeWidth: 10,
-						stroke: highlight
-					},
-					'<'
-				)
-				.to(
-					weightBiasCells[outCellIdx],
-
-					{
-						strokeWidth: 0,
-						duration: isFirstOutCell ? 0.4 : 0.002
-					},
-					'<50%'
-				);
-
 			//out
 			timeline
 				.fromTo(
@@ -250,7 +225,6 @@
 					.selectAll('.weight-popover-content .qkv-weights g.g-col rect')
 					.nodes();
 				timeline.set(weightColRects, { opacity: 0.1 });
-				timeline.set(weightBiasCells, { opacity: 0.1 });
 			}
 
 			outputCells.forEach((d, colIdx) => {
@@ -273,15 +247,6 @@
 						duration: 0.01
 					},
 					`<50%`
-				);
-				timeline.fromTo(
-					weightBiasCells[colIdx],
-					{ opacity: 0.1 },
-					{
-						opacity: 1,
-						duration: 0.01
-					},
-					'<'
 				);
 			});
 			previousRowIdx = rowIdx;
@@ -319,11 +284,11 @@
 		</div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1 self-end">
-				Embeddings<HelpPopover id="qkv-emgeddings" 
-					>{`Embeddings originate from tokens \nbut evolve through blocks, becoming \nabstract representations.`}</HelpPopover
+				RMSNorm output<HelpPopover id="qkv-emgeddings"
+					>{`Each token’s hidden state after the block’s input RMSNorm.`}</HelpPopover
 				>
 			</div>
-			<!-- (tokenLen, 768) -->
+			<!-- (tokenLen, 1024) -->
 			<Matrix
 				className="token-embedding"
 				data={embeddingData}
@@ -339,8 +304,8 @@
 		<div class="operator"><div class="symbol mul">&times;</div></div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Q·K·V Weights<HelpPopover id="qkv-weights" 
-					>{`Transforms embedding vectors into Query, Key, and Value vectors. \nParameters were learned in training, fixed in prediction.`}</HelpPopover
+				Q·K·V Weights<HelpPopover id="qkv-weights"
+					>{`Bias-free projections produce Q with 16 heads and K/V with 8 heads each.\nRoPE is then applied to Q and K inside attention.`}</HelpPopover
 				>
 			</div>
 			<div class="flex gap-0">
@@ -357,27 +322,7 @@
 				/>
 			</div>
 
-			<div class="size">({$modelMeta.dimension}, {$modelMeta.dimension * 3})</div>
-		</div>
-		<div class="operator"><div class="symbol plus">+</div></div>
-		<div class="matrix flex flex-col items-center">
-			<div class="title flex items-center gap-1">
-				Q·K·V Bias<HelpPopover id="qkv-bias" 
-					>{`Offsets added after transformation. \nParameters that learned in training, fixed in prediction.`}</HelpPopover
-				>
-			</div>
-			<Matrix
-				className="qkv-bias"
-				data={qkvBiasData}
-				showSize={false}
-				groupBy={'col'}
-				cellHeight={2}
-				cellWidth={8}
-				rowGap={0}
-				colorScale={embeddingColorScale}
-				highlightRow={highlightCol}
-			/>
-			<div class="size">({$modelMeta.dimension * 3})</div>
+			<div class="size">({$modelMeta.dimension}, {outputDimension})</div>
 		</div>
 		<div class="operator"><div class="symbol equal">=</div></div>
 		<div class="matrix flex flex-col items-center">
@@ -388,7 +333,7 @@
 			</div>
 		</div>
 		<div class="matrix flex flex-col items-center">
-			<div class="title">Q·K·V</div>
+			<div class="title">Q·K·V before RoPE</div>
 			<div class="flex">
 				<Matrix
 					className="qkv-output"
@@ -404,7 +349,7 @@
 					{highlightRow}
 				/>
 			</div>
-			<div class="size">({tokenLen}, {$modelMeta.dimension * 3})</div>
+			<div class="size">({tokenLen}, {outputDimension})</div>
 		</div>
 	</div>
 	<div class="formula">
@@ -413,23 +358,48 @@
 				<Katex
 					displayMode
 					math={`
-	(Embedding_{1,1}×Weights_{1,1} + \\cdots + Embedding_{1,768}×Weights_{768,1})`}
+	(Hidden_{1,1}×Weights_{1,1} + \\cdots + Hidden_{1,1024}×Weights_{1024,1})`}
 				/>
 			</span>
 			<span class="part2">
-				<Katex displayMode math={`+ Bias_1 = QKV_{1,1}`} />
+				<Katex displayMode math={`= QKV_{1,1}`} />
 			</span>
 		</div>
 		<div class="total">
 			<Katex
 				displayMode
 				math={`
-	\\sum_{d=1}^{768} Embedding_{id} \\cdot Weights_{dj} + Bias_j = QKV_{ij} 
+	\\sum_{d=1}^{1024} Hidden_{id} \\cdot Weights_{dj} = QKV_{ij}
 	`}
 			/>
 		</div>
 	</div>
+	<div class="recording-note">
+		All cells in this animation are schematic, not recorded values. Bias-free projections produce Q
+		({queryDimension}), K ({keyValueDimension}), and V ({keyValueDimension}); Q and K receive RoPE
+		afterward.
+	</div>
+	<div class="projection-head-flow"><HeadFlow on:inspect={() => (showRoPE = true)} /></div>
 </WeightPopoverCard>
+{#if showRoPE}<RoPEInspector
+		on:close={() => (showRoPE = false)}
+		on:attention={() => {
+			$weightPopover = null;
+			$expandedBlock = { id: 'attention' };
+		}}
+	/>{/if}
 
 <style lang="scss">
+	.projection-head-flow {
+		width: min(100%, 580px);
+		margin: 0 auto 12px;
+		padding: 0 15px;
+	}
+	.recording-note {
+		max-width: 42rem;
+		padding: 0.5rem 1rem;
+		color: #6b7280;
+		font-size: 0.75rem;
+		line-height: 1.5;
+	}
 </style>

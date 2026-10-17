@@ -8,7 +8,9 @@
 		isExpandOrCollapseRunning,
 		textbookCurrentPageId,
 		isTextbookOpen,
-		userId
+		userId,
+		moeExample,
+		moeModel
 	} from '~/store';
 	import classNames from 'classnames';
 	import { gsap, Flip } from '~/utils/gsap';
@@ -73,7 +75,7 @@
 	onMount(() => {
 		document.querySelector('.main-section').addEventListener('click', handleOutsideClick);
 		return () => {
-			document.querySelector('.main-section').removeEventListener('click', handleOutsideClick);
+			document.querySelector('.main-section')?.removeEventListener('click', handleOutsideClick);
 		};
 	});
 
@@ -193,6 +195,23 @@
 				{/each}
 			</div>
 			{#if isEmbeddingExpanded}
+				<!-- Position is metadata for RoPE, not an embedding operand. -->
+				<div class="column token-position position-embedding embedding-detail">
+					<div class="subtitle">
+						<TextbookTooltip id="positional-encoding">
+							<span>Position<br /><small>for RoPE</small></span>
+						</TextbookTooltip>
+					</div>
+					{#each $tokens as token, index}
+						<div class="cell">
+							<span
+								class="position-value"
+								title={`Token position ${index}; used later to rotate Q and K in attention.`}
+								>{index}</span
+							>
+						</div>
+					{/each}
+				</div>
 				<!-- token id and embedding -->
 				<div class="column token-embedding embedding-detail">
 					<div class="subtitle flex items-center gap-1">
@@ -223,7 +242,12 @@
 							</div>
 							<div class="cell flex items-center">
 								<div class={`vector ${embeddingVectorColor}`}>
-									<VectorCanvas active />
+									<VectorCanvas
+										active
+										data={$moeExample?.embeddingPreview[index]?.map(
+											(v) => v / ($moeModel?.embeddingMultiplier ?? 12)
+										)}
+									/>
 								</div>
 								<span class="index-val text-xs">
 									{#if index === 0}
@@ -235,41 +259,21 @@
 						</div>
 					{/each}
 				</div>
-				<!-- position embedding -->
+				<!-- Scale the token lookup by the model's scalar multiplier. -->
 				<div class="column symbol embedding-detail">
 					{#each $tokens as token, index}
-						<div class="cell text-lg">+</div>
+						<div class="cell text-lg">×</div>
 					{/each}
 				</div>
-				<div class="column embedding-detail position-embedding">
-					<div class="subtitle flex gap-1">
-						<TextbookTooltip id="positional-encoding">
-							<span>Positional<br />Encoding</span>
-						</TextbookTooltip>
-						<!-- <HelpPopover
-							id="position-embedding"
-							goTo="article-positional-embedding"
-							>{`Converts token positions into \nnumerical representations that \ncapture their order in the sequence.`}</HelpPopover
-						> -->
-					</div>
+				<div class="column embedding-scale embedding-detail">
+					<div class="subtitle">Embedding<br />Scale</div>
 					{#each $tokens as token, index}
-						<div class="cell flex items-center">
-							<div class={`vector ${embeddingVectorColor}`}>
-								<VectorCanvas
-									active
-									colorScale={(d, i) => {
-										return d3
-											.scaleDiverging()
-											.domain([0, 0.5, 1])
-											.range([theme.colors['red'][400], 'white', theme.colors['blue'][400]])(d);
-									}}
-								/>
-							</div>
-							<span class="index-val text-xs">
-								{#if index === 0}
-									<span class="label">position</span><br />
-								{/if}
-								<span class="val">{index}</span>
+						<div class="cell">
+							<span
+								class="scale-value"
+								title="Scalar applied to every coordinate of the token embedding."
+							>
+								{$moeModel?.embeddingMultiplier ?? 12}
 							</span>
 						</div>
 					{/each}
@@ -282,7 +286,6 @@
 				<Tooltip triggeredBy=".embedding .vector" class="popover" placement="right"
 					>vector({$modelMeta.dimension})</Tooltip
 				>
-				<!-- <PositionalEncodingPopover triggeredBy=".position-embedding" /> -->
 			{/if}
 		</div>
 
@@ -290,7 +293,10 @@
 			<div class="column vectors embedding-column">
 				{#each $tokens as token, index}
 					<div class={`vector ${embeddingVectorColor}`} class:last={index === $tokens.length - 1}>
-						<VectorCanvas active={$blockIdx === 0 && (isHovered || isEmbeddingExpanded)} />
+						<VectorCanvas
+							data={$moeExample?.embeddingPreview[index]}
+							active={$blockIdx === 0 && (isHovered || isEmbeddingExpanded)}
+						/>
 					</div>
 				{/each}
 			</div>
@@ -386,18 +392,42 @@
 				}
 			}
 
-			.position-embedding {
-				.subtitle {
-					margin-left: -1rem;
+			.token-column {
+				.column.token-position,
+				.column.embedding-scale {
+					flex-shrink: 0;
+					padding: 0 0.5rem;
+
+					.subtitle {
+						left: 0;
+					}
+					.cell {
+						justify-content: center;
+					}
 				}
-				.cell {
-					justify-content: center;
-					gap: 0.5rem;
+				.column.token-position {
+					width: 4.5rem;
 				}
-				.index-val {
-					width: 2rem;
-					justify-content: start;
+				.column.embedding-scale {
+					width: 6rem;
 				}
+			}
+			.position-value,
+			.scale-value {
+				font: 0.75rem/1.3 monospace;
+				white-space: nowrap;
+			}
+			.position-value {
+				color: theme('colors.gray.500');
+			}
+			.scale-value {
+				min-width: 2.5rem;
+				padding: 0 0.4rem;
+				border: 1px solid theme('colors.gray.200');
+				border-radius: 0.2rem;
+				background: theme('colors.gray.50');
+				color: theme('colors.gray.600');
+				text-align: center;
 			}
 		}
 	}

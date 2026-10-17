@@ -1,185 +1,55 @@
 <script lang="ts">
-	import {
-		tokens,
-		expandedBlock,
-		vectorHeight,
-		inputText,
-		rootRem,
-		sampling,
-		maxVectorHeight,
-		minVectorHeight,
-		maxVectorScale,
-		headContentHeight,
-		temperature,
-		modelData,
-		modelSession,
-		isFetchingModel,
-		selectedExampleIdx,
-		isMobile,
-		isOnBlockTransition,
-		blockIdx,
-		isTextbookOpen,
-		userId
-	} from '~/store';
-	import { PreTrainedTokenizer } from '@xenova/transformers';
-	import Sankey from '~/components/Sankey.svelte';
-	import Attention from '~/components/Attention.svelte';
-	import SubsequentBlocks from '~/components/SubsequentBlocks.svelte';
-	import LinearSoftmax from '~/components/LinearSoftmax.svelte';
-	import Embedding from '~/components/Embedding.svelte';
-	import Mlp from '~/components/Mlp.svelte';
-
-	import { onMount } from 'svelte';
-	import classNames from 'classnames';
-	import { base } from '$app/paths';
-	import * as ort from 'onnxruntime-web';
-
-	import { adjustTemperature, runModel, fakeRunWithCachedData } from '~/utils/data';
-	import { fetchAndMergeChunks } from '~/utils/fetchChunks';
-	import WeightPopovers from '~/components/WeightPopovers.svelte';
-	import { fade } from 'svelte/transition';
-	import { AutoTokenizer } from '@xenova/transformers';
-	import { ex0, ex1, ex2, ex3, ex4 } from '~/constants/examples';
-	import BlockTransition from '~/components/BlockTransition.svelte';
-	import QKV from '~/components/QKV.svelte';
-	import Textbook from '~/components/textbook/Textbook.svelte';
-
-	ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/';
-	ort.env.logLevel = 'error';
-
-	let active = false;
-	let appStartTime = Date.now();
-
-	// fetch model
-	onMount(async () => {
-		const gpt2Tokenizer = await AutoTokenizer.from_pretrained('Xenova/gpt2');
-		active = true;
-
-		const unsubscribe = subscribeInputs(gpt2Tokenizer);
-
-		if (!$isMobile) {
-			await fetchModel();
-		}
-
-		return unsubscribe;
-	});
-
-	// Fetch model onnx
-	const fetchModel = async () => {
-		const chunkNum = 63; //TODO: move to model meta
-		const chunkUrls = Array(chunkNum)
-			.fill(0)
-			.map((d, i) => `${base}/model-v2/gpt2.onnx.part${i}`);
-
-		// Fetch from cache
-		const { hasCache, mergedArray } = await fetchAndMergeChunks(chunkUrls);
-
-		// Create a Blob from the merged array
-		const blob = new Blob([mergedArray], { type: 'application/octet-stream' });
-
-		// Create a URL for the Blob
-		const url = URL.createObjectURL(blob);
-
-		// Create ONNX session using the Blob URL
-		const session = await ort.InferenceSession.create(url, {
-			// logSeverityLevel: 0
-		});
-
-		modelSession.set(session);
-
-		isFetchingModel.set(false);
-
-		const loadTime = Date.now() - appStartTime;
-		window.dataLayer?.push({
-			event: `model-loaded`,
-			use_cache: hasCache,
-			load_time_ms: loadTime,
-			user_id: $userId
-		});
-	};
-
-	// Subscribe inputs
-	const cachedDataMap = [ex0, ex1, ex2, ex3, ex4];
-	const subscribeInputs = (tokenizer: PreTrainedTokenizer) => {
-		const runModelOrCache = () => {
-			if ($isFetchingModel || !$modelSession) {
-				const cachedData = cachedDataMap[$selectedExampleIdx];
-
-				fakeRunWithCachedData({
-					cachedData,
-					tokenizer,
-					temperature: $temperature,
-					sampling: $sampling
-				});
-				return;
-			}
-			// run model when input has changed
-			runModel({
-				tokenizer,
-				input: $inputText.trim(),
-				temperature: $temperature,
-				sampling: $sampling
-			});
-		};
-
-		const unsubscribeInputText = inputText.subscribe((value) => {
-			runModelOrCache();
-		});
-
-		let initialTemperature = true; // prevent initial redundant rendering
-		const unsubscribeTemperature = temperature.subscribe((value) => {
-			if (initialTemperature) {
-				initialTemperature = false;
-				return;
-			}
-			adjustTemperature({
-				tokenizer,
-				logits: $modelData.logits,
-				temperature: value,
-				sampling: $sampling
-			});
-		});
-
-		let initialSampling = true; // prevent initial redundant rendering
-		const unsubscribeSmapling = sampling.subscribe((value) => {
-			if (initialSampling) {
-				initialSampling = false;
-				return;
-			}
-			adjustTemperature({
-				tokenizer,
-				logits: $modelData.logits,
-				temperature: $temperature,
-				sampling: value
-			});
-		});
-
-		return () => {
-			unsubscribeInputText();
-			unsubscribeTemperature();
-			unsubscribeSmapling();
-		};
-	};
-
-	// visual elements
-	let vizHeight = 0;
-	let titleHeight = rootRem * 5;
-
-	const calculateVectorHeight = () => {
-		const gaps = rootRem * 0.5 * ($tokens.length - 1);
-		const vectorHeightVal = Math.min(
-			Math.max((vizHeight - titleHeight - gaps) / $tokens.length / maxVectorScale, minVectorHeight),
-			maxVectorHeight
-		);
-		vectorHeight.set(vectorHeightVal);
-		headContentHeight.set(Math.max($tokens.length * vectorHeightVal * 3 + gaps, rootRem * 20));
-	};
-
-	$: if (vizHeight || $tokens.length) {
-		calculateVectorHeight();
-	}
+ import { onMount } from 'svelte';
+ import { base } from '$app/paths';
+ import classNames from 'classnames';
+ import { fade } from 'svelte/transition';
+ import { tokens, expandedBlock, vectorHeight, rootRem, maxVectorHeight, minVectorHeight, maxVectorScale, headContentHeight, sampling, temperature, isTextbookOpen } from '~/store';
+ import Sankey from '~/components/Sankey.svelte';
+ import Attention from '~/components/Attention.svelte';
+ import SubsequentBlocks from '~/components/SubsequentBlocks.svelte';
+ import LinearSoftmax from '~/components/LinearSoftmax.svelte';
+ import Embedding from '~/components/Embedding.svelte';
+ import Mlp from '~/components/Mlp.svelte';
+ import QKV from '~/components/QKV.svelte';
+ import WeightPopovers from '~/components/WeightPopovers.svelte';
+ import BlockTransition from '~/components/BlockTransition.svelte';
+ import Textbook from '~/components/textbook/Textbook.svelte';
+ import { hydrateRecordedExample, applyRecordedSampling } from '$lib/moe/adapter';
+ import type { TraceDocument } from '$lib/moe/types';
+ let active = false;
+ let error = '';
+ let vizHeight = 0;
+ let titleHeight = rootRem * 5;
+ const calculateVectorHeight = () => {
+   const gaps = rootRem * 0.5 * ($tokens.length - 1);
+   const height = Math.min(Math.max((vizHeight - titleHeight - gaps) / $tokens.length / maxVectorScale, minVectorHeight), maxVectorHeight);
+   vectorHeight.set(height);
+   headContentHeight.set(Math.max($tokens.length * height * 3 + gaps, rootRem * 20));
+ };
+ $: if (vizHeight || $tokens.length) calculateVectorHeight();
+ async function loadTraces() {
+   error = '';
+   try {
+     const response = await fetch(`${base}/traces/granite-moe.json`);
+     if (!response.ok) throw new Error(`Trace file returned HTTP ${response.status}`);
+     hydrateRecordedExample(await response.json() as TraceDocument, 0);
+     active = true;
+   } catch (reason) { error = reason instanceof Error ? reason.message : 'Could not load traces'; }
+ }
+ onMount(() => {
+   loadTraces();
+   const unsubTemperature = temperature.subscribe(() => { if(active) applyRecordedSampling(); });
+   const unsubSampling = sampling.subscribe(() => { if(active) applyRecordedSampling(); });
+   return () => { unsubTemperature(); unsubSampling(); };
+ });
 </script>
-
+<svelte:head>
+ <title>Transformer Explainer · MoE</title>
+ <meta name="description" content="The original Transformer Explainer diagram, with recorded Granite mixture-of-experts routing replacing the MLP." />
+ <link rel="stylesheet" href={`${base}/fonts/font.css`} />
+</svelte:head>
+{#if error}<div class="trace-status" role="alert">{error} <button on:click={loadTraces}>Try again</button></div>{:else if !active}<div class="trace-status" role="status">Loading recorded inference…</div>{/if}
+{#if active}
 <div
 	class:active
 	class="main-section h-full w-full"
@@ -206,34 +76,25 @@
 		<div class="steps" class:expanded={!!$expandedBlock.id} bind:offsetHeight={vizHeight}>
 			<Embedding className="step" />
 			<div class="blocks relative">
-				<div class="block-steps main" class:initial={$blockIdx === 0}>
+				<div class="block-steps main">
 					<QKV className="step" />
 					<Attention className="step" />
 					<Mlp className="step" />
 				</div>
-				<div
-					class="block-steps next"
-					class:hide={!$isOnBlockTransition}
-					class:initial={$blockIdx === 0}
-				>
-					<QKV className="step" />
-					<Attention className="step" />
-					<Mlp className="step" />
-				</div>
-				<div class="transition-watch" class:hide={!$isOnBlockTransition}></div>
 			</div>
 			<SubsequentBlocks className="step" />
 			<LinearSoftmax className="step" />
 		</div>
 		<WeightPopovers />
 		<BlockTransition />
-		{#if !$isMobile}
-			<Textbook showTextCard={$isTextbookOpen} />
-		{/if}
+		<Textbook showTextCard={$isTextbookOpen} />
+
 	</div>
 </div>
 
+{/if}
 <style lang="scss">
+ .trace-status { padding: 8rem 3rem; color: #9ca3af; }
 	.main-section {
 		opacity: 0;
 		&.active {
@@ -243,7 +104,7 @@
 	.nodes {
 		height: 100%;
 		width: 100%;
-		padding: 1rem 0 3rem 0;
+		padding: 2rem 0 3rem 0;
 		position: relative;
 	}
 	.steps {
@@ -252,7 +113,7 @@
 		height: 100%;
 		position: relative;
 		display: grid;
-		grid-template-columns: auto 3.5fr 0.5fr 0.5fr;
+		grid-template-columns: auto 5.8fr 0.6fr 0.85fr;
 
 		&.expanded {
 			:global(.step > .title) {
@@ -270,96 +131,12 @@
 				width: 100%;
 				position: absolute;
 				display: grid;
-				grid-template-columns: 0.5fr 2fr 1fr;
+				grid-template-columns: 0.5fr 2fr 1.8fr;
 			}
 			.block-steps.main {
-				transform-origin: 3rem center;
 				top: 0;
 				left: 0;
 			}
-			.block-steps.next {
-				transform-origin: right center;
-				justify-content: end;
-				top: 0;
-				right: 0;
-				pointer-events: none;
-			}
-
-			.transition-watch {
-				position: absolute;
-				top: 0;
-				left: 0;
-				height: 100%;
-				width: 100%;
-				pointer-events: none;
-			}
-
-			.hide {
-				display: none;
-			}
-			&.animate-forward {
-				.block-steps,
-				.transition-watch {
-					animation-duration: 800ms;
-					animation-timing-function: ease-in;
-				}
-				.block-steps.main {
-					animation-name: collapse;
-					&.initial {
-						transform-origin: left center;
-					}
-				}
-				.block-steps.next {
-					animation-name: expand;
-				}
-				.transition-watch {
-					animation-name: width-collapse;
-				}
-			}
-
-			&.animate-backward {
-				.block-steps,
-				.transition-watch {
-					animation-duration: 800ms;
-					animation-timing-function: ease-in;
-				}
-				.block-steps.main {
-					animation-name: expand;
-					&.initial {
-						transform-origin: left center;
-					}
-				}
-				.block-steps.next {
-					animation-name: collapse;
-				}
-				.transition-watch {
-					animation-name: width-collapse;
-				}
-			}
-		}
-	}
-	@keyframes width-collapse {
-		0% {
-			width: 100%;
-		}
-		100% {
-			width: 0%;
-		}
-	}
-	@keyframes expand {
-		0% {
-			transform: scaleX(0);
-		}
-		100% {
-			transform: scaleX(1);
-		}
-	}
-	@keyframes collapse {
-		0% {
-			transform: scaleX(1);
-		}
-		100% {
-			transform: scaleX(0);
 		}
 	}
 
@@ -435,7 +212,7 @@
 	:global(.cell.x1-12),
 	:global(.vector.x1-12),
 	:global(.sub-vector.x1-12) {
-		height: calc(var(--vector-height) / 12);
+		height: calc(var(--vector-height) / 16);
 	}
 
 	:global(.cell.x3),

@@ -36,7 +36,7 @@ export const textPages: TextbookPage[] = [
 	{
 		id: 'what-is-transformer',
 		title: 'What is Transformer?',
-		content: `<p><strong>Transformer</strong> is the core architecture behind modern AI, powering models like ChatGPT and Gemini. Introduced in 2017, it revolutionized how AI processes information. The same architecture is used for training on massive datasets and for inference to generate outputs. Here we use GPT-2 (small), simpler than newer ones but perfect for learning the fundamentals.</p>
+		content: `<p><strong>Transformer</strong> is the core architecture behind modern AI, powering models like ChatGPT and Gemini. Introduced in 2017, it revolutionized how AI processes information. The same architecture is used for training on massive datasets and for inference to generate outputs. Here we replay recorded inference from IBM Granite 3.1 1B-A400M, a sparse mixture-of-experts transformer.</p>
 `,
 		on: () => {},
 		out: () => {}
@@ -79,7 +79,7 @@ export const textPages: TextbookPage[] = [
 		id: 'transformer-architecture',
 		title: 'Transformer Architecture',
 		content:
-			'<p>Transformer has three main parts:</p><div class="numbered-list"><div class="numbered-item"><span class="number-circle">1</span><div class="item-content"><strong>Embeddings</strong> turn text into numbers.</div></div><div class="numbered-item"><span class="number-circle">2</span><div class="item-content"><strong>Transformer blocks</strong> mix information with Self-Attention and refine it with an MLP.</div></div><div class="numbered-item"><span class="number-circle">3</span><div class="item-content"><strong>Probabilities</strong> determine the likelihood of each next token.</div></div></div>',
+			'<p>Transformer has three main parts:</p><div class="numbered-list"><div class="numbered-item"><span class="number-circle">1</span><div class="item-content"><strong>Embeddings</strong> turn text into numbers.</div></div><div class="numbered-item"><span class="number-circle">2</span><div class="item-content"><strong>Transformer blocks</strong> mix information with Self-Attention and route each token through selected expert MLPs.</div></div><div class="numbered-item"><span class="number-circle">3</span><div class="item-content"><strong>Probabilities</strong> determine the likelihood of each next token.</div></div></div>',
 		on: () => {
 			const selectors = [
 				'.step.embedding',
@@ -125,7 +125,7 @@ export const textPages: TextbookPage[] = [
 	{
 		id: 'token-embedding',
 		title: 'Token Embedding',
-		content: `<p><strong>Tokenization</strong> splits input text into tokens—small units like words or parts of words. GPT-2 (small) has 50,257 token vocabulary, each with a unique ID.</p><p>In the <strong>token embedding</strong> step, every token is matched to a 768-number vector from a large lookup table. These vectors are learned during training to best represent each token’s meaning.</p>`,
+		content: `<p><strong>Tokenization</strong> splits input text into tokens—small units like words or parts of words. Granite has a 49,152-token vocabulary, each with a unique ID.</p><p>In the <strong>token embedding</strong> step, every token is matched to a 1,024-number vector from a large lookup table. These vectors are learned during training to best represent each token’s meaning.</p>`,
 		on: function () {
 			const selectors = [
 				'.token-column .column.token-string',
@@ -156,7 +156,7 @@ export const textPages: TextbookPage[] = [
 	{
 		id: 'positional-encoding',
 		title: 'Positional Encoding',
-		content: `<p>Word order matters in language. <strong>Positional encoding</strong> gives each token information about its place in the sequence.</p><p>GPT-2 does this by adding a learned positional embedding to the token's embedding, but newer models may use other methods, like RoPE, which encodes position by rotating certain vectors. All aim to help the model understand order in text.</p>`,
+		content: `<p>Word order matters in language. <strong>Positional encoding</strong> gives each token information about its place in the sequence.</p><p>Granite uses RoPE, which rotates query and key vectors inside attention. Its token embeddings are multiplied by 12; there is no learned positional embedding added to them.</p>`,
 		on: function () {
 			const selectors = [
 				'.token-column .column.position-embedding',
@@ -187,7 +187,7 @@ export const textPages: TextbookPage[] = [
 	{
 		id: 'blocks',
 		title: 'Repetitive Transformer Blocks',
-		content: `<p>A <strong>Transformer block</strong> is the main unit of processing in the model. It has two parts:</p><ul><li><strong>Multi-head self-attention</strong> – lets tokens share information</li><li><strong>MLP</strong> – refines each token's details</li></ul><p>Models stack many blocks so token representations become richer as they pass through. GPT-2 (small) has 12 of them.</p>`,
+		content: `<p>A <strong>Transformer block</strong> is the main unit of processing in the model. It has two parts:</p><ul><li><strong>Multi-head self-attention</strong> – lets tokens share information</li><li><strong>Mixture of experts</strong> – routes each token through eight of 32 expert networks</li></ul><p>Models stack many blocks so token representations become richer as they pass through. This Granite model has 24 of them.</p>`,
 		on: function () {
 			this.timeoutId = setTimeout(
 				() => {
@@ -243,16 +243,7 @@ export const textPages: TextbookPage[] = [
 	{
 		id: 'qkv',
 		title: 'Query, Key, Value',
-		content: `
-	<p>To perform self-attention, each token's embedding is transformed into 
-  <span class="highlight">three new embeddings</span>—
-  <span class="blue">Query</span>,  
-  <span class="red">Key</span>, and  
-  <span class="green">Value</span>.
-  This transformation is done by applying different weights and biases to each token embedding. These parameters (weights and biases), are optimized through training.</p>
-
-<p>Once created, <span class="blue">Queries</span> compare with <span class="red">Keys</span> to measure relevance, and this relevance is used to weight the <span class="green">Values</span>.</p>
-`,
+		content: `<p>Bias-free projections transform each token’s RMS-normalized hidden state into <span class="blue">Q (1024)</span>, <span class="red">K (512)</span>, and <span class="green">V (512)</span>.</p><p>Q splits into <strong>16 heads of 64 coordinates</strong>; K and V each split into <strong>8 heads of 64</strong>. RoPE rotates coordinate pairs within Q and K using token position. It preserves the 64-dimensional head size and leaves V unchanged.</p><p>Each pair of query heads shares one K/V head: Q1 and Q2 use K1/V1, Q3 and Q4 use K2/V2, and so on. Click <strong>Inspect RoPE</strong> to follow the recorded rotation.</p>`,
 		on: function () {
 			this.timeoutId = setTimeout(
 				() => {
@@ -285,7 +276,7 @@ export const textPages: TextbookPage[] = [
 		id: 'multi-head',
 		title: 'Multi-head',
 		content:
-			'<p>After creating <span class="blue">Q</span>, <span class="red">K</span>, and <span class="green">V</span> embeddings, the model splits them into several <strong>heads</strong> (12 in GPT-2 small). Each head works with its own smaller set of <span class="blue">Q</span>/<span class="red">K</span>/<span class="green">V</span>, focusing on different patterns in the text—like grammar, meaning, or long-range links.</p><p>Multiple heads let the model learn many kinds of relationships in parallel, making its understanding richer.</p>',
+			'<p>Granite uses <strong>grouped-query attention</strong>: 16 query heads share 8 key/value heads. All heads contain 64 coordinates; Q is larger overall because it has twice as many heads.</p><p>After RoPE, query heads 1 and 2 both compare against key head 1, then each uses its own attention weights to combine value head 1. The same sharing applies to the other query pairs. K/V sharing repeats the same values without creating new projections.</p><p>Use the head arrows to follow the highlighted query head and its shared K/V head in the diagram.</p>',
 		on: () => {
 			highlightAttentionPath();
 			highlightElements(['.multi-head .head-title']);
@@ -333,7 +324,7 @@ export const textPages: TextbookPage[] = [
 		id: 'output-concatenation',
 		title: 'Attention Output & Concatenation',
 		content:
-			'<p>Each head <span class="highlight">multiplies its <span class="purple">attention scores</span> with the <span class="green">Value</span> embeddings to produce its attention output</span>—a refined representation of each token after considering context.</p><p>GPT-2 (small) has 12 such outputs, which are concatenated to form a single vector of the original size (768 numbers).</p>',
+			'<p>Each head <span class="highlight">multiplies its <span class="purple">attention scores</span> with the <span class="green">Value</span> embeddings to produce its attention output</span>—a refined representation of each token after considering context.</p><p>Granite has 16 query-head outputs, which are concatenated and projected to a 1,024-number vector. Each pair of query heads shares a key/value head.</p>',
 		on: function () {
 			this.timeoutId = setTimeout(
 				() => {
@@ -363,9 +354,9 @@ export const textPages: TextbookPage[] = [
 	},
 	{
 		id: 'mlp',
-		title: 'MLP (Multi-Layer Perceptron)',
+		title: 'MoE (Mixture of Experts)',
 		content:
-			'<p>The attention output goes through an <strong>MLP</strong> to refine token representations. A Linear layer changes embedding values and size using learned weights and bias, then a non-linear activation decides how much each value passes.</p><p>Many activation types exist; GPT-2 uses <strong>GELU</strong>, which lets small values pass partially and large values pass fully, helping capture both subtle and strong patterns.</p>',
+			'<p>A learned <strong>router</strong> scores 32 experts for each token. Granite selects the top eight logits and applies softmax to those eight scores.</p><p>Each selected expert is a SwiGLU network. Its output is multiplied by its routing weight, then the eight outputs are summed. The recorded gates and outputs are visible in the MoE panel.</p>',
 		on: () => {
 			highlightElements(['.step.mlp', '.operation-col.activation']);
 		},
@@ -377,7 +368,7 @@ export const textPages: TextbookPage[] = [
 	{
 		id: 'output-logit',
 		title: 'Output Logit',
-		content: `<p>After all Transformer blocks, the last token's output embedding, enriched with context from all previous tokens, is multiplied by learned weights in a final layer.</p><p>This produces <strong>logits</strong>, 50,257 numbers—one for each token in GPT-2’s vocabulary—that indicate how likely each token is to come next.</p>`,
+		content: `<p>After all Transformer blocks, the last token's output embedding, enriched with context from all previous tokens, is multiplied by learned weights in a final layer.</p><p>This produces <strong>logits</strong>, 49,152 numbers—one for each token in Granite’s vocabulary—that indicate how likely each token is to come next.</p>`,
 		on: () => {
 			highlightElements(['g.path-group.softmax', '.column.final']);
 		},
@@ -521,7 +512,7 @@ export const textPages: TextbookPage[] = [
 	{
 		id: 'residual',
 		title: 'Residual Connection',
-		content: `<p>Transformers have auxiliary features that enhance the model performance. For example, a <strong>residual connection</strong> adds a layer's input to its output, keeping information from fading through many blocks. In GPT-2, it's used twice per block to train deeper stacks effectively.</p>`,
+		content: `<p>Transformers have auxiliary features that enhance the model performance. For example, a <strong>residual connection</strong> adds a layer's input to its output, keeping information from fading through many blocks. Granite uses two residual additions per block; each attention or MoE output is multiplied by 0.22 before being added to the residual stream.</p>`,
 		on: function () {
 			this.timeoutId = setTimeout(
 				() => {
@@ -543,7 +534,7 @@ export const textPages: TextbookPage[] = [
 	{
 		id: 'layer-normalization',
 		title: 'Layer Normalization',
-		content: `<p><strong>Layer Normalization</strong> helps stabilize both training and inference by adjusting input numbers so their mean and variance stay consistent. This makes the model less sensitive to its starting weights and helps it learn more effectively. In GPT-2, it's applied before self-attention, before the MLP, and once more before the final output.</p>`,
+		content: `<p><strong>RMSNorm</strong> rescales a vector by its root-mean-square magnitude, followed by learned coordinate weights. Granite applies it before self-attention, before the MoE, and once more before the final output.</p>`,
 		on: () => {
 			highlightElements(['.operation-col.ln']);
 		},
@@ -554,7 +545,7 @@ export const textPages: TextbookPage[] = [
 	{
 		id: 'dropout',
 		title: 'Dropout',
-		content: `<p>During training, <strong>dropout</strong> randomly turns off some connections between numbers so the model doesn't overfit to specific patterns. This helps it learn features that generalize better. GPT-2 uses it, but newer LLMs often skip it because they train on huge datasets and overfitting is less of a problem. In inference, dropout is turned off.</p>`,
+		content: `<p>During training, <strong>dropout</strong> randomly turns off some connections between numbers so the model doesn't overfit to specific patterns. This helps it learn features that generalize better. This recording runs in evaluation mode. In inference, dropout is turned off.</p>`,
 		on: () => {
 			highlightElements(['.operation-col.dropout']);
 		},

@@ -17,3 +17,14 @@ __pycache__
 params_output
 
 static/consent-form.pdf
+.venv/
+.cache/
+.hf-cache/
+.moe-cache/
+.uv-cache/
+.trace-venv/
+.test-results/
+playwright-report/
+.sites-runtime/
+dense/build/
+dense/.svelte-kit/

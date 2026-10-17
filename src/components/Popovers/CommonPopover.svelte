@@ -54,7 +54,7 @@
 >
 	<div class="content">
 		<slot></slot>
-		{#if goTo}
+		{#if goTo && !goTo.startsWith('article-')}
 			<div
 				class="more-btn mt-1 text-blue-600 hover:underline"
 				on:click={(e) =>

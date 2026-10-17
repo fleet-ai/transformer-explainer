@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import QkvWeightPopover from './popovers/QKVWeightPopover.svelte';
+	import QkvWeightPopover from './Popovers/QKVWeightPopover.svelte';
 	import { weightPopover, tooltip } from '~/store';
 	import { fade } from 'svelte/transition';
-	import AttentionWeightPopover from './popovers/AttentionWeightPopover.svelte';
-	import MLPWeightPopover from './popovers/MLPWeightPopover.svelte';
-	import MLPDownWeightPopover from './popovers/MLPDownWeightPopover.svelte';
+	import AttentionWeightPopover from './Popovers/AttentionWeightPopover.svelte';
+	import MLPWeightPopover from './Popovers/MLPWeightPopover.svelte';
+	import MLPDownWeightPopover from './Popovers/MLPDownWeightPopover.svelte';
 
-	import LogitWeightPopover from './popovers/LogitWeightPopover.svelte';
+	import LogitWeightPopover from './Popovers/LogitWeightPopover.svelte';
 	import { ArrowUpRightDownLeftOutline } from 'flowbite-svelte-icons';
 	import {
 		highlightAttentionPath,
@@ -36,7 +36,7 @@
 		document.querySelector('.main-section').addEventListener('click', handleOutsideClick);
 
 		return () => {
-			document.querySelector('.main-section').removeEventListener('click', handleOutsideClick);
+			document.querySelector('.main-section')?.removeEventListener('click', handleOutsideClick);
 		};
 	});
 
@@ -80,7 +80,7 @@
 		elements.forEach((el) => resizeObserver.observe(el));
 
 		return () => {
-			document.querySelector('.main-section').removeEventListener('click', handleOutsideClick);
+			document.querySelector('.main-section')?.removeEventListener('click', handleOutsideClick);
 		};
 	});
 

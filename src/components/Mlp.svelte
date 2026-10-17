@@ -1,193 +1,577 @@
 <script lang="ts">
-	import { tokens, modelMeta, blockIdx, attentionHeadIdx, vectorHeight } from '~/store';
+	import { onMount, setContext, tick } from 'svelte';
+	import { scaleLinear } from 'd3';
 	import classNames from 'classnames';
-	import { onMount, setContext } from 'svelte';
+	import {
+		tokens,
+		modelMeta,
+		blockIdx,
+		attentionHeadIdx,
+		vectorHeight,
+		moeExample,
+		moeModel,
+		moeTokenIndex
+	} from '~/store';
 	import OperationGroup from './OperationGroup.svelte';
-	import VectorCanvas from './common/VectorCanvas.svelte';
-	import { Tooltip } from 'flowbite-svelte';
-	import { onClickReadMore } from '~/utils/event';
-	import TextbookTooltip from '~/components/common/TextbookTooltip.svelte';
+	import MoeInspector from './moe/MoeInspector.svelte';
+	import { percent, tokenLabel } from '$lib/moe/format';
 
 	export let className: string | undefined = undefined;
-
 	setContext('block-id', 'mlp');
-
-	const firstLayerlColor = 'bg-purple-200';
-	const secondLayerColor = 'bg-indigo-200';
-	const outputColor = 'bg-blue-200';
-	const queryHeadVectorColor = 'bg-purple-400';
-
+	let network: HTMLDivElement;
+	let routingColumn: HTMLDivElement;
+	let networkWidth = 310;
+	let rowGap = 8;
+	let selectedExpert: number | null = null;
+	let showSum = false;
 	let isHovered = false;
-
-	function handleMouseEnter() {
-		isHovered = true;
+	let showHelp = false;
+	$: layer = $moeExample?.layers[$blockIdx];
+	$: trace = layer?.tokens[$moeTokenIndex];
+	$: rowHeight = $tokens.length * $vectorHeight + Math.max(0, $tokens.length - 1) * rowGap;
+	$: networkHeight = Math.max(rowHeight, 235);
+	$: bankWidth = Math.min(184, Math.max(152, networkWidth * 0.56));
+	$: bankLeft = (networkWidth - bankWidth) / 2;
+	$: bankTop = Math.max(0, (rowHeight - 235) / 2);
+	$: expertWidth = (bankWidth - 15) / 4;
+	$: if ($moeExample || $blockIdx || $moeTokenIndex) {
+		selectedExpert = null;
+		showSum = false;
 	}
+	$: if (network && ($vectorHeight || $tokens)) tick().then(measure);
 
-	function handleMouseLeave() {
-		isHovered = false;
+	function measure() {
+		if (!network) return;
+		networkWidth = network.clientWidth;
+		if (routingColumn) rowGap = parseFloat(getComputedStyle(routingColumn).gap) || 8;
 	}
-
-	let vectorHoverIdx: number | null = null;
-
-	// attentionHeadIdx subscribe
-	const headCursors = {};
-
 	onMount(() => {
-		const unsubscribe = attentionHeadIdx.subscribe(async (newIdx) => {
-			Object.values(headCursors).forEach((el) => {
-				el.style.top = `${($vectorHeight / $modelMeta.attention_head_num) * newIdx}px`;
-			});
-		});
-
-		return () => {
-			unsubscribe();
-		};
+		const observer = new ResizeObserver(measure);
+		observer.observe(network);
+		measure();
+		return () => observer.disconnect();
 	});
-	$: isLastBlock = $blockIdx === $modelMeta?.layer_num - 1;
+	function rowY(index: number, height: number, gap: number) {
+		return height / 2 + index * (height + gap);
+	}
+	function expertX(expert: number, left: number, width: number) {
+		return left + (expert % 4) * (width + 5);
+	}
+	function expertY(expert: number, top: number) {
+		return top + Math.floor(expert / 4) * 30 + 12.5;
+	}
+	function wire(x1: number, y1: number, x2: number, y2: number) {
+		const bend = Math.max(15, Math.abs(x2 - x1) * 0.5);
+		return `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`;
+	}
+	function vectorColor(value: number, values: number[]) {
+		const max = Math.max(...values.map(Math.abs), 0.00001);
+		return scaleLinear<string>().domain([-max, 0, max]).range(['#c2a8e9', '#f7f1ff', '#9671ca'])(
+			value
+		);
+	}
+	async function chooseSum(index: number) {
+		chooseToken(index);
+		await tick();
+		showSum = true;
+	}
+	function chooseToken(index: number) {
+		moeTokenIndex.set(index);
+		selectedExpert = null;
+	}
 </script>
 
-<div class={classNames('mlp', 'mlpUp', 'mlpDown', className)} data-click="mlp-step">
+<div class={classNames('mlp', 'moe', 'mlpUp', 'mlpDown', className)} data-click="mlp-step">
 	<div
 		class="title"
-		on:mouseenter={handleMouseEnter}
-		on:mouseleave={handleMouseLeave}
+		on:mouseenter={() => (isHovered = true)}
+		on:mouseleave={() => (isHovered = false)}
 		role="group"
 		data-click="mlp-step-title"
 	>
-		<div class="w-max">
-			<TextbookTooltip id="mlp">MLP</TextbookTooltip>
-		</div>
+		<button class="moe-title" aria-expanded={showHelp} on:click={() => (showHelp = !showHelp)}
+			>Mixture of Experts <span aria-hidden="true">ⓘ</span></button
+		>
+		<span class="moe-subtitle"
+			>{$moeModel?.topK ?? 8} of {$moeModel?.numExperts ?? 32} experts per token</span
+		>
 	</div>
+	<!-- Keep the explanation outside the title's stacking context, above the diagram. -->
+	{#if showHelp}
+		<section class="moe-help" aria-label="MoE explanation">
+			<button class="close" aria-label="Close MoE explanation" on:click={() => (showHelp = false)}
+				>×</button
+			>
+			The router selects the top {$moeModel?.topK ?? 8} logits, then softmax gives their mixing weights.
+			Only those experts run. Their weighted outputs are added, scaled, and joined to the residual stream.
+			Expert IDs are local to this layer.
+		</section>
+	{/if}
 
-	<div class="content relative">
+	<div class="content resize-watch relative">
 		<div class="bounding mlp-bounding" class:active={isHovered}></div>
-		<div class="layer mlpUp first-layer flex">
+		<div class="first-layer layer flex">
 			<div class="column initial">
 				{#each $tokens as token, index}
-					<div
+					<div class="cell" class:last={index === $tokens.length - 1}>
+						<span class="label float">{token}</span>
+						<button
+							class="vector initial-vector"
+							class:chosen={index === $moeTokenIndex}
+							aria-label={`Inspect MoE routing for token ${index}: ${token}`}
+							aria-pressed={index === $moeTokenIndex}
+							on:click={() => chooseToken(index)}
+							title={`Attention output, token ${index}. Select to inspect its expert routes.`}
+						>
+							{#each layer?.attentionOutputPreview[index] ?? [] as value, dim}<span
+									class="coordinate"
+									style={`top:${dim * 12.5}%;background:${vectorColor(value, layer!.attentionOutputPreview[index])}`}
+									title={`Attention output coordinate ${dim}: ${value}`}
+								></span>{/each}
+							<div
+								class="sub-vector head1"
+								style={`top:${($vectorHeight / $modelMeta.attention_head_num) * $attentionHeadIdx}px;height:${$vectorHeight / $modelMeta.attention_head_num}px;`}
+							></div>
+							<div class="sub-vector head-rest"></div>
+						</button>
+					</div>
+				{/each}
+			</div>
+			<OperationGroup type="residual-end" id="embedding-residual" />
+			<OperationGroup type="residual-start" id="mlp-residual" />
+			<div class="column rmsnorm">
+				{#each $tokens as _, index}<div class="cell" class:last={index === $tokens.length - 1}>
+						<span class="normalization-dot" title="RMS normalization before routing"></span>
+					</div>{/each}
+			</div>
+		</div>
+
+		<div class="moe-network" bind:this={network} style={`height:${networkHeight}px;`}>
+			<svg class="moe-paths" width={networkWidth} height={networkHeight} aria-hidden="true">
+				{#each layer?.tokens ?? [] as tokenTrace, index}
+					{#if index !== $moeTokenIndex}
+						{#each tokenTrace.selectedExperts as expert}<path
+								d={wire(
+									17,
+									rowY(index, $vectorHeight, rowGap),
+									expertX(expert, bankLeft, expertWidth),
+									expertY(expert, bankTop)
+								)}
+								class="context-path"
+							/><path
+								d={wire(
+									expertX(expert, bankLeft, expertWidth) + expertWidth,
+									expertY(expert, bankTop),
+									networkWidth - 12,
+									rowY(index, $vectorHeight, rowGap)
+								)}
+								class="context-path"
+							/>{/each}
+					{/if}
+				{/each}
+				{#each trace?.selectedExperts ?? [] as expert, rank}<path
+						d={wire(
+							17,
+							rowY($moeTokenIndex, $vectorHeight, rowGap),
+							expertX(expert, bankLeft, expertWidth),
+							expertY(expert, bankTop)
+						)}
+						class="selected-path"
+						style={`stroke-width:${1.5 + trace!.routingWeights[rank] * 12};opacity:${selectedExpert === null || selectedExpert === expert ? 0.8 : 0.2}`}
+					/><path
+						d={wire(
+							expertX(expert, bankLeft, expertWidth) + expertWidth,
+							expertY(expert, bankTop),
+							networkWidth - 12,
+							rowY($moeTokenIndex, $vectorHeight, rowGap)
+						)}
+						class="selected-path"
+						style={`stroke-width:${1.5 + trace!.routingWeights[rank] * 12};opacity:${selectedExpert === null || selectedExpert === expert ? 0.8 : 0.2}`}
+					/>{/each}
+			</svg>
+			<div class="column routing-column" bind:this={routingColumn}>
+				<span class="subtitle">Router</span>{#each $tokens as token, index}<div
 						class="cell"
 						class:last={index === $tokens.length - 1}
-						on:mouseenter={() => {
-							vectorHoverIdx = index;
-						}}
-						on:mouseleave={() => {
-							vectorHoverIdx = null;
-						}}
-						role="group"
 					>
-						<span class="label float">{token}</span>
-						<div class={`vector flex flex-col  ${firstLayerlColor}`}>
-							<VectorCanvas colorScale="purple" active={vectorHoverIdx === index} />
-							<div
-								class={`sub-vector x1-12 head1 ${queryHeadVectorColor} absolute`}
-								bind:this={headCursors[`token${index}_out`]}
-							></div>
-							<div class="sub-vector head-rest grow"></div>
-						</div>
-					</div>
-				{/each}
+						<button
+							class="router-dot"
+							class:chosen={index === $moeTokenIndex}
+							aria-label={`Select router token ${index}: ${token}`}
+							aria-pressed={index === $moeTokenIndex}
+							on:click={() => chooseToken(index)}>R</button
+						>
+					</div>{/each}
 			</div>
-			<Tooltip triggeredBy={'.step.mlp .initial .cell'} class="popover" placement="right">
-				vector({$modelMeta.dimension})</Tooltip
-			>
-			<OperationGroup type="dropout" id={'mlp-first-dropout'} />
-			<OperationGroup type="residual-end" id={'embedding-residual'} />
-			<OperationGroup type="residual-start" id={'mlp-residual'} />
-			<OperationGroup type="ln" id={'mlp-first-ln'} />
-		</div>
-		<div class="layer mlpUp mlpDown second-layer flex justify-between">
-			<div class="column mlp-mid-column">
-				{#each $tokens as token, index}
-					<div
-						class={classNames('cell x4', { small: index !== 0 && index !== $tokens.length - 1 })}
+			<div class="expert-bank" style={`left:${bankLeft}px;top:${bankTop}px;width:${bankWidth}px;`}>
+				<span class="bank-label">Experts</span
+				>{#each Array($moeModel?.numExperts ?? 32) as _, expert}{@const rank =
+						trace?.selectedExperts.indexOf(expert) ?? -1}<button
+						class="expert"
+						class:active={rank >= 0}
+						class:inspected={selectedExpert === expert}
+						aria-label={`Expert ${expert}, ${rank >= 0 ? `selected, mixing weight ${percent(trace!.routingWeights[rank], 2)}` : 'skipped'}. Inspect expert.`}
+						aria-pressed={selectedExpert === expert}
+						on:click={() => {
+							showSum = false;
+							selectedExpert = selectedExpert === expert ? null : expert;
+						}}
+						title={`Expert ${expert} · ${rank >= 0 ? percent(trace!.routingWeights[rank], 2) : 'not selected'}`}
+						><span>E{expert.toString().padStart(2, '0')}</span><small
+							>{rank >= 0 ? percent(trace!.routingWeights[rank], 0) : '—'}</small
+						></button
+					>{/each}
+			</div>
+			<div class="column sum-column">
+				<span class="subtitle">Sum</span>{#each $tokens as _, index}<div
+						class="cell"
 						class:last={index === $tokens.length - 1}
 					>
-						<div class={classNames(`vector x4 ${secondLayerColor} opacity-80`)}>
-							<VectorCanvas colorScale="indigo" />
-						</div>
-					</div>
-				{/each}
+						<button
+							class="sum-dot"
+							class:chosen={index === $moeTokenIndex}
+							aria-label={`Inspect weighted sum for token ${index}: ${$tokens[index]}`}
+							aria-pressed={showSum && index === $moeTokenIndex}
+							on:click={() => chooseSum(index)}
+							title="Inspect the weighted sum of expert outputs">Σ</button
+						>
+					</div>{/each}
+			</div>
+			<div class="selection-note" style={`top:${networkHeight + 10}px;`}>
+				<strong>{tokenLabel($tokens[$moeTokenIndex] ?? '')}</strong> → top-{$moeModel?.topK ??
+					8}<span>Click an expert or Σ to see its operations</span>
 			</div>
 		</div>
-		<Tooltip triggeredBy={'.step.mlp .mlp-mid-column .cell'} class="popover" placement="right">
-			vector({$modelMeta.dimension * 4})</Tooltip
-		>
-		<div class="layer mlpDown out-layer relative flex justify-between">
-			<div class="activation">
-				<OperationGroup type="activation" id={'mlp-activation'} className="x4" />
+
+		<div class="out-layer layer flex">
+			<div class="column raw-sum">
+				<span class="subtitle">×{$moeModel?.residualMultiplier ?? 0.22}</span
+				>{#each $tokens as _, index}<div class="cell" class:last={index === $tokens.length - 1}>
+						<div
+							class="raw-vector"
+							title="Raw weighted MoE output, before residual scaling and addition"
+						>
+							{#each layer?.tokens[index].combinedOutputPreview ?? [] as value, dim}<span
+									class="coordinate"
+									style={`top:${dim * 12.5}%;background:${vectorColor(value, layer!.tokens[index].combinedOutputPreview)}`}
+									title={`MoE sum coordinate ${dim}: ${value}`}
+								></span>{/each}
+						</div>
+					</div>{/each}
 			</div>
-			<div class="ouputs flex">
-				<div class="column out-label">
-					{#each $tokens as token, index}
-						<div class="cell" class:last={index === $tokens.length - 1}>
-							<span class="label float">{token}</span>
-						</div>
-					{/each}
-				</div>
-				<OperationGroup type="residual-end" id={'mlp-residual'} />
-				{#if isLastBlock}
-					<OperationGroup type="ln" id={'mlp-second-ln'} />
-				{/if}
-				<div
-					class="column out mlp-out-column"
-					class:last-block={$blockIdx === $modelMeta.layer_num - 1}
-				>
-					{#each $tokens as token, index}
-						<div class="cell" class:last={index === $tokens.length - 1}>
-							<div class={`vector ${outputColor}`}>
-								<VectorCanvas colorScale="blue" />
-							</div>
-						</div>
-					{/each}
-				</div>
-				<Tooltip triggeredBy={'.step.mlp .mlp-out-column .cell'} class="popover" placement="right">
-					vector({$modelMeta.dimension})</Tooltip
-				>
+			<OperationGroup type="residual-end" id="mlp-residual" />
+			<div class="column out mlp-out-column">
+				{#each $tokens as token, index}<div class="cell" class:last={index === $tokens.length - 1}>
+						<div
+							class="vector output-vector"
+							title={`Block output after residual addition, token ${index}; schematic vector`}
+						></div>
+					</div>{/each}
 			</div>
 		</div>
 	</div>
 </div>
 
-<style lang="scss">
-	.mlp {
-		.title > div {
-			// cursor: help;
-		}
+{#if selectedExpert !== null || showSum}
+	<MoeInspector
+		expert={showSum ? null : selectedExpert}
+		on:close={() => {
+			selectedExpert = null;
+			showSum = false;
+		}}
+		on:expert={(event) => {
+			selectedExpert = event.detail;
+			showSum = false;
+		}}
+		on:sum={() => {
+			selectedExpert = null;
+			showSum = true;
+		}}
+	/>
+{/if}
 
-		.mlp-bounding {
-			top: -0.5rem;
-			padding: 0.5rem 0;
-			left: -0.2rem;
-			width: calc(100% + 0.2rem);
-			height: 100%;
-		}
-		.content {
-			display: grid;
-			grid-template-columns: repeat(4, minmax(var(--min-column-width), 1fr));
-
-			.first-layer {
-				grid-column: span 2;
-			}
-
-			.activation {
-				position: relative;
-				left: calc(-100% + 0.8rem);
-			}
-		}
-
-		.column.out-label {
-			.label {
-				opacity: 0;
-			}
-			.last .label {
-				opacity: 1;
-			}
-		}
-		.last-block {
-			pointer-events: none;
-			.vector {
-				width: 0;
-			}
-		}
+<style>
+	.mlp.moe {
+		position: relative;
+		min-width: 420px;
+	}
+	.moe-title {
+		padding: 0;
+		border: 0;
+		width: max-content;
+		background: none;
+		color: inherit;
+		text-align: left;
+		font: inherit;
+		cursor: pointer;
+	}
+	.moe-title > span {
+		font-size: 0.7em;
+		opacity: 0.65;
+	}
+	.moe-subtitle {
+		color: #aa99bb;
+		font-size: 0.65rem;
+		font-weight: 400;
+		margin-top: 4px;
+	}
+	.mlp-bounding {
+		top: -0.5rem;
+		left: -0.2rem;
+		width: calc(100% + 0.2rem);
+		height: 100%;
+		padding: 0.5rem 0;
+	}
+	.moe .content {
+		display: grid;
+		grid-template-columns: 50px minmax(300px, 1fr) 43px;
+		gap: 12px;
+	}
+	.first-layer,
+	.out-layer {
+		align-items: flex-start;
+		position: relative;
+	}
+	.initial-vector {
+		padding: 0;
+		border: 0;
+		background: #e9d5ff;
+		cursor: pointer;
+		overflow: hidden;
+		display: block;
+	}
+	.initial-vector.chosen {
+		box-shadow: 0 0 0 1px #b497d0;
+	}
+	.coordinate {
+		position: absolute;
+		height: 12.5%;
+		left: 0;
+		width: 100%;
+		display: block;
+	}
+	.initial .head1 {
+		position: absolute;
+		background: #c084fc;
+		left: 0;
+		opacity: 0.65;
+	}
+	.rmsnorm {
+		width: 13px;
+		flex-shrink: 0;
+	}
+	.rmsnorm .subtitle {
+		white-space: nowrap;
+		font-size: 0.55rem;
+		left: -12px;
+		width: 44px;
+	}
+	.normalization-dot {
+		height: 3px;
+		width: 3px;
+		border-radius: 50%;
+		background: #bdb2c8;
+		margin: auto;
+	}
+	.moe-network {
+		position: relative;
+		min-width: 0;
+	}
+	.moe-paths {
+		position: absolute;
+		left: 0;
+		top: 0;
+		overflow: visible;
+		pointer-events: none;
+		z-index: 90;
+	}
+	.context-path {
+		fill: none;
+		stroke: #d6c4e6;
+		stroke-width: 0.7;
+		opacity: 0.3;
+	}
+	.selected-path {
+		fill: none;
+		stroke: #bb97d9;
+	}
+	.routing-column,
+	.sum-column {
+		position: absolute;
+		top: 0;
+		z-index: 103;
+	}
+	.routing-column {
+		left: 0;
+		width: 20px;
+	}
+	.sum-column {
+		right: 0;
+		width: 17px;
+	}
+	.routing-column .subtitle,
+	.sum-column .subtitle {
+		font-size: 0.6rem;
+		width: 46px;
+		left: -13px;
+	}
+	.routing-column .subtitle {
+		top: 100%;
+		transform: translateY(6px);
+	}
+	.router-dot,
+	.sum-dot {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 17px;
+		height: 17px;
+		border: 1px solid #dbcbe9;
+		background: #faf6fe;
+		color: #b79acc;
+		border-radius: 50%;
+		font-size: 9px;
+		padding: 0;
+		flex-shrink: 0;
+	}
+	.router-dot,
+	.sum-dot {
+		cursor: pointer;
+	}
+	.router-dot.chosen,
+	.sum-dot.chosen {
+		border-color: #aa7cc9;
+		background: #d9bfea;
+		color: #795298;
+	}
+	.expert-bank {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		grid-auto-rows: 25px;
+		gap: 5px;
+		position: absolute;
+		z-index: 104;
+	}
+	.bank-label {
+		position: absolute;
+		top: -28px;
+		width: 100%;
+		text-align: center;
+		color: #a89ab6;
+		font-size: 0.6rem;
+	}
+	.expert {
+		border: 1px solid #e7deef;
+		border-radius: 3px;
+		padding: 1px 2px;
+		background: #fcfaff;
+		color: #b7a9c3;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		font:
+			9px/1.2 'SFMono-Regular',
+			Consolas,
+			monospace;
+	}
+	.expert small {
+		font:
+			8px/1.1 Arial,
+			sans-serif;
+		color: #c3b7ce;
+		margin-top: 1px;
+	}
+	.expert.active {
+		border-color: #c5a5de;
+		background: #e5d3f3;
+		color: #9366b3;
+	}
+	.expert.active small {
+		color: #9366b3;
+	}
+	.expert.inspected {
+		border-color: #9670b6;
+		background: #cda9e6;
+		box-shadow: 0 0 0 1px #e9ddf3;
+		color: #6e448c;
+	}
+	.expert:hover {
+		border-color: #b293ca;
+	}
+	.selection-note {
+		position: absolute;
+		left: 0;
+		width: 100%;
+		color: #ad99bf;
+		text-align: center;
+		font-size: 0.6rem;
+		white-space: nowrap;
+	}
+	.selection-note strong {
+		font: inherit;
+		color: #9773ae;
+	}
+	.selection-note > span {
+		display: block;
+		margin-top: 5px;
+		font-size: 0.55rem;
+		color: #bcaacb;
+	}
+	.raw-sum {
+		width: 12px;
+	}
+	.raw-sum .subtitle {
+		width: 40px;
+		left: -13px;
+		font-size: 0.55rem;
+	}
+	.raw-vector {
+		position: relative;
+		height: var(--vector-height);
+		width: 10px;
+		background: #e9d5ff;
+	}
+	.output-vector {
+		background: #bfdbfe;
+	}
+	.out-layer .column.out {
+		margin-left: 7px;
+	}
+	.moe-help {
+		position: absolute;
+		z-index: 998;
+		background: white;
+		border: 1px solid #ddcfe8;
+		border-radius: 5px;
+		padding: 13px 26px 13px 13px;
+		box-shadow: 0 4px 15px #5c417415;
+		color: #9078a1;
+		font-size: 0.67rem;
+		line-height: 1.6;
+		white-space: normal;
+		font-weight: 400;
+	}
+	.moe-help {
+		top: calc(var(--title-height) - 20px);
+		width: 290px;
+		left: 40px;
+	}
+	.close {
+		border: 0;
+		background: white;
+		color: #af99bf;
+		position: absolute;
+		top: 4px;
+		right: 6px;
+		cursor: pointer;
+		font-size: 16px;
+		line-height: 1;
+		padding: 3px;
+	}
+	button:focus-visible {
+		outline: 2px solid #b596cf;
+		outline-offset: 3px;
 	}
 </style>

@@ -1,4 +1,7 @@
 <script lang="ts">
+	import HeadFlow from './moe/HeadFlow.svelte';
+	import RoPEInspector from './moe/RoPEInspector.svelte';
+	import VectorCanvas from './common/VectorCanvas.svelte';
 	import HeadStack from '~/components/HeadStack.svelte';
 	import {
 		tokens,
@@ -7,7 +10,10 @@
 		expandedBlock,
 		headGap,
 		hoveredMatrixCell,
-		attentionHeadIdx
+		attentionHeadIdx,
+		moeExample,
+		moeModel,
+		blockIdx
 	} from '~/store';
 	import classNames from 'classnames';
 	import AttentionMatrix from '~/components/AttentionMatrix.svelte';
@@ -30,6 +36,12 @@
 	const outputVectorColor = 'bg-purple-500';
 
 	let isHovered = false;
+	let showRoPE = false;
+	$: kvHead = Math.floor(
+		$attentionHeadIdx / (($moeModel?.attentionHeads ?? 16) / ($moeModel?.keyValueHeads ?? 8))
+	);
+	$: headSize = $moeModel?.attentionHeadSize ?? 64;
+	$: layer = $moeExample?.layers[$blockIdx];
 
 	function handleMouseEnter() {
 		isHovered = true;
@@ -65,13 +77,18 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
+				<div class="head-flow-wrap"><HeadFlow on:inspect={() => (showRoPE = true)} /></div>
 				<div
 					class="head-block flex w-full items-center justify-between px-2"
-					style={`height:${$headContentHeight}px;`}
+					style={`height:${Math.max($headContentHeight - 110, 320)}px;min-height:calc(var(--vector-height) * ${($tokens.length * 3) / 16} + ${($tokens.length - 1) * 1.5 + 14}rem);`}
 				>
 					<div class="qkv flex h-full flex-col justify-center gap-[5rem] pl-[6rem]">
 						<div class="column key">
-							<div class="head1 title"><TextbookTooltip id="qkv">Key</TextbookTooltip></div>
+							<div class="head1 title">
+								<TextbookTooltip id="qkv">Key {kvHead + 1}</TextbookTooltip><small
+									>RoPE · {headSize}D</small
+								>
+							</div>
 
 							{#each $tokens as token, index}
 								<div
@@ -80,16 +97,25 @@
 									class:active={$hoveredMatrixCell.col === index}
 								>
 									<span class="label float">{token}</span>
-									<div class={`vector x1-12 ${keyHeadVectorColor}`}></div>
+									<div class={`vector x1-12 ${keyHeadVectorColor}`}>
+										<VectorCanvas
+											colorScale="red"
+											data={layer?.keyPreview[$attentionHeadIdx][index]}
+										/>
+									</div>
 								</div>
 							{/each}
 							<Tooltip class="popover" triggeredBy={'.step.attention .key .cell'} placement="right"
-								>Key, Head {$attentionHeadIdx + 1}, vector({$modelMeta.dimension /
+								>Key, shared KV head {kvHead + 1}, after RoPE, vector({$modelMeta.dimension /
 									$modelMeta.attention_head_num})</Tooltip
 							>
 						</div>
 						<div class="column query">
-							<div class="head1 title"><TextbookTooltip id="qkv">Query</TextbookTooltip></div>
+							<div class="head1 title">
+								<TextbookTooltip id="qkv">Query {$attentionHeadIdx + 1}</TextbookTooltip><small
+									>RoPE · {headSize}D</small
+								>
+							</div>
 							{#each $tokens as token, index}
 								<div
 									class="head1 cell x1-12 query text-xs"
@@ -97,30 +123,44 @@
 									class:active={$hoveredMatrixCell.row === index}
 								>
 									<span class="label float">{token}</span>
-									<div class={`vector x1-12  ${queryHeadVectorColor}`}></div>
+									<div class={`vector x1-12 ${queryHeadVectorColor}`}>
+										<VectorCanvas
+											colorScale="blue"
+											data={layer?.queryPreview[$attentionHeadIdx][index]}
+										/>
+									</div>
 								</div>
 							{/each}
 							<Tooltip
 								class="popover"
 								triggeredBy={'.step.attention .query .cell'}
 								placement="right"
-								>Query, Head {$attentionHeadIdx + 1}, vector({$modelMeta.dimension /
+								>Query, Head {$attentionHeadIdx + 1}, after RoPE, vector({$modelMeta.dimension /
 									$modelMeta.attention_head_num})</Tooltip
 							>
 						</div>
 						<div class="column value">
-							<div class="head1 title"><TextbookTooltip id="qkv">Value</TextbookTooltip></div>
+							<div class="head1 title">
+								<TextbookTooltip id="qkv">Value {kvHead + 1}</TextbookTooltip><small
+									>unchanged · {headSize}D</small
+								>
+							</div>
 							{#each $tokens as token, index}
 								<div class="head1 cell x1-12 text-xs" class:last={index === $tokens.length - 1}>
 									<span class="label float">{token}</span>
-									<div class={`vector x1-12 ${valHeadVectorColor}`}></div>
+									<div class={`vector x1-12 ${valHeadVectorColor}`}>
+										<VectorCanvas
+											colorScale="green"
+											data={layer?.valuePreview[$attentionHeadIdx][index]}
+										/>
+									</div>
 								</div>
 							{/each}
 							<Tooltip
 								class="popover"
 								triggeredBy={'.step.attention .value .cell'}
 								placement="right"
-								>Value, Head {$attentionHeadIdx + 1}, vector({$modelMeta.dimension /
+								>Value, shared KV head {kvHead + 1}, no RoPE, vector({$modelMeta.dimension /
 									$modelMeta.attention_head_num})</Tooltip
 							>
 						</div>
@@ -139,7 +179,7 @@
 								</div>
 							{/each}
 							<Tooltip class="popover" triggeredBy={'.step.attention .out .cell'} placement="right"
-								>Attention Out, Head 1, vector({$modelMeta.dimension /
+								>Attention Out, Head {$attentionHeadIdx + 1}, vector({$modelMeta.dimension /
 									$modelMeta.attention_head_num})</Tooltip
 							>
 						</div>
@@ -149,8 +189,28 @@
 		</div>
 	</div>
 </div>
+{#if showRoPE}<RoPEInspector
+		on:close={() => (showRoPE = false)}
+		on:attention={() => {
+			showRoPE = false;
+			$expandedBlock = { id: 'attention' };
+		}}
+	/>{/if}
 
 <style lang="scss">
+	.head-flow-wrap {
+		position: relative;
+		z-index: 30;
+		padding: 12px 14px 8px;
+		max-width: 508px;
+	}
+	.column .title small {
+		display: block;
+		font-size: 9px;
+		line-height: 1.2;
+		white-space: nowrap;
+		color: #9ca3af;
+	}
 	.attention-matrix,
 	.head-title {
 		z-index: $COLUMN_TITLE_INDEX;
@@ -184,10 +244,11 @@
 			.title {
 				z-index: $COLUMN_TITLE_INDEX;
 				position: absolute;
-				top: -1.7rem;
+				top: -2.1rem;
 				left: 50%;
 				transform: translateX(-50%);
 				font-size: 0.9rem;
+				white-space: nowrap;
 				transition: none;
 			}
 			&.query .title {

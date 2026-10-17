@@ -5,6 +5,7 @@
 	import InputForm from '~/components/InputForm.svelte';
 	import { ga } from '~/utils/event';
 	import Sampling from '~/components/Sampling.svelte';
+	import ArchitectureTabs from './common/ArchitectureTabs.svelte';
 
 	export let isActive;
 
@@ -13,8 +14,11 @@
 </script>
 
 <div class="top-bar flex w-full items-center gap-4 px-10 py-2 pb-3" class:active={isActive}>
-	<div class="logo text-bold text-gray-700" data-click="logo">
-		T<span class="small">RANSFORMER</span> E<span class="small">XPLAINER</span>
+	<div class="brand">
+		<div class="logo text-bold text-gray-700" data-click="logo">
+			T<span class="small">RANSFORMER</span> E<span class="small">XPLAINER</span>
+		</div>
+		<ArchitectureTabs active="moe" />
 	</div>
 	<div class="inputs flex grow items-center">
 		<div class="input-wrapper w-full" class:active={isActive}>
@@ -90,7 +94,16 @@
 </div>
 
 <style lang="scss">
+	.brand {
+		display: flex;
+		flex-direction: column;
+		align-self: flex-start;
+		flex-shrink: 0;
+		gap: 3px;
+	}
 	.top-bar {
+		// Reserve room for the prompt status line below the input controls.
+		padding-bottom: 1.8rem;
 		background: linear-gradient(to bottom, rgba(255, 255, 255, 1) 60%, rgba(255, 255, 255, 0) 100%);
 		.input-wrapper {
 			&.active {

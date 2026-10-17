@@ -6,8 +6,7 @@
 		weightPopover,
 		tooltip,
 		attentionHeadIdx,
-		blockIdx,
-		isOnBlockTransition
+		blockIdx
 	} from '~/store';
 	import * as d3 from 'd3';
 	import { onMount, tick } from 'svelte';
@@ -24,6 +23,7 @@
 		TRANSFORMER_BLOCKS
 	} from '~/constants/opacity';
 	import { textPages } from '~/utils/textbookPages';
+	import { getRenderedEndpointPairs } from '~/utils/sankeyGeometry';
 
 	const { theme } = resolveConfig(tailwindConfig);
 
@@ -32,6 +32,7 @@
 
 	let resizeObserver: ResizeObserver;
 	let screenWidth: number;
+	let mounted = false;
 
 	$: curveFactor = Math.floor(screenWidth / 1000) || 1;
 	$: defaultCurveOffset = 40 * (curveFactor - 1) + 80;
@@ -85,11 +86,6 @@
 			...d,
 			from: `.block-steps.main ${d.from}`,
 			to: `.block-steps.main ${d.to}`
-		})),
-		nextAttention: backPaths.map((d) => ({
-			...d,
-			from: `.block-steps.next ${d.from}`,
-			to: `.block-steps.next ${d.to}`
 		}))
 	};
 
@@ -402,44 +398,14 @@
 			from: `.block-steps.main ${d.from}`,
 			to: `.block-steps.main ${d.to}`
 		})),
-		nextQkv: qkvPaths.map((d) => ({
-			...d,
-			from: `.block-steps.next ${d.from}`,
-			to: `.block-steps.next ${d.to}`
-		})),
 		attention: attentionPaths.map((d) => ({
 			...d,
 			from: `.block-steps.main ${d.from}`,
 			to: `.block-steps.main ${d.to}`
 		})),
-		nextAttention: attentionPaths.map((d) => ({
-			...d,
-			from: `.block-steps.next ${d.from}`,
-			to: `.block-steps.next ${d.to}`
-		})),
-		mlpUp: mlpUpPaths.map((d) => ({
-			...d,
-			from: `.block-steps.main ${d.from}`,
-			to: `.block-steps.main ${d.to}`
-		})),
-		mlpDown: mlpDownPaths.map((d) => ({
-			...d,
-			from: `.block-steps.main ${d.from}`,
-			to: `.block-steps.main ${d.to}`
-		})),
-		nextMlpUp: mlpUpPaths.map((d) => ({
-			...d,
-			from: `.block-steps.next ${d.from}`,
-			to: `.block-steps.next ${d.to}`
-		})),
-		nextMlpDown: mlpDownPaths.map((d) => ({
-			...d,
-			from: `.block-steps.next ${d.from}`,
-			to: `.block-steps.next ${d.to}`
-		})),
 		'transformer-blocks': [
 			{
-				from: `.block-steps.${$isOnBlockTransition ? 'next' : 'main'} .mlp .column.out .vector`,
+				from: '.block-steps.main .mlp .column.out .vector',
 				to: '.transformer-blocks .column.final .vector',
 				gradientId: $blockIdx === $modelMeta.layer_num - 1 ? 'blue' : 'blue-white-blue',
 				opacity: $blockIdx === $modelMeta.layer_num - 1 ? MLP : TRANSFORMER_BLOCKS,
@@ -538,6 +504,7 @@
 
 	const drawPath = async () => {
 		await tick();
+		if (!mounted) return;
 		const svg = d3.select(svgEl);
 		const svgBack = d3.select(svgBackEl);
 
@@ -558,42 +525,41 @@
 						const sources = d3.selectAll(from).nodes() as Element[];
 						const targets = d3.selectAll(to).nodes() as Element[];
 
-						return sources.map((src, i) => {
-							const source = src?.getBoundingClientRect();
-							const target = targets[i]?.getBoundingClientRect();
+						return getRenderedEndpointPairs(sources, targets).map(
+							({ source, target, index: i }) => {
+								const curveOffset = curve || defaultCurveOffset;
 
-							const curveOffset = curve || defaultCurveOffset;
+								const generator = pathGenerator || defaultPathGenerator;
+								const path = generator(source, target, curveOffset);
 
-							const generator = pathGenerator || defaultPathGenerator;
-							const path = source && target ? generator(source, target, curveOffset) : '';
+								const isLast = targets.length > 1 && i === sources.length - 1;
+								let gradUrl = gradientId;
 
-							const isLast = targets.length > 1 && i === sources.length - 1;
-							let gradUrl = gradientId;
+								if (isLast && !unique && document.getElementById(gradientId + '-last')) {
+									gradUrl = gradientId + '-last';
+								}
 
-							if (isLast && !unique && document.getElementById(gradientId + '-last')) {
-								gradUrl = gradientId + '-last';
+								return {
+									isLast: i === sources.length - 1,
+									path,
+									fill:
+										item.type === 'stroke'
+											? 'none'
+											: item.gradientId
+												? `url(#${gradUrl})`
+												: item.fill,
+									opacity: item.opacity,
+									stroke:
+										item.type === 'stroke'
+											? item.gradientId
+												? `url(#${item.gradientId})`
+												: item.fill
+											: 'none',
+									clickable: !!item.onMouseClick,
+									...rest
+								};
 							}
-
-							return {
-								isLast: i === sources.length - 1,
-								path,
-								fill:
-									item.type === 'stroke'
-										? 'none'
-										: item.gradientId
-											? `url(#${gradUrl})`
-											: item.fill,
-								opacity: item.opacity,
-								stroke:
-									item.type === 'stroke'
-										? item.gradientId
-											? `url(#${item.gradientId})`
-											: item.fill
-										: 'none',
-								clickable: !!item.onMouseClick,
-								...rest
-							};
-						});
+						);
 					});
 
 					return data.flat();
@@ -637,6 +603,7 @@
 
 	onMount(() => {
 		createGradients();
+		mounted = true;
 
 		const updateSvgs = () => {
 			drawPath();
@@ -649,45 +616,36 @@
 		const elements = document?.querySelectorAll('.resize-watch');
 		elements.forEach((el) => resizeObserver.observe(el));
 
-		const transition = document?.querySelector('.transition-watch');
-
-		resizeObserver.observe(transition);
-
-		// redraw when data updated
-		const unsubscribeAttnIdx = attentionHeadIdx.subscribe(async (newIdx) => {
-			drawPath();
-		});
-
 		return () => {
+			mounted = false;
 			resizeObserver.disconnect();
-			unsubscribeAttnIdx();
 		};
 	});
 
-	$: if (typeof window !== 'undefined') {
-		if ($tokens) {
-			drawPath();
-			drawResidualPath();
-		}
+	// Redraw after Svelte commits a block change, even when no resize occurs.
+	$: if (mounted && pathMap && $tokens && $attentionHeadIdx >= 0) {
+		drawPath();
+		drawResidualPath();
 	}
 
-	const drawResidualPath = () => {
+	const drawResidualPath = async () => {
+		await tick();
+		if (!mounted) return;
 		const svg = d3.select(svgEl);
 
-		const starts = d3.selectAll(`.residual-start path.head`).nodes();
-		const ends = d3.selectAll(`.residual-end path.head`).nodes();
+		const starts = d3.selectAll(`.residual-start path.head`).nodes() as Element[];
+		const ends = d3.selectAll(`.residual-end path.head`).nodes() as Element[];
 
-		const lineData = starts.map((start, i) => {
-			const startEl = start.getBoundingClientRect();
-			const endEl = ends[i].getBoundingClientRect();
+		const lineData = getRenderedEndpointPairs(starts, ends).map(
+			({ source: startEl, target: endEl, index }) => {
+				const x1 = startEl.right;
+				const y1 = startEl.top;
+				const x2 = endEl.left;
+				const y2 = endEl.top;
 
-			const x1 = startEl.right;
-			const y1 = startEl.top;
-			const x2 = endEl.left;
-			const y2 = endEl.top;
-
-			return { x1, y1, x2, y2, id: start.id };
-		});
+				return { x1, y1, x2, y2, id: starts[index].id };
+			}
+		);
 		svg
 			.selectAll('line.residual-connector')
 			.data(lineData)

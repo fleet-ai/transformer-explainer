@@ -11,7 +11,7 @@
 
 <CommonPopover
 	className="ln-popover"
-	title="Layer Normalization"
+	title="RMS Normalization"
 	{offset}
 	{triggeredBy}
 	{trigger}
@@ -19,7 +19,7 @@
 	goTo="article-ln"
 >
 	<div class="ln-content">
-		Normalizes layer input to have a standard distribution for stability.
+		Scales each token vector by its root mean square and a learned weight. Granite uses RMSNorm without subtracting the mean.
 	</div></CommonPopover
 >
 

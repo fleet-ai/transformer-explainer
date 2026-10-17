@@ -6,28 +6,37 @@
 	import { vectorHeight } from '~/store';
 
 	const { theme } = resolveConfig(tailwindConfig);
+	const palettes: Record<string, { 100: string; 400: string }> = {
+		gray: theme.colors.gray, blue: theme.colors.blue, red: theme.colors.red,
+		green: theme.colors.green, purple: theme.colors.purple, indigo: theme.colors.indigo
+	};
 
-	let visibleDimension = Math.floor($vectorHeight * 3.5) * 4;
 	export let active: boolean = false;
-	export let data: number[] = new Array(visibleDimension).fill(0).map((d) => Math.random());
+	export let data: number[] | undefined = undefined;
+	export let label: string | undefined = undefined;
 	export let colorScale: string | ((t: number, i: number) => string) | undefined = undefined;
 
 	let canvas: HTMLCanvasElement;
 
 	const lineHeight = 1;
+	$: hasCapturedValues = !!data?.length && data.every(Number.isFinite);
+	$: description = label ?? (hasCapturedValues
+		? `Recorded activation preview, first ${data!.length} coordinates. Colors normalized within this vector.`
+		: 'Activation values not captured. This neutral vector is schematic.');
 
 	$: colorKey = typeof colorScale === 'string' ? colorScale : 'gray';
+	$: palette = palettes[colorKey] ?? palettes.gray;
 	$: color =
 		typeof colorScale === 'function'
 			? colorScale
-			: d3.interpolate(theme.colors[colorKey][100], theme.colors[colorKey][400]);
+			: d3.interpolate(palette[100], palette[400]);
 
-	function drawCanvas() {
+	function drawCanvas(values: number[] | undefined, palette: (value: number, index: number) => string) {
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
-		const width = canvas.parentElement.clientWidth;
-		const height = canvas.parentElement.clientHeight;
+		const width = canvas.parentElement?.clientWidth ?? 0;
+		const height = canvas.parentElement?.clientHeight ?? 0;
 
 		ctx.clearRect(0, 0, width, height);
 
@@ -37,26 +46,35 @@
 		canvas.style.width = `${width}px`;
 		canvas.style.height = `${height}px`;
 
+		const captured = values?.length && values.every(Number.isFinite) ? values : null;
+		const extent = captured ? Math.max(...captured.map(Math.abs), 1e-12) : 1;
 		for (let i = 0; i < height / lineHeight; i++) {
-			const value = data[i];
-			ctx.fillStyle = color(value);
+			// Stretch only the recorded preview coordinates over the visual strip.
+			// Missing activations remain uniform; no random values or invented tail.
+			const index = captured ? Math.min(captured.length - 1, Math.floor(i * lineHeight / height * captured.length)) : 0;
+			const normalized = captured ? 0.5 + captured[index] / (2 * extent) : 0.5;
+			ctx.fillStyle = captured ? palette(normalized, index) : theme.colors.gray[200];
 			ctx.fillRect(0, i * lineHeight * pixelRatio, width * pixelRatio, lineHeight * pixelRatio);
 		}
 	}
 
 	onMount(() => {
-		const unsubscribe = vectorHeight.subscribe(drawCanvas);
+		const redraw = () => drawCanvas(data, color);
+		const unsubscribe = vectorHeight.subscribe(redraw);
+		const observer = new ResizeObserver(redraw);
+		if (canvas.parentElement) observer.observe(canvas.parentElement);
 		return () => {
 			unsubscribe();
+			observer.disconnect();
 		};
 	});
 
-	$: if (data && canvas && color) {
-		drawCanvas();
+	$: if (canvas && color) {
+		drawCanvas(data, color);
 	}
 </script>
 
-<canvas class:active bind:this={canvas}></canvas>
+<canvas class:active bind:this={canvas} aria-label={description} title={description}></canvas>
 
 <style lang="scss">
 	canvas {

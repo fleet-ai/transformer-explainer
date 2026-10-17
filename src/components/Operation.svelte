@@ -81,7 +81,7 @@
 					/> -->
 					<path d="M0,50 Q0,0 24,0"></path>
 				</svg>
-				<div class="guide-text ln-text">Layer Normalization</div>
+				<div class="guide-text ln-text">RMS Normalization</div>
 			</div>
 		{/if}
 	</div>

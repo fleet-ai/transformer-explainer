@@ -1,244 +1,294 @@
 <script lang="ts">
+	import { onDestroy, tick } from 'svelte';
 	import { Dropdown, DropdownItem, ButtonGroup } from 'flowbite-svelte';
 	import Temperature from './Temperature.svelte';
-
+	import Sampling from './Sampling.svelte';
 	import { ChevronDownOutline } from 'flowbite-svelte-icons';
 	import {
 		inputText,
-		isModelRunning,
 		predictedToken,
-		inputTextExample,
-		isFetchingModel,
+		isModelRunning,
 		expandedBlock,
-		selectedExampleIdx,
-		isLoaded,
-		isOnAnimation,
-		isMobile,
 		weightPopover,
-		sampling,
-		attentionHeadIdx,
-		blockIdx,
-		temperature,
-		tokenIds,
-		userId
+		moeDocument,
+		moeExample
 	} from '~/store';
-	import LoadingDots from './common/LoadingDots.svelte';
+	import { hydrateRecordedExample } from '$lib/moe/adapter';
+	import {
+		generateLiveTrace,
+		isLiveTrace,
+		LOCAL_INFERENCE_ORIGIN,
+		promptError,
+		traceAssetUrl,
+		type LiveProgress
+	} from '$lib/moe/live';
+	import type { TraceDocument } from '$lib/moe/types';
+	import { resolvePromptCompletion, preparePromptSubmission } from '$lib/moe/prompt';
+	import { base } from '$app/paths';
 	import classNames from 'classnames';
-	import Sampling from './Sampling.svelte';
-	import { completeCurrentAnimation } from '~/utils/animation';
-	import { textPages } from '~/utils/textbookPages';
-
-	let inputRef: HTMLDivElement;
-	let predictRef: HTMLDivElement;
-
-	let useCustomInput = false;
-
-	$: inputTextTemp = $inputText || '';
-
-	$: predictedTokenTemp = $predictedToken?.token || '';
-
-	const wordLimit = 12;
-	$: exceedLimit = inputTextTemp.split(' ').length >= wordLimit;
-
-	// Text input
-	const onFocusInput = (e) => {
-		let formattedString = (inputTextTemp + predictedTokenTemp).replace(/[\s\n]+/g, ' ');
-
-		inputTextTemp = formattedString;
-
-		// set predicted to empty
-		predictedTokenTemp = '';
-		// set input box text
-		inputRef.innerText = inputTextTemp;
+	import LoadingDots from './common/LoadingDots.svelte';
+	let inputRef: HTMLTextAreaElement;
+	let previewRef: HTMLDivElement;
+	let editing = false;
+	let dropdownOpen = false;
+	let draft = $inputText || '';
+	let displayedPrompt = $inputText;
+	let presetDocument: TraceDocument | null = null;
+	let controller: AbortController | null = null;
+	let busy = false;
+	let error = '';
+	let serviceState = 'connect on Generate';
+	let showSetup = false;
+	let progress: LiveProgress = 'connecting';
+	const progressLabels: Record<LiveProgress, string> = {
+		connecting: 'Connecting to Local Granite… Allow local-network access if prompted.',
+		loading: 'Loading Granite on this Mac…',
+		queued: 'Waiting for the local model…',
+		running: 'Running Granite and recording every block…',
+		downloading: 'Loading the fresh trace…'
 	};
-
-	const onInput = (e) => {
-		inputTextTemp = inputRef.innerText;
-	};
-
-	const handleSubmit = (e) => {
-		// Complete any running animation before starting new generation
-		completeCurrentAnimation();
-
-		setTimeout(() => {
-			onFocusInput();
-			textPages.find((page) => page.id === 'how-transformers-work')?.complete();
-
-			inputText.set(inputTextTemp);
-
-			window.dataLayer?.push({
-				event: 'generate-next-token',
-				attn_head_num: $attentionHeadIdx,
-				transformer_block_num: $blockIdx,
-				sampling_type: $sampling.type,
-				sampling_value: $sampling.value,
-				temperature_value: $temperature,
-				current_token_length: $tokenIds.length,
-				input_word_count: inputTextTemp
-					.trim()
-					.split(/\s+/)
-					.filter((word) => word.length > 0).length,
-				use_custom_input: useCustomInput,
-				user_id: $userId
-			});
-		}, 0);
-	};
-
-	const handleKeyDown = (e) => {
-		if (e.key === 'Enter') {
-			e.preventDefault();
-			if (disabled || exceedLimit) return;
-			handleSubmit(e);
+	$: if ($inputText !== displayedPrompt) {
+		if (!editing) draft = $inputText;
+		displayedPrompt = $inputText;
+	}
+	$: if ($moeDocument && !$moeDocument.examples.some((example) => isLiveTrace(example.id)))
+		presetDocument = $moeDocument;
+	$: completion = resolvePromptCompletion(
+		$inputText,
+		$moeDocument?.vocabulary,
+		$predictedToken?.tokenId
+	);
+	$: dirty = editing || draft !== $inputText;
+	$: editorText = preparePromptSubmission(draft, completion, dirty);
+	$: showPrediction = !busy && !dirty && !!completion.token;
+	$: if (inputRef && editorText && !dirty) revealCompletion(editorText);
+	$: disabled = !$moeDocument || busy;
+	$: parameterDisabled = !$moeDocument || !!$weightPopover || busy;
+	$: invalidPrompt = promptError(editorText) || (!dirty ? completion.error : '');
+	$: finished = !dirty && completion.finished;
+	$: traceUrl = traceAssetUrl($moeExample?.id ?? '', 'main', base);
+	$: currentIsLive = isLiveTrace($moeExample?.id ?? '');
+	function closeDiagramDetails() {
+		$expandedBlock = { id: null };
+		$weightPopover = null;
+	}
+	function onSelectExample(index: number) {
+		if (busy || !presetDocument) return;
+		dropdownOpen = false;
+		error = '';
+		editing = false;
+		draft = presetDocument.examples[index].prompt;
+		closeDiagramDetails();
+		hydrateRecordedExample(presetDocument, index);
+	}
+	async function handleSubmit(event: Event) {
+		event.preventDefault();
+		if (disabled || finished) return;
+		if (invalidPrompt) {
+			error = invalidPrompt;
 			return;
 		}
-		useCustomInput = true;
-	};
-
-	// Example select box
-	let dropdownOpen = false;
-	const onSelectExample = (d, i) => {
-		if ($isFetchingModel) {
-			textPages.find((page) => page.id === 'how-transformers-work')?.complete();
-		}
-
-		dropdownOpen = false;
-
-		selectedExampleIdx.set(i);
-		predictedTokenTemp = '';
-
-		inputTextTemp = d;
-		inputRef.innerText = inputTextTemp;
-		inputText.update((prev) => {
-			if (prev === d.trim()) {
-				return d + ' ';
+		closeDiagramDetails();
+		const submittedPrompt = editorText;
+		// Accept the visible token once. Retries then reuse this exact draft.
+		draft = submittedPrompt;
+		editing = true;
+		controller?.abort();
+		const request = new AbortController();
+		controller = request;
+		busy = true;
+		$isModelRunning = true;
+		error = '';
+		try {
+			const document = await generateLiveTrace(submittedPrompt, {
+				signal: request.signal,
+				onProgress: (state) => {
+					progress = state;
+					serviceState =
+						state === 'connecting' ? 'connecting' : state === 'loading' ? 'loading' : 'connected';
+				}
+			});
+			if (request.signal.aborted) return;
+			hydrateRecordedExample(document);
+			draft = submittedPrompt;
+			editing = false;
+			serviceState = 'ready';
+		} catch (reason) {
+			if (!request.signal.aborted) {
+				error =
+					reason instanceof Error ? reason.message : 'Could not generate a trace. Please retry.';
+				serviceState = progress === 'connecting' ? 'unavailable' : 'retry available';
 			}
-			return d.trim();
-		});
-		useCustomInput = false;
-	};
-
-	const moveCursorToEnd = (element) => {
-		const range = document.createRange();
-		const sel = window.getSelection();
-		range.selectNodeContents(element);
-		range.collapse(false);
-		sel.removeAllRanges();
-		sel.addRange(range);
-		element.focus();
-	};
-
-	$: isLoading = $isFetchingModel || $isModelRunning;
-	$: disabled =
-		$isFetchingModel ||
-		// $isModelRunning ||
-		$expandedBlock.id !== null ||
-		!!$weightPopover;
-	$: selectDisabled = $isModelRunning || $expandedBlock.id !== null || !!$weightPopover;
-	$: parameterDisabled = !!$weightPopover;
+		} finally {
+			if (controller === request) {
+				controller = null;
+				busy = false;
+				$isModelRunning = false;
+			}
+		}
+	}
+	function handleKeyDown(event: KeyboardEvent) {
+		event.stopPropagation();
+		if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) handleSubmit(event);
+	}
+	function onInput() {
+		draft = inputRef.value;
+		editing = true;
+		error = '';
+	}
+	function onFocusInput() {
+		closeDiagramDetails();
+		if (!dirty) draft = completion.text;
+		editing = true;
+	}
+	function syncPreviewScroll() {
+		const preview = previewRef;
+		if (!preview || !inputRef) return;
+		const atRightEdge = inputRef.scrollLeft >= inputRef.scrollWidth - inputRef.clientWidth - 1;
+		const boldOverflow = atRightEdge ? Math.max(0, preview.scrollWidth - inputRef.scrollWidth) : 0;
+		preview.scrollLeft = inputRef.scrollLeft + boldOverflow;
+		preview.scrollTop = inputRef.scrollTop;
+	}
+	async function revealCompletion(text: string) {
+		await tick();
+		const editor = inputRef;
+		if (!editor || dirty || editorText !== text) return;
+		editor.scrollTop = editor.scrollHeight;
+		// Follow the final line, even when an earlier code line is much longer.
+		const preview = previewRef;
+		const fragments = preview?.lastElementChild?.getClientRects();
+		const tail = fragments?.item(fragments.length - 1);
+		const end =
+			preview && tail ? tail.right - preview.getBoundingClientRect().left + preview.scrollLeft : 0;
+		editor.scrollLeft = Math.max(0, end - editor.clientWidth + 2);
+		syncPreviewScroll();
+	}
+	onDestroy(() => {
+		controller?.abort();
+		$isModelRunning = false;
+	});
 </script>
 
 <div class="input-area" data-click="input-area">
-	<form class="input-form" data-click="input-form">
+	<form class="input-form" data-click="input-form" on:submit={handleSubmit}>
 		<ButtonGroup class="input-btn-group" size="sm">
 			<button
 				data-click="dropdown-btn"
 				type="button"
-				disabled={selectDisabled}
-				class:selectDisabled
+				{disabled}
+				class:selectDisabled={disabled}
 				class="select-button inline-flex shrink-0 items-center justify-center border border-s-0 border-gray-200 bg-white px-3 py-2 text-center text-xs font-medium text-gray-900 first:rounded-s-lg first:border-s last:rounded-e-lg"
 			>
 				Examples<ChevronDownOutline class="pointer-events-none h-4 w-4 text-gray-500" />
 			</button>
 			<Dropdown bind:open={dropdownOpen} class="example-dropdown">
-				{#each inputTextExample as text, index}
+				{#each presetDocument?.examples ?? [] as example, index}
 					<DropdownItem
 						data-click={`dropdown-item-${index}`}
-						class={$selectedExampleIdx === index && 'active'}
-						on:click={() => {
-							onSelectExample(text, index);
-						}}>{text}</DropdownItem
+						class={$moeExample?.id === example.id ? 'active' : undefined}
+						on:click={() => onSelectExample(index)}>{example.prompt}</DropdownItem
 					>
 				{/each}
 			</Dropdown>
-
 			<div
 				data-click="text-input"
 				class="input-container"
-				class:disabled
+				class:disabled={busy}
 				role="none"
-				on:keydown={(e) => {
-					e.stopPropagation();
-					inputRef.focus();
-				}}
-				on:click={(e) => {
-					e.stopPropagation();
-					inputRef.focus();
-				}}
+				on:click={() => inputRef.focus()}
 			>
-				<div class={`editable ${!$isModelRunning ? 'w-full' : ''}`}>
-					<div
+				<div class="editable">
+					<textarea
 						bind:this={inputRef}
-						contenteditable={!disabled}
+						value={editorText}
+						disabled={busy}
+						rows="1"
 						class="text-box"
-						placeholder="Test your own input text"
-						on:focus={onFocusInput}
+						class:has-prediction={showPrediction}
+						placeholder="Type your own prompt…"
+						title="Enter a prompt. Enter generates; Shift+Enter inserts a line break. Up to 32 tokens."
+						aria-label="Prompt"
+						aria-invalid={!!invalidPrompt}
+						aria-describedby="prompt-status"
 						on:input={onInput}
+						on:focus={onFocusInput}
+						on:scroll={syncPreviewScroll}
 						on:keydown={handleKeyDown}
-						on:click={(e) => {
-							e.stopPropagation();
-						}}
-						role="input"
-					>
-						{inputTextTemp}
-					</div>
-					{#if !$isModelRunning}
-						<div
-							bind:this={predictRef}
-							class="predicted"
-							role="none"
-							on:click={(e) => {
-								e.stopPropagation();
-								onFocusInput(e);
-								inputRef.focus();
-								moveCursorToEnd(inputRef);
-							}}
-						>
-							<span>{predictedTokenTemp}</span>
-						</div>
-					{/if}
+					></textarea>
+					{#if showPrediction}<div class="prompt-preview" bind:this={previewRef} aria-hidden="true">
+							<span>{$inputText}</span><span class="predicted">{completion.token}</span>
+						</div>{/if}
 				</div>
-				{#if $isModelRunning}
-					<div class="loading"><LoadingDots /></div>
-				{/if}
-				{#if $isMobile}
-					<span class="helper-text"
-						>Try the examples. Please use a desktop computer to input GPT-2 prompts directly.</span
+				{#if busy}<div class="loading"><LoadingDots /></div>{/if}
+				<div class="helper-text" id="prompt-status" aria-live="polite">
+					{#if busy}{progressLabels[progress]}
+					{:else if invalidPrompt}<span class="draft-status">{invalidPrompt}</span>
+					{:else if finished}End of text · edit the prompt to continue
+					{:else if dirty}<span class="draft-status"
+							>Draft · diagram shows the last completed prompt</span
+						>
+					{:else}Click the prompt to edit · {currentIsLive
+							? 'Fresh Granite trace'
+							: 'Recorded Granite MoE'} ·
+						<a href={traceUrl} download>trace JSON ↓</a>{/if}
+					<span class="local-status">
+						· Local Granite: {serviceState} ·
+						<button
+							type="button"
+							on:click|stopPropagation={() => (showSetup = !showSetup)}
+							aria-expanded={showSetup}>setup</button
+						></span
 					>
-				{:else if $isLoaded && $isFetchingModel}
-					<span class="helper-text"
-						>Try the examples while GPT-2 model is being downloaded (600MB)</span
-					>
-				{:else if exceedLimit}
-					<span class="helper-text">You can enter up to {wordLimit} words.</span>
+				</div>
+				{#if error || showSetup}
+					<div class="prompt-feedback" on:click|stopPropagation role="none">
+						{#if error}<p role="alert">{error}</p>{/if}
+						{#if serviceState === 'unavailable' || showSetup}
+							<p>
+								<a href={LOCAL_INFERENCE_ORIGIN} target="_blank" rel="noopener">Open local app ↗</a
+								>
+								to use this same diagram directly with the model on your Mac.
+							</p>
+						{/if}
+						{#if showSetup}
+							<p>
+								Prompts run on this Mac with the same Granite model. Up to 32 tokens; Enter
+								generates and Shift+Enter adds a line break.
+							</p>
+							<p>Start the local inference service from this project’s Python environment:</p>
+							<code>python scripts/serve_traces.py --cache-dir /private/tmp/moe-hf-cache</code>
+							<p>
+								Allow local-network access if your browser asks. If it cannot connect, open the
+								local app above. Recorded examples remain available when the service is offline.
+							</p>
+						{/if}
+						<button
+							type="button"
+							on:click={() => {
+								error = '';
+								showSetup = false;
+							}}>Dismiss</button
+						>
+					</div>
 				{/if}
 			</div>
 		</ButtonGroup>
 		<button
 			data-click="generate-btn"
-			disabled={disabled || exceedLimit || exceedLimit}
+			disabled={disabled || !!invalidPrompt || finished}
 			class={classNames('generate-button rounded-lg text-center text-sm shadow-sm', {
-				disabled: disabled || exceedLimit,
-				active: !(disabled || exceedLimit)
+				disabled: disabled || !!invalidPrompt || finished,
+				active: !(disabled || invalidPrompt || finished)
 			})}
-			type="submit"
-			on:click={handleSubmit}
+			title={invalidPrompt ||
+				(finished
+					? 'End of text. Edit the prompt to continue.'
+					: 'Continue this text on Local Granite and record its trace')}
+			type="submit">{busy ? 'Running…' : 'Generate'}</button
 		>
-			Generate
-		</button>
 	</form>
 	<div class="parameters" data-click="input-parameters">
-		<Temperature disabled={parameterDisabled} />
-		<Sampling disabled={parameterDisabled} />
+		<Temperature disabled={parameterDisabled} /><Sampling disabled={parameterDisabled} />
 	</div>
 </div>
 
@@ -288,36 +338,61 @@
 		width: 10px; // to keep input box width
 
 		.editable {
-			overflow-y: hidden;
-			justify-content: end; // to show the last word
+			position: relative;
+			flex: 1 1 auto;
+			min-width: 0;
+			width: 100%;
+			height: 1.35rem;
+			line-height: 1.35rem;
 
-			display: flex;
-			align-items: center;
-			overflow-x: hidden;
-			white-space: nowrap;
-
+			.text-box,
+			.prompt-preview {
+				width: 100%;
+				height: 100%;
+				border: 0;
+				border-radius: 0;
+				padding: 0;
+				margin: 0;
+				background: transparent;
+				color: inherit;
+				font: inherit;
+				line-height: inherit;
+				white-space: pre;
+				text-align: left;
+				tab-size: 8;
+			}
 			.text-box {
-				white-space: nowrap;
-				br {
-					display: none;
-				}
-
+				display: block;
+				overflow: auto;
+				scrollbar-width: none;
+				resize: none;
 				&:focus {
 					outline: none;
+					box-shadow: none;
+				}
+				&.has-prediction {
+					color: transparent;
+					caret-color: theme('colors.gray.900');
 				}
 			}
+			.prompt-preview {
+				position: absolute;
+				inset: 0;
+				overflow: hidden;
+				pointer-events: none;
+			}
 			.predicted {
-				flex: 1 0 0;
 				color: var(--predicted-color);
 				font-weight: 600;
-				span {
-					white-space: pre;
-				}
 			}
 		}
 
 		&.disabled {
 			cursor: not-allowed;
+		}
+		&:focus-within {
+			border-color: var(--predicted-color);
+			box-shadow: 0 0 0 1px var(--predicted-color);
 		}
 
 		.loading {
@@ -345,6 +420,46 @@
 			background-color: theme('colors.gray.100') !important;
 		}
 	}
+	.prompt-feedback {
+		position: absolute;
+		z-index: 60;
+		top: calc(100% + 1.8rem);
+		left: 0;
+		width: min(38rem, 100%);
+		padding: 0.85rem 1rem;
+		border: 1px solid #ddd6e8;
+		border-radius: 0.6rem;
+		background: white;
+		box-shadow: 0 4px 14px #0002;
+		color: #4b5563;
+		white-space: normal;
+		line-height: 1.5;
+		font-size: 0.85rem;
+		p + p,
+		code + p {
+			margin-top: 0.5rem;
+		}
+		code {
+			display: block;
+			margin-top: 0.4rem;
+			overflow-wrap: anywhere;
+			font-size: 0.75rem;
+			color: #6d28d9;
+		}
+		button {
+			margin-top: 0.5rem;
+			color: #7c3aed;
+		}
+	}
+	.local-status {
+		color: #9ca3af;
+	}
+	.helper-text button {
+		text-decoration: underline;
+	}
+	.draft-status {
+		color: #7c3aed;
+	}
 	.helper-text {
 		position: absolute;
 		bottom: 0;
@@ -352,7 +467,8 @@
 		padding: 0.3rem 0;
 		transform: translate(0, 100%);
 		color: theme('colors.gray.400');
-		font-size: 0.9rem;
+		font-size: 0.72rem;
+		white-space: nowrap;
 	}
 	:global(.generate-button) {
 		padding: 0.4rem 0.8rem;

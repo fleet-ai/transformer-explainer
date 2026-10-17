@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { modelMeta, tokens, rootRem } from '~/store';
+	import { modelMeta, tokens, rootRem, moeModel } from '~/store';
 	import * as d3 from 'd3';
 	import { gsap } from '~/utils/gsap';
 	import Matrix from '~/components/common/Matrix.svelte';
@@ -16,15 +16,17 @@
 
 	const tokenGap = 6;
 
-	// generate data
+	// Neutral placeholders show the matrix operation, not captured tensor values.
 	const visibleDimension = 18;
+	$: logitsScaling = $moeModel?.logitsScaling ?? 6;
+	$: vocabularySize = $moeModel?.vocabSize ?? 49152;
 	$: tokenLen = $tokens.length;
 	$: inputData = Array(1)
 		.fill(0)
 		.map((col) =>
 			Array(visibleDimension)
 				.fill(0)
-				.map((d) => Math.random())
+				.map((d) => 0)
 		);
 
 	const weightData = Array(visibleDimension * 5)
@@ -32,14 +34,7 @@
 		.map((col) =>
 			Array(visibleDimension)
 				.fill(0)
-				.map((d) => Math.random())
-		);
-	const biasData = Array(1)
-		.fill(0)
-		.map((col) =>
-			Array(visibleDimension * 5)
-				.fill(0)
-				.map((d) => Math.random())
+				.map((d) => 0)
 		);
 
 	$: logitData = Array(1)
@@ -47,7 +42,7 @@
 		.map((col) =>
 			Array(visibleDimension * 5)
 				.fill(0)
-				.map((d) => Math.random())
+				.map((d) => 0)
 		);
 
 	// color scale
@@ -90,18 +85,16 @@
 	const draw = () => {
 		const embeddingRows = d3.selectAll('.weight-popover-content .hidden-state g.g-row').nodes();
 		const weightCols = d3.selectAll('.weight-popover-content .lm-head-weights g.g-col').nodes();
-		const weightBiasCells = d3.selectAll('.weight-popover-content .lm-head-bias rect').nodes();
 
 		const outRows = d3.selectAll('.weight-popover-content .logits g.g-row').nodes();
 
 		const mulSymbol = d3.select('.weight-popover-content .symbol.mul').node();
-		const plusSymbol = d3.select('.weight-popover-content .symbol.plus').node();
 		const equalSymbol = d3.select('.weight-popover-content .symbol.equal').node();
 
 		const highlight = '#94a3b8';
 
 		// first row detail animation
-		timeline.set(weightBiasCells, { opacity: 0.1 });
+
 		timeline.set('.formula .first-row', { opacity: 1 });
 		timeline.set('.formula .total', { opacity: 0 });
 
@@ -165,7 +158,6 @@
 						mulSymbol,
 						equalSymbol,
 						'.formula .first-row .part1',
-						plusSymbol,
 						equalSymbol,
 						'.formula .first-row .part2'
 					],
@@ -176,39 +168,7 @@
 					'<50%'
 				);
 
-				// timeline.from(
-				// 	[plusSymbol, equalSymbol, '.formula .first-row .part2'],
-				// 	{
-				// 		duration: 0.5,
-				// 		opacity: 0.1
-				// 	},
-				// 	'<'
-				// );
 			}
-			//bias
-			timeline
-				.fromTo(
-					weightBiasCells[outCellIdx],
-
-					{ opacity: 0.1, strokeWidth: 0 },
-					{
-						opacity: 1,
-						duration: isFirstOutCell ? 0.4 : 0.002,
-						strokeWidth: 10,
-						stroke: highlight
-					},
-					'<'
-				)
-				.to(
-					weightBiasCells[outCellIdx],
-
-					{
-						strokeWidth: 0,
-						duration: isFirstOutCell ? 0.4 : 0.002
-					},
-					'<50%'
-				);
-
 			//out
 			timeline
 				.fromTo(
@@ -264,7 +224,7 @@
 					.selectAll('.weight-popover-content .lm-head-weights g.g-col rect')
 					.nodes();
 				timeline.set(weightColRects, { opacity: 0.1 });
-				timeline.set(weightBiasCells, { opacity: 0.1 });
+
 			}
 
 			outputCells.forEach((d, colIdx) => {
@@ -287,15 +247,6 @@
 						duration: 0.01
 					},
 					`<50%`
-				);
-				timeline.fromTo(
-					weightBiasCells[colIdx],
-					{ opacity: 0.1 },
-					{
-						opacity: 1,
-						duration: 0.01
-					},
-					'<'
 				);
 			});
 			previousRowIdx = rowIdx;
@@ -321,9 +272,9 @@
 	<div class="weight-popover-content flex items-center justify-start">
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				<span>Output<br />Embedding</span>
-				<HelpPopover id="hidden-states" 
-					>{`After passing through all blocks, \nthe final token's embedding vector \ncontains all the contextual information \nfrom the preceding tokens.`}</HelpPopover
+				<span>Final RMSNorm<br />output</span>
+				<HelpPopover id="hidden-states"
+					>{`The final token’s hidden state after all blocks and the final RMSNorm.`}</HelpPopover
 				>
 			</div>
 			<Matrix
@@ -342,8 +293,8 @@
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
 				Output Projection Weights
-				<HelpPopover id="lm-head-weights" 
-					>{`Transforms the final embedding into a vocabulary distribution.\nParameters were learned in training, fixed in prediction.`}</HelpPopover
+				<HelpPopover id="lm-head-weights"
+					>{`Bias-free projection of the final RMSNorm output into vocabulary scores.\nGranite divides these scores by 6 before temperature and softmax.`}</HelpPopover
 				>
 			</div>
 			<div class="flex gap-0">
@@ -360,33 +311,14 @@
 				/>
 			</div>
 
-			<div class="size">({$modelMeta.dimension}, 50,257)</div>
+			<div class="size">({$modelMeta.dimension}, {vocabularySize.toLocaleString()})</div>
 		</div>
-		<div class="operator"><div class="symbol plus">+</div></div>
-		<div class="matrix flex flex-col items-center">
-			<div class="title flex items-center gap-1">
-				Output Projection Bias<HelpPopover id="lm-head-bias" 
-					>{`Offsets added after the transformation.\nParameters were learned in training, fixed in prediction.`}</HelpPopover
-				>
-			</div>
-			<Matrix
-				className="lm-head-bias"
-				data={biasData}
-				showSize={false}
-				groupBy={'col'}
-				cellHeight={1}
-				cellWidth={8}
-				rowGap={0}
-				colorScale={weightColorScale}
-				highlightRow={highlightCol}
-			/>
-			<div class="size">(50,257)</div>
-		</div>
+		<div class="operator"><div class="symbol divide">÷ {logitsScaling}</div></div>
 		<div class="operator"><div class="symbol equal">=</div></div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
 				Logits
-				<HelpPopover id="logits" 
+				<HelpPopover id="logits"
 					>{`Raw scores representing the model’s preference \nfor each vocabulary token before applying softmax.`}</HelpPopover
 				>
 			</div>
@@ -405,7 +337,7 @@
 					{highlightRow}
 				/>
 			</div>
-			<div class="size">(1, 50,257)</div>
+			<div class="size">(1, {vocabularySize.toLocaleString()})</div>
 		</div>
 	</div>
 	<div class="formula">
@@ -414,25 +346,26 @@
 				<Katex
 					displayMode
 					math={`
-	(Embedding_{1}×Weights_{1,1} + \\cdots + Embedding_{768}×Weights_{768,1})`}
+	(Hidden_{1}×Weights_{1,1} + \\cdots + Hidden_{1024}×Weights_{1024,1})`}
 				/>
 			</span>
 			<span class="part2">
-				<Katex displayMode math={`+ Bias_1 = Logits_{1}`} />
+				<Katex displayMode math={`\\div ${logitsScaling} = Logits_{1}`} />
 			</span>
 		</div>
 		<div class="total">
 			<Katex
 				displayMode
 				math={`
-	\\sum_{d=1}^{768} Embedding_{d} \\cdot Weights_{di} + Bias_j = Logits_{i} 
+	\\frac{1}{${logitsScaling}} \\sum_{d=1}^{1024} Hidden_{d} \\cdot Weights_{di} = Logits_{i}
 	`}
 			/>
 		</div>
 	</div>
+	<div class="recording-note">All cells in this animation are schematic, not recorded values. The bias-free output projection acts on the final RMSNorm output; its scores are divided by {logitsScaling} before the temperature control. Recorded logits appear in the main diagram.</div>
 </WeightPopoverCard>
-
 <style lang="scss">
+ .recording-note { max-width: 42rem; padding: .5rem 1rem; color: #6b7280; font-size: .75rem; line-height: 1.5; }
 	.weight-popover-content {
 		padding: 3rem 2rem 1.5rem 3.5rem;
 		gap: 0.5rem;

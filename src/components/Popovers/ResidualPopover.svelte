@@ -21,7 +21,7 @@
 	goTo="article-residual"
 >
 	<div class="residual-content">
-		Adds layer input to output to help preserve information.
+		Adds the residual stream to the branch output multiplied by 0.22, the scale used by this Granite checkpoint.
 	</div></CommonPopover
 >
 

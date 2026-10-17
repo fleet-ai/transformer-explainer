@@ -3,10 +3,8 @@
 	import { onMount, tick } from 'svelte';
 	import {
 		blockIdx,
-		blockIdxTemp,
 		rootRem,
 		modelMeta,
-		isOnBlockTransition,
 		isBoundingBoxActive,
 		expandedBlock,
 		weightPopover,
@@ -19,133 +17,58 @@
 	let resizeObserver: ResizeObserver;
 	let boundingPos = { left: 0, top: 0, width: 0 };
 
-	let duration = 800;
+	let mounted = false;
 
-	const asyncUpdateBlockIdx = (timeout = duration) => {
-		setTimeout(() => {
-			$blockIdx = $blockIdxTemp;
-		}, timeout);
-	};
-
-	const animateForwardTransition = async ({ asyncTime } = {}) => {
-		const container = document.querySelector('.steps .blocks');
+	const setPosition = async () => {
 		await tick();
+		if (!mounted) return;
+		const container = document.querySelector('.nodes');
+		const embedding = document.querySelector(
+			'.block-steps.main .qkv .content .block-start-column'
+		);
+		const block =
+			$blockIdx === $modelMeta.layer_num - 1
+				? document.querySelector('.step.transformer-blocks .content .column.final')
+				: document.querySelector('.step.transformer-blocks .content');
 
-		isOnBlockTransition.set(true);
-		await tick();
+		if (!container || !embedding || !block) return;
+		const containerRect = container.getBoundingClientRect();
+		const embeddingRect = embedding.getBoundingClientRect();
+		const blockRect = block.getBoundingClientRect();
 
-		container.classList.add('animate-forward');
-		await tick();
-
-		asyncUpdateBlockIdx(asyncTime);
-
-		setTimeout(() => {
-			container.classList.remove('animate-forward');
-			isOnBlockTransition.set(false);
-		}, duration);
-	};
-
-	const animateBackwardTransition = async ({ asyncTime } = {}) => {
-		const container = document.querySelector('.steps .blocks');
-		await tick();
-
-		isOnBlockTransition.set(true);
-		await tick();
-
-		container.classList.add('animate-backward');
-		await tick();
-
-		asyncUpdateBlockIdx(asyncTime);
-
-		setTimeout(() => {
-			container.classList.remove('animate-backward');
-			isOnBlockTransition.set(false);
-		}, duration);
-	};
-
-	let currentBlockIdx = $blockIdxTemp;
-
-	blockIdxTemp.subscribe((newIdx) => {
-		if (newIdx === currentBlockIdx) return;
-
-		// 2->1
-		if (currentBlockIdx === 1 && newIdx === 0) {
-			animateBackwardTransition({ asyncTime: 0 });
-			currentBlockIdx = newIdx;
-			return;
-		}
-		//11->12
-		if (currentBlockIdx === $modelMeta.layer_num - 2 && newIdx === $modelMeta.layer_num - 1) {
-			animateForwardTransition({ asyncTime: 0 });
-			currentBlockIdx = newIdx;
-			return;
-		}
-
-		// 12->1
-		if (currentBlockIdx === $modelMeta.layer_num - 1 && newIdx === 0) {
-			animateForwardTransition();
-			currentBlockIdx = newIdx;
-			return;
-		}
-		// 1->12
-		if (newIdx === $modelMeta.layer_num - 1 && currentBlockIdx === 0) {
-			animateBackwardTransition();
-			currentBlockIdx = newIdx;
-			return;
-		}
-
-		if (newIdx > currentBlockIdx) {
-			animateForwardTransition();
-			currentBlockIdx = newIdx;
-			return;
-		}
-
-		if (newIdx < currentBlockIdx) {
-			animateBackwardTransition();
-			currentBlockIdx = newIdx;
-			return;
-		}
-	});
-
-	// transformer block bounding
-	onMount(() => {
-		const setPosition = () => {
-			const scrollLeft = window.scrollX;
-			const topbarHeight = document.querySelector('.top-bar')?.offsetHeight;
-
-			const embedding = document.querySelector('.step.qkv .content .block-start-column');
-			const block =
-				$blockIdx === $modelMeta.layer_num - 1
-					? document.querySelector('.step.transformer-blocks .content .column.final')
-					: document.querySelector('.step.transformer-blocks .content');
-
-			const embeddingRect = embedding.getBoundingClientRect();
-			const blockRect = block.getBoundingClientRect();
-
-			boundingPos = {
-				left: embeddingRect.left + scrollLeft + rootRem,
-				top: embeddingRect.top - topbarHeight,
-				width: blockRect.left - embeddingRect.left - rootRem
-			};
+		boundingPos = {
+			left: embeddingRect.left - containerRect.left + rootRem,
+			top: embeddingRect.top - containerRect.top,
+			width: blockRect.left - embeddingRect.left - rootRem
 		};
+	};
+
+	$: if (mounted && $blockIdx >= 0) setPosition();
+
+	onMount(() => {
+		mounted = true;
 		setPosition();
 
-		resizeObserver = new ResizeObserver((entries) => {
+		resizeObserver = new ResizeObserver(() => {
 			setPosition();
 		});
 		const elements = document?.querySelectorAll('.resize-watch');
 		elements.forEach((el) => resizeObserver.observe(el));
+		return () => {
+			mounted = false;
+			resizeObserver.disconnect();
+		};
 	});
 
 	const onClickNext = (e) => {
 		e.stopPropagation();
 		textPages.find((page) => page.id === 'blocks')?.complete();
 
-		$blockIdxTemp = $blockIdxTemp < $modelMeta.layer_num - 1 ? $blockIdxTemp + 1 : 0;
+		$blockIdx = Math.min($blockIdx + 1, $modelMeta.layer_num - 1);
 
 		window.dataLayer?.push({
 			event: `pagination-transformer-block-next`,
-			page_num: $blockIdxTemp,
+			page_num: $blockIdx,
 			pagination_name: 'transformer-block',
 			user_id: $userId
 		});
@@ -154,11 +77,11 @@
 		e.stopPropagation();
 		textPages.find((page) => page.id === 'blocks')?.complete();
 
-		$blockIdxTemp = $blockIdxTemp > 0 ? $blockIdxTemp - 1 : $modelMeta.layer_num - 1;
+		$blockIdx = Math.max($blockIdx - 1, 0);
 
 		window.dataLayer?.push({
 			event: `pagination-transformer-block-prev`,
-			page_num: $blockIdxTemp,
+			page_num: $blockIdx,
 			pagination_name: 'transformer-block',
 			user_id: $userId
 		});
@@ -182,22 +105,23 @@
 	on:mouseleave={() => {
 		isBoundingBoxActive.set(false);
 	}}
-	style={`top:${boundingPos.top - rootRem * 3.5}px;`}
 	class:active={$isBoundingBoxActive}
 >
 	<TextbookTooltip id="blocks">
-		<span class="title-text">Transformer Block {$blockIdxTemp + 1}</span>
+		<span class="title-text">Transformer Block {$blockIdx + 1}</span>
 	</TextbookTooltip>
 	<button
+		aria-label="Previous transformer block"
 		data-click="transformer-block-prev-btn"
 		on:click={onClickPrev}
-		disabled={$isOnAnimation || $isOnBlockTransition || $blockIdxTemp === 0}
+		disabled={$isOnAnimation || $blockIdx === 0}
 		><AngleLeftOutline size="sm" /></button
 	>
 	<button
+		aria-label="Next transformer block"
 		data-click="transformer-block-next-btn"
 		on:click={onClickNext}
-		disabled={$isOnAnimation || $isOnBlockTransition || $blockIdxTemp === $modelMeta.layer_num - 1}
+		disabled={$isOnAnimation || $blockIdx === $modelMeta.layer_num - 1}
 		><AngleRightOutline size="sm" /></button
 	>
 </div>
@@ -209,13 +133,14 @@
 		}
 		position: absolute;
 		left: 13rem;
-		transform: translate(0, calc(-100% - 0.2rem));
+		top: 0.4rem;
 		z-index: $BOUNDING_BOX_INDEX;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 0.3rem;
-		color: theme('colors.gray.400');
+		gap: 0.4rem;
+		color: theme('colors.gray.700');
+		background: white;
 		transition: opacity 0.2s;
 
 		&.hide {
@@ -226,19 +151,33 @@
 			width: 10rem;
 			white-space: nowrap;
 			text-align: center;
-			font-weight: 500;
+			font-weight: 600;
 		}
 
 		button {
+			display: grid;
+			place-items: center;
+			width: 2rem;
+			height: 2rem;
 			border-radius: 0.3rem;
 			padding: 0.1rem;
-			border: 1px solid theme('colors.gray.300');
-			color: theme('colors.gray.400');
+			border: 1px solid theme('colors.purple.300');
+			color: theme('colors.purple.700');
+			background: theme('colors.purple.50');
 			box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 		}
+		button:hover:not(:disabled) {
+			background: theme('colors.purple.100');
+		}
+		button:focus-visible,
+		:global(.textbook-tooltip:focus-visible) {
+			outline: 2px solid theme('colors.purple.500');
+			outline-offset: 3px;
+		}
 		button:disabled {
-			color: theme('colors.gray.200');
-			border: 1px solid theme('colors.gray.200');
+			color: theme('colors.gray.400');
+			border: 1px solid theme('colors.gray.300');
+			background: theme('colors.gray.50');
 		}
 
 		&.active {
@@ -249,8 +188,8 @@
 				color: theme('colors.blue.600');
 			}
 			button:disabled {
-				border: 1px solid theme('colors.blue.300');
-				color: theme('colors.blue.300');
+				border: 1px solid theme('colors.gray.300');
+				color: theme('colors.gray.400');
 			}
 		}
 	}

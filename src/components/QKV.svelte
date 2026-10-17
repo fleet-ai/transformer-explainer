@@ -1,7 +1,16 @@
 <script lang="ts">
-	import { tokens, modelMeta, attentionHeadIdx, vectorHeight, blockIdx } from '~/store';
+	import {
+		tokens,
+		modelMeta,
+		attentionHeadIdx,
+		blockIdx,
+		moeExample,
+		moeModel,
+		moeAttentionOperations
+	} from '~/store';
 	import classNames from 'classnames';
-	import { onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
+	import { loadAttentionOperations } from '$lib/moe/attention';
 	import VectorCanvas from './common/VectorCanvas.svelte';
 	import OperationGroup from './OperationGroup.svelte';
 	import { Tooltip } from 'flowbite-svelte';
@@ -19,20 +28,25 @@
 	const keyHeadVectorColor = 'bg-red-500';
 	const valHeadVectorColor = 'bg-green-500';
 
-	// attentionHeadIdx subscribe
-	const headCursors = {};
-
-	onMount(() => {
-		const unsubscribe = attentionHeadIdx.subscribe(async (newIdx) => {
-			Object.values(headCursors).forEach((el) => {
-				el.style.top = `${($vectorHeight / $modelMeta.attention_head_num) * newIdx}px`;
-			});
-		});
-
-		return () => {
-			unsubscribe();
-		};
-	});
+	$: recording = $moeAttentionOperations;
+	let request = 0;
+	$: queryHeads = $moeModel?.attentionHeads ?? 16;
+	$: keyValueHeads = $moeModel?.keyValueHeads ?? 8;
+	$: headSize = $moeModel?.attentionHeadSize ?? 64;
+	$: kvHead = Math.floor($attentionHeadIdx / (queryHeads / keyValueHeads));
+	$: layer = recording?.example.id === $moeExample?.id ? recording?.layers[$blockIdx] : undefined;
+	$: if ($moeExample) load($moeExample.id);
+	async function load(id: string) {
+		const current = ++request;
+		try {
+			const data = await loadAttentionOperations(id);
+			if (current === request) $moeAttentionOperations = data;
+		} catch {
+			// The inspector exposes a retry; never replace missing recorded values with generated ones.
+			if (current === request) $moeAttentionOperations = null;
+		}
+	}
+	onDestroy(() => request++);
 </script>
 
 <div class={classNames('qkv', className)} role="none" data-click="qkv-step">
@@ -74,31 +88,52 @@
 					}}
 					role="group"
 				>
-					<div class={`sub-vector query relative flex grow flex-col ${queryVectorColor}`}>
-						<VectorCanvas colorScale="blue" active={vectorHoverIdx === index} />
+					<div class={`sub-vector query relative flex flex-col ${queryVectorColor}`}>
+						<VectorCanvas
+							colorScale="blue"
+							data={layer?.queryBefore.flatMap((head) => head[index])}
+							label={layer
+								? `Recorded QUERY projection before head split, ${queryHeads * headSize} coordinates. Colors normalized within this vector.`
+								: 'Loading recorded projection values.'}
+							active={vectorHoverIdx === index}
+						/>
 						<div
 							class={`sub-vector x1-12 head1 ${queryHeadVectorColor} absolute`}
-							bind:this={headCursors[`token${index}_query`]}
+							style={`top:${(100 * $attentionHeadIdx) / queryHeads}%;height:${100 / queryHeads}%;`}
 						></div>
 						<div class="sub-vector head-rest">
 							{#if vectorHoverIdx !== index}<span>Q</span>{/if}
 						</div>
 					</div>
-					<div class={`sub-vector key relative flex grow flex-col ${keyVectorColor}`}>
-						<VectorCanvas colorScale="red" active={vectorHoverIdx === index} />
+					<div class={`sub-vector key relative flex flex-col ${keyVectorColor}`}>
+						<VectorCanvas
+							colorScale="red"
+							data={layer?.keyBefore.flatMap((head) => head[index])}
+							label={layer
+								? `Recorded KEY projection before head split, ${keyValueHeads * headSize} coordinates. Colors normalized within this vector.`
+								: 'Loading recorded projection values.'}
+							active={vectorHoverIdx === index}
+						/>
 						<div
 							class={`sub-vector x1-12 head1 ${keyHeadVectorColor} absolute`}
-							bind:this={headCursors[`token${index}_key`]}
+							style={`top:${(100 * kvHead) / keyValueHeads}%;height:${100 / keyValueHeads}%;`}
 						></div>
 						<div class="sub-vector head-rest">
 							{#if vectorHoverIdx !== index}<span>K</span>{/if}
 						</div>
 					</div>
-					<div class={`sub-vector value relative flex grow flex-col ${valVectorColor}`}>
-						<VectorCanvas colorScale="green" active={vectorHoverIdx === index} />
+					<div class={`sub-vector value relative flex flex-col ${valVectorColor}`}>
+						<VectorCanvas
+							colorScale="green"
+							data={layer?.value.flatMap((head) => head[index])}
+							label={layer
+								? `Recorded VALUE projection before head split, ${keyValueHeads * headSize} coordinates. Colors normalized within this vector.`
+								: 'Loading recorded projection values.'}
+							active={vectorHoverIdx === index}
+						/>
 						<div
 							class={`sub-vector x1-12 head1 ${valHeadVectorColor} absolute`}
-							bind:this={headCursors[`token${index}_value`]}
+							style={`top:${(100 * kvHead) / keyValueHeads}%;height:${100 / keyValueHeads}%;`}
 						></div>
 						<div class="sub-vector head-rest">
 							{#if vectorHoverIdx !== index}<span>V</span>{/if}
@@ -107,7 +142,8 @@
 				</div>
 			{/each}
 			<Tooltip class="popover" triggeredBy={'.qkv .qkv-column .vector'} placement="right"
-				>vector({$modelMeta.dimension * 3})</Tooltip
+				>Before head split: Q {queryHeads * headSize}, K {keyValueHeads * headSize}, V {keyValueHeads *
+					headSize}. Highlighted slices are {headSize}D.</Tooltip
 			>
 		</div>
 	</div>
@@ -146,12 +182,15 @@
 						opacity: 0.45;
 					}
 					&.query {
+						height: calc(var(--vector-height) * 1.5);
 						color: theme('colors.blue.600');
 					}
 					&.key {
+						height: calc(var(--vector-height) * 0.75);
 						color: theme('colors.red.600');
 					}
 					&.value {
+						height: calc(var(--vector-height) * 0.75);
 						color: theme('colors.green.600');
 					}
 

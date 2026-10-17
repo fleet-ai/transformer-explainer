@@ -1,17 +1,16 @@
 import { writable, derived, readable } from 'svelte/store';
-import * as ort from 'onnxruntime-web';
+import type * as ort from 'onnxruntime-web';
 import tailwindConfig from '../../tailwind.config';
 import resolveConfig from 'tailwindcss/resolveConfig';
-import { ex0 } from '~/constants/examples';
 import { textPages } from '~/utils/textbookPages';
+import type { TraceDocument, TraceExample } from '$lib/moe/types';
+import type { AttentionOperationsDocument } from '$lib/moe/attention';
 
 const { theme } = resolveConfig(tailwindConfig);
 
 export const attentionHeadIdxTemp = writable(0);
 export const attentionHeadIdx = writable(0);
-export const blockIdxTemp = writable(0);
 export const blockIdx = writable(0);
-export const isOnBlockTransition = writable(false);
 
 export const isOnAnimation = writable(false);
 
@@ -28,11 +27,9 @@ export const isFetchingModel = writable(true);
 export const isLoaded = writable(false);
 
 export const inputTextExample = [
-	'Data visualization empowers users to',
-	'Artificial Intelligence is transforming the',
-	'As the spaceship was approaching the',
-	'On the deserted planet they discovered a',
-	'IEEE VIS conference highlights the'
+	'The capital of France is',
+	'def add(a, b):\n    return a +',
+	'Question: What is 7 + 5?\nAnswer:'
 ];
 
 const initialExIdx = 0;
@@ -41,12 +38,18 @@ export const selectedExampleIdx = writable<number>(initialExIdx);
 export const modelSession = writable<ort.InferenceSession>();
 
 // transformer model output
-export const modelData = writable<ModelData>(ex0);
+export const modelData = writable<ModelData>();
 export const predictedToken = writable<Probability>();
-export const tokens = writable<string[]>(ex0?.tokens);
-export const tokenIds = writable<number[]>(ex0?.tokenIds);
+export const tokens = writable<string[]>([]);
+export const tokenIds = writable<number[]>([]);
+export const moeDocument = writable<TraceDocument | null>(null);
+export const moeExample = writable<TraceExample | null>(null);
+export const moeModel = writable<TraceDocument['model'] | null>(null);
+export const moeAttentionOperations = writable<AttentionOperationsDocument | null>(null);
+export const moeTokenIndex = writable(0);
 
 export const modelMetaMap: Record<string, ModelMetaData> = {
+	'granite-moe': { layer_num: 24, attention_head_num: 16, dimension: 1024 },
 	gpt2: { layer_num: 12, attention_head_num: 12, dimension: 768, chunkTotal: 63 },
 	'gpt2-medium': { layer_num: 24, attention_head_num: 16, dimension: 1024 },
 	'gpt2-large': { layer_num: 36, attention_head_num: 20, dimension: 1280 }
@@ -74,16 +77,24 @@ export const inputText = writable(inputTextExample[initialExIdx]);
 // export const tokens = derived(inputText, ($inputText) => $inputText.trim().split(' '));
 
 // selected model and meta data
-const initialSelectedModel = 'gpt2';
+const initialSelectedModel = 'granite-moe';
 export const selectedModel = writable(initialSelectedModel);
-export const modelMeta = derived(selectedModel, ($selectedModel) => modelMetaMap[$selectedModel]);
+export const modelMeta = derived([selectedModel, moeModel], ([$selectedModel, $moeModel]) =>
+	$selectedModel === 'granite-moe' && $moeModel
+		? {
+				layer_num: $moeModel.numLayers,
+				attention_head_num: $moeModel.attentionHeads,
+				dimension: $moeModel.hiddenSize
+			}
+		: modelMetaMap[$selectedModel]
+);
 
 // Temperature setting
-export const initialTemperature = 0.8;
+export const initialTemperature = 1;
 export const temperature = writable(initialTemperature);
 
 // Sampling
-export const sampling = writable<Sampling>({ type: 'top-k', value: 5 });
+export const sampling = writable<Sampling>({ type: 'top-p', value: 1 });
 
 // Prediction visual
 export const highlightedIndex = writable(null);

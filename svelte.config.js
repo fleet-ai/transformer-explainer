@@ -17,7 +17,7 @@ const config = {
 			assets: 'build',
 			fallback: null,
 			precompress: false,
-			strict: false // Ignore errors about dynamic routes
+			strict: true
 		}),
 		prerender: {
 			// List the specific routes to prerender
@@ -27,7 +27,7 @@ const config = {
 			'~': './src'
 		},
 		paths: {
-			base: process.env.NODE_ENV === 'production' ? '/transformer-explainer' : ''
+			base: process.env.BASE_PATH || ''
 		}
 	}
 };
