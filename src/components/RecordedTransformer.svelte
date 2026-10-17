@@ -45,6 +45,13 @@
 	let active = false;
 	let error = '';
 	let vizHeight = 0;
+	// Fit the overview without shrinking its individual layout tracks into overlaps.
+	// Expanded attention reserves room for all three score matrices.
+	let viewportWidth = 1680;
+	$: mlaDiagramScale =
+		$moeModel?.architecture === 'mla'
+			? Math.min(1, viewportWidth / ($expandedBlock.id === 'attention' ? 2000 : 1680))
+			: 1;
 	let titleHeight = rootRem * 5;
 	const calculateVectorHeight = () => {
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
@@ -92,6 +99,8 @@
 	});
 </script>
 
+<svelte:window bind:innerWidth={viewportWidth} />
+
 <svelte:head>
 	<title>Transformer Explainer · {modelLabel}</title>
 	<meta
@@ -134,7 +143,7 @@
 		<div class="sankey opacity-1" class:attention={$expandedBlock.id === 'attention'}>
 			<Sankey />
 		</div>
-		<div class="nodes resize-watch">
+		<div class="nodes resize-watch" style={`--mla-diagram-scale:${mlaDiagramScale};`}>
 			<div class="steps" class:expanded={!!$expandedBlock.id} bind:offsetHeight={vizHeight}>
 				<svelte:component this={customEmbedding ?? Embedding} className="step" />
 				<div class="blocks relative">
@@ -206,14 +215,27 @@
 		}
 	}
 
+	.latent-model .nodes {
+		zoom: var(--mla-diagram-scale);
+		width: 100%;
+	}
 	.latent-model .steps {
-		grid-template-columns: auto max-content 120px 210px;
-		min-width: 100%;
-		width: max-content;
+		grid-template-columns: 170px minmax(0, 1fr) 90px 230px;
+		width: 100%;
 	}
 	.latent-model .steps .blocks .block-steps {
 		position: relative;
-		grid-template-columns: 80px max-content 440px;
+		grid-template-columns: 55px minmax(0, 1fr) 350px;
+	}
+	.latent-model :global(.mlp.moe) {
+		min-width: 0;
+	}
+	.latent-model :global(.moe .content) {
+		grid-template-columns: 30px minmax(0, 1fr) 20px;
+		gap: 8px;
+	}
+	.latent-model :global(.softmax .content) {
+		padding-right: 10px;
 	}
 	.seq2seq .steps {
 		grid-template-columns: auto 7fr 0.45fr 0.85fr;
