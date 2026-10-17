@@ -59,17 +59,21 @@
 	$: isMambaOnly =
 		$moeModel?.architecture === 'hybrid' &&
 		$hybridRecording?.document.layers[$blockIdx].type === 'mamba';
+	$: usesRoPE =
+		!!$moeModel &&
+		!['mla', 'vit', 'encoder-decoder'].includes($moeModel.architecture ?? '') &&
+		$moeModel.maskMode !== 'bidirectional';
 	$: backPaths = [
 		{
 			from: '.qkv .qkv-column .query',
-			to: '.head-block .query .vector',
+			to: usesRoPE ? '.head-block .query .rotary-port' : '.head-block .query .vector',
 			// fill: theme.colors.blue[defaultGradientBrightness],
 			gradientId: 'blue-blue2',
 			opacity: ATTENTION_HEAD_BACK
 		},
 		{
 			from: '.qkv .qkv-column .key',
-			to: '.head-block .key .vector',
+			to: usesRoPE ? '.head-block .key .rotary-port' : '.head-block .key .vector',
 			// fill: theme.colors.red[defaultGradientBrightness],
 			gradientId: 'red-red2',
 			opacity: ATTENTION_HEAD_BACK
@@ -142,14 +146,14 @@
 	$: selfAttentionPaths = [
 		{
 			from: '.qkv .qkv-column .query .sub-vector.head1',
-			to: '.head-block .query .vector',
+			to: usesRoPE ? '.head-block .query .rotary-port' : '.head-block .query .vector',
 			// fill: theme.colors.blue[200]
 			gradientId: 'blue-blue',
 			opacity: ATTENTION_HEAD_1
 		},
 		{
 			from: '.qkv .qkv-column .key .sub-vector.head1',
-			to: '.head-block .key .vector',
+			to: usesRoPE ? '.head-block .key .rotary-port' : '.head-block .key .vector',
 			// fill: theme.colors.red[200]
 			gradientId: 'red-red',
 			opacity: ATTENTION_HEAD_1

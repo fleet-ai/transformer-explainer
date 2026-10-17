@@ -1,6 +1,4 @@
 <script lang="ts">
-	import HeadFlow from './moe/HeadFlow.svelte';
-	import RoPEAttentionLinks from './moe/RoPEAttentionLinks.svelte';
 	import PlainHeadFlow from './vit/PlainHeadFlow.svelte';
 	import { hybridHeadOperations, hybridInspector } from '$lib/hybrid/store';
 	import { vitHeadOperations } from '$lib/vit/store';
@@ -20,6 +18,7 @@
 		attentionHeadIdx,
 		moeExample,
 		moeModel,
+		weightPopover,
 		moeAttentionOperations,
 		blockIdx
 	} from '~/store';
@@ -45,6 +44,7 @@
 
 	let isHovered = false;
 	let showRoPE = false;
+	let ropeKind: 'query' | 'key' = 'query';
 	let mlaStage: string | null = null;
 	$: isMLA = $moeModel?.architecture === 'mla';
 	$: isVit = $moeModel?.architecture === 'vit';
@@ -53,6 +53,13 @@
 	$: isPlain =
 		['vit', 'encoder-decoder'].includes($moeModel?.architecture ?? '') ||
 		(isVlm && $moeModel?.maskMode === 'bidirectional');
+	$: usesRoPE = !isPlain && !isMLA;
+	function inspectRoPE(kind: 'query' | 'key' = 'query') {
+		ropeKind = kind;
+		if (isVlm) vlmInspectorStage.set('rope');
+		else if (isHybrid) hybridInspector.set('rope');
+		else showRoPE = true;
+	}
 	$: valueSize = $moeModel?.valueHeadSize ?? headSize;
 	$: kvHead = Math.floor(
 		$attentionHeadIdx / (($moeModel?.attentionHeads ?? 16) / ($moeModel?.keyValueHeads ?? 8))
@@ -82,6 +89,7 @@
 	class={classNames('attention', className, {
 		expanded: isAttentionExpanded
 	})}
+	class:rotary={usesRoPE}
 	data-click="attention-step"
 >
 	<div
@@ -108,21 +116,22 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
-				{#if !isPlain && !isMLA}<RoPEAttentionLinks expanded={isAttentionExpanded} />{/if}
 				<div class="head-flow-wrap">
 					{#if isPlain}<PlainHeadFlow />{:else if isMLA}<LatentHeadFlow
 							on:inspect={(event) => (mlaStage = event.detail)}
 							on:rope={() => (showRoPE = true)}
-						/>{:else}<HeadFlow
-							queryHeads={$moeModel?.attentionHeads ?? 16}
-							keyValueHeads={$moeModel?.keyValueHeads ?? 8}
-							{headSize}
-							on:inspect={() => {
-								if (isVlm) vlmInspectorStage.set('rope');
-								else if (isHybrid) hybridInspector.set('rope');
-								else showRoPE = true;
-							}}
-						/>{/if}
+						/>{:else}
+						<div class="rotary-sequence">
+							<button on:click={() => weightPopover.set('qkv')}>Head split ↗</button>
+							<span aria-hidden="true">→</span>
+							<button on:click={() => inspectRoPE()}>RoPE · position encoding ↗</button>
+							<span aria-hidden="true">→</span><span>Attention</span>
+						</div>
+						<div class="rotary-sharing">
+							Q head {$attentionHeadIdx + 1} · {headSize}D · shares K/V head {kvHead + 1} · V bypasses
+							RoPE
+						</div>
+					{/if}
 				</div>
 				<div
 					class="head-block flex w-full items-center justify-between px-2"
@@ -136,6 +145,11 @@
 								>
 							</div>
 
+							{#if usesRoPE}<button
+									class="rotary-gate"
+									on:click={() => inspectRoPE('key')}
+									aria-label="Inspect key RoPE before attention">RoPE<small>position</small></button
+								>{/if}
 							{#each $tokens as token, index}
 								<div
 									class="head1 key cell x1-12 text-xs"
@@ -143,6 +157,17 @@
 									class:active={$hoveredMatrixCell.col === index}
 								>
 									<span class="label float">{token}</span>
+									{#if usesRoPE}
+										<div
+											class="rotary-token-input"
+											aria-label={`RoPE for token ${index}: ${token}`}
+										>
+											<span class="rotary-port"></span>
+											<span class="rotary-wire"></span>
+											<span class="rotary-gate-space"></span>
+											<span class="rotary-wire outgoing">→</span>
+										</div>
+									{/if}
 									<div class={`vector x1-12 ${keyHeadVectorColor}`}>
 										<VectorCanvas
 											colorScale="red"
@@ -164,6 +189,12 @@
 									>{isPlain ? 'Projected' : isMLA ? 'Content + rotary' : 'After RoPE'} · {headSize}D</small
 								>
 							</div>
+							{#if usesRoPE}<button
+									class="rotary-gate"
+									on:click={() => inspectRoPE('query')}
+									aria-label="Inspect query RoPE before attention"
+									>RoPE<small>position</small></button
+								>{/if}
 							{#each $tokens as token, index}
 								<div
 									class="head1 cell x1-12 query text-xs"
@@ -171,6 +202,17 @@
 									class:active={$hoveredMatrixCell.row === index}
 								>
 									<span class="label float">{token}</span>
+									{#if usesRoPE}
+										<div
+											class="rotary-token-input"
+											aria-label={`RoPE for token ${index}: ${token}`}
+										>
+											<span class="rotary-port"></span>
+											<span class="rotary-wire"></span>
+											<span class="rotary-gate-space"></span>
+											<span class="rotary-wire outgoing">→</span>
+										</div>
+									{/if}
 									<div class={`vector x1-12 ${queryHeadVectorColor}`}>
 										<VectorCanvas
 											colorScale="blue"
@@ -243,6 +285,7 @@
 	</div>
 </div>
 {#if showRoPE}<RoPEInspector
+		kind={ropeKind}
 		on:close={() => (showRoPE = false)}
 		on:attention={() => {
 			showRoPE = false;
@@ -264,6 +307,99 @@
 	/>{/if}
 
 <style lang="scss">
+	.rotary-sequence {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: #87669e;
+		font-size: 11px;
+		white-space: nowrap;
+	}
+	.rotary-sequence button,
+	.rotary-gate {
+		background: #fbf7fd;
+		border: 1px solid #dfcee9;
+		border-radius: 3px;
+		color: #9472ab;
+		cursor: pointer;
+	}
+	.rotary-sequence button {
+		padding: 4px 7px;
+	}
+	.rotary-sequence button:hover,
+	.rotary-gate:hover {
+		background: #eee0f7;
+		border-color: #b28bcb;
+	}
+	.rotary-sequence button:focus-visible,
+	.rotary-gate:focus-visible {
+		outline: 2px solid #b28bcb;
+		outline-offset: 2px;
+	}
+	.rotary-sharing {
+		color: #91769f;
+		font-size: 9px;
+		margin-top: 7px;
+	}
+	.rotary .head-block > .qkv {
+		padding-left: 10rem;
+	}
+	.rotary .column.key .label.float,
+	.rotary .column.query .label.float {
+		left: -94px;
+	}
+	.rotary-token-input {
+		position: absolute;
+		left: -84px;
+		top: 0;
+		height: 100%;
+		width: 84px;
+		display: flex;
+		align-items: center;
+		color: #80afe9;
+		z-index: 35;
+	}
+	.key .rotary-token-input {
+		color: #e9a0a5;
+	}
+	.rotary-port {
+		width: 2px;
+		height: 100%;
+		flex: 0 0 2px;
+		background: currentColor;
+	}
+	.rotary-gate {
+		position: absolute;
+		left: -70px;
+		top: -3px;
+		height: calc(100% + 6px);
+		width: 42px;
+		z-index: 36;
+		padding: 0;
+		font-size: 10px;
+	}
+	.rotary-gate small {
+		display: block;
+		font-size: 7px;
+		color: #a48eb2;
+	}
+	.rotary-gate-space {
+		width: 40px;
+		flex-shrink: 0;
+	}
+
+	.rotary-wire {
+		border-top: 1px solid currentColor;
+		width: 12px;
+	}
+	.rotary-wire.outgoing {
+		border: 0;
+		flex: 1;
+		font-size: 18px;
+		line-height: 1;
+		text-align: center;
+	}
+
 	.head-flow-wrap {
 		position: relative;
 		z-index: 30;

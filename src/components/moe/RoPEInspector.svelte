@@ -22,7 +22,7 @@
 	import TraceSelector from './TraceSelector.svelte';
 
 	const dispatch = createEventDispatcher<{ close: void; attention: void }>();
-	let kind: 'query' | 'key' = 'query';
+	export let kind: 'query' | 'key' = 'query';
 	let selectedCoordinate = 0;
 	$: isMLA = $moeModel?.architecture === 'mla';
 	$: headSize = isMLA ? ($moeModel?.rotarySize ?? 64) : ($moeModel?.attentionHeadSize ?? 64);
