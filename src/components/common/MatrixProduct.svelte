@@ -75,8 +75,8 @@
 		grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr) 22px minmax(0, 1fr);
 		gap: 9px;
 		align-items: center;
-		margin: 12px 0;
-		color: #715883;
+		margin: 8px 0;
+		color: #65467e;
 		font:
 			13px/1.4 Arial,
 			sans-serif;
@@ -87,9 +87,9 @@
 	}
 	h4 {
 		font:
-			16px Georgia,
+			18px Georgia,
 			serif;
-		margin: 8px 0 12px;
+		margin: 4px 0 8px;
 		overflow-wrap: anywhere;
 	}
 	.tensor {
@@ -104,7 +104,7 @@
 	}
 	.vectors span {
 		font:
-			11px Arial,
+			13px Arial,
 			sans-serif;
 		max-width: 65px;
 		overflow: hidden;
@@ -113,22 +113,22 @@
 	}
 	.vectors i {
 		display: block;
-		height: 24px;
-		background: repeating-linear-gradient(90deg, transparent 0 5px, #fff 5px 6px), #bed9ff;
+		height: 34px;
+		background: repeating-linear-gradient(90deg, transparent 0 11px, #fff 11px 13px), #a8cafa;
 	}
 	.result i {
-		background-color: #d9c4ed;
+		background-color: #c9acdf;
 	}
 	.matrix {
 		background:
-			repeating-linear-gradient(90deg, transparent 0 8px, #fff 8px 9px),
-			repeating-linear-gradient(0deg, transparent 0 8px, #fff 8px 9px), #d9c4ed;
+			repeating-linear-gradient(90deg, transparent 0 16px, #fff 16px 18px),
+			repeating-linear-gradient(0deg, transparent 0 16px, #fff 16px 18px), #c9acdf;
 	}
 	.term:nth-child(3) .vectors {
 		grid-template-columns: 1fr;
 	}
 	.term:nth-child(3) i {
-		background-color: #d9c4ed;
+		background-color: #c9acdf;
 	}
 	.activation {
 		display: flex;
@@ -142,18 +142,19 @@
 	strong {
 		display: block;
 		font:
-			500 16px/1.4 Arial,
+			600 20px/1.3 Arial,
 			sans-serif;
-		margin-top: 10px;
+		margin-top: 6px;
+		color: #5e3d79;
 		font-variant-numeric: tabular-nums;
 	}
 	.symbol {
-		font-size: 23px;
+		font-size: 27px;
 		text-align: center;
 	}
 	.symbol small {
 		display: block;
-		font-size: 12px;
+		font-size: 14px;
 		white-space: nowrap;
 	}
 	.shape-note {
@@ -161,7 +162,7 @@
 			11px/1.5 Arial,
 			sans-serif;
 		color: #90799f;
-		margin: 6px 0 12px;
+		margin: 4px 0 8px;
 	}
 	@media (max-width: 600px) {
 		.matrix-product {
@@ -169,10 +170,10 @@
 			grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr) 12px minmax(0, 1fr);
 		}
 		h4 {
-			font-size: 13px;
+			font-size: 15px;
 		}
 		strong {
-			font-size: 12px;
+			font-size: 15px;
 		}
 		.vectors {
 			grid-template-columns: 1fr;
@@ -181,7 +182,7 @@
 			height: 65px;
 		}
 		.symbol {
-			font-size: 18px;
+			font-size: 22px;
 		}
 	}
 </style>
