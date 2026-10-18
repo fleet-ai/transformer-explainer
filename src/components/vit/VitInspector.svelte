@@ -1,4 +1,6 @@
 <script lang="ts">
+	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
+	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { recordedAssetUrl } from '$lib/recorded-json.js';
 
 	import { createEventDispatcher } from 'svelte';
@@ -26,6 +28,10 @@
 	$: data = $vitRecording?.layers[$blockIdx];
 	$: common = $vitRecording?.common;
 	$: document = $vitRecording?.document;
+	$: tokenOptions = (document?.tokens ?? []).map((text, value) => ({
+		value,
+		label: `${value}: ${text}`
+	}));
 	$: position = $vitSelectedPosition;
 	$: head = $attentionHeadIdx;
 	$: selectedStage = stages.find((s) => s[0] === stage)?.[1] ?? 'Recorded operation';
@@ -139,243 +145,251 @@
 			>
 		</header>
 		<div class="body">
-			<nav aria-label="Recorded operation">
-				{#each stages as [id, label]}<button
-						class:active={stage === id}
-						on:click={() => {
-							stage = id;
-							coordinate = 0;
-						}}>{label}</button
-					>{/each}
-			</nav>
-			<div class="controls">
-				<label
-					>Position <select aria-label="Position" bind:value={$vitSelectedPosition}
-						>{#each document?.tokens ?? [] as token, p}<option value={p}>{p}: {token}</option
-							>{/each}</select
-					></label
-				>{#if ['qkv', 'attention'].includes(stage)}<div class="segmented" aria-label="Head">
-						{#each [0, 1, 2] as h}<button class:active={head === h} on:click={() => selectHead(h)}
-								>Head {h + 1}</button
-							>{/each}
-					</div>{/if}{#if maxCoordinate > 0 && stage !== 'classifier'}<label
-						>Coordinates <input
-							type="number"
-							min="0"
-							max={maxCoordinate}
-							step="4"
-							bind:value={coordinate}
-						/>–{coordinate + 3}</label
-					>{/if}
-			</div>
-			{#if data && common && document}
-				{#key `${$blockIdx}:${position}:${head}:${coordinate}:${projection}:${stage}`}
-					{#if stage === 'embedding'}<div class="formula">
-							x₀ = [CLS; patch₀; …; patch₁₉₅] + Eposition
-						</div>
-						<div class="image-equation">
-							<img src={`${base}/${document.image.src}`} alt={document.image.alt} /><span
-								>224 × 224 RGB → 196 patches of 16 × 16<br />Learned projection: 768 pixel
-								coordinates → 192D<br />Prepend learned [CLS] → 197 positions</span
-							>
-						</div>
-						<table>
-							<thead
-								><tr
-									><th>Coordinate</th><th>{position === 0 ? 'Learned CLS' : 'Projected patch'}</th
-									><th>+</th><th>Learned position</th><th>= Encoder input</th></tr
-								></thead
-							><tbody
-								>{#each coords as c}<tr
-										><td>{c}</td><td>{f(scalar(common, 'patchTokens', position, c))}</td><td>+</td
-										><td>{f(scalar(common, 'positionEmbedding', position, c))}</td><td
-											>{f(scalar(common, 'embedding', position, c))}</td
-										></tr
-									>{/each}</tbody
-							>
-						</table>
-					{:else if stage === 'norm1' || stage === 'norm2'}<div class="formula">
-							LayerNorm(x)[d] = (x[d] − mean(x)) / √(variance(x) + {document.model.rmsNormEps}) ×
-							γ[d] + β[d]
-						</div>
-						<table>
-							<thead
-								><tr
-									><th>d</th><th>x[d]</th><th>mean</th><th>variance</th><th>γ[d]</th><th>β[d]</th
-									><th>Recorded result</th></tr
-								></thead
-							><tbody
-								>{#each normRows(stage) as r}<tr
-										><td>{r.c}</td><td>{f(r.input)}</td><td>{f(r.mean)}</td><td>{f(r.variance)}</td
-										><td>{f(r.weight)}</td><td>{f(r.bias)}</td><td>{f(r.output)}</td></tr
-									>{/each}</tbody
-							>
-						</table>
-						<p>
-							Mean and variance use all 192 coordinates of this position. Each of the 12 blocks has
-							its own learned normalization parameters.
-						</p>
-					{:else if stage === 'qkv' || stage === 'up' || stage === 'down'}
-						{#if stage === 'qkv'}<div class="segmented">
-								{#each ['query', 'key', 'value'] as p}<button
-										class:active={projection === p}
-										on:click={() => (projection = p)}>{p.toUpperCase()}</button
-									>{/each}
+			<TokenInspectorLayout gap="0px"
+				><TokenPicker
+					slot="tokens"
+					label="ViT token"
+					options={tokenOptions}
+					bind:value={$vitSelectedPosition}
+				/>
+				<nav aria-label="Recorded operation">
+					{#each stages as [id, label]}<button
+							class:active={stage === id}
+							on:click={() => {
+								stage = id;
+								coordinate = 0;
+							}}>{label}</button
+						>{/each}
+				</nav>
+				<div class="controls">
+					{#if ['qkv', 'attention'].includes(stage)}<div class="segmented" aria-label="Head">
+							{#each [0, 1, 2] as h}<button class:active={head === h} on:click={() => selectHead(h)}
+									>Head {h + 1}</button
+								>{/each}
+						</div>{/if}{#if maxCoordinate > 0 && stage !== 'classifier'}<label
+							>Coordinates <input
+								type="number"
+								min="0"
+								max={maxCoordinate}
+								step="4"
+								bind:value={coordinate}
+							/>–{coordinate + 3}</label
+						>{/if}
+				</div>
+				{#if data && common && document}
+					{#key `${$blockIdx}:${position}:${head}:${coordinate}:${projection}:${stage}`}
+						{#if stage === 'embedding'}<div class="formula">
+								x₀ = [CLS; patch₀; …; patch₁₉₅] + Eposition
 							</div>
+							<div class="image-equation">
+								<img src={`${base}/${document.image.src}`} alt={document.image.alt} /><span
+									>224 × 224 RGB → 196 patches of 16 × 16<br />Learned projection: 768 pixel
+									coordinates → 192D<br />Prepend learned [CLS] → 197 positions</span
+								>
+							</div>
+							<table>
+								<thead
+									><tr
+										><th>Coordinate</th><th>{position === 0 ? 'Learned CLS' : 'Projected patch'}</th
+										><th>+</th><th>Learned position</th><th>= Encoder input</th></tr
+									></thead
+								><tbody
+									>{#each coords as c}<tr
+											><td>{c}</td><td>{f(scalar(common, 'patchTokens', position, c))}</td><td>+</td
+											><td>{f(scalar(common, 'positionEmbedding', position, c))}</td><td
+												>{f(scalar(common, 'embedding', position, c))}</td
+											></tr
+										>{/each}</tbody
+								>
+							</table>
+						{:else if stage === 'norm1' || stage === 'norm2'}<div class="formula">
+								LayerNorm(x)[d] = (x[d] − mean(x)) / √(variance(x) + {document.model.rmsNormEps}) ×
+								γ[d] + β[d]
+							</div>
+							<table>
+								<thead
+									><tr
+										><th>d</th><th>x[d]</th><th>mean</th><th>variance</th><th>γ[d]</th><th>β[d]</th
+										><th>Recorded result</th></tr
+									></thead
+								><tbody
+									>{#each normRows(stage) as r}<tr
+											><td>{r.c}</td><td>{f(r.input)}</td><td>{f(r.mean)}</td><td
+												>{f(r.variance)}</td
+											><td>{f(r.weight)}</td><td>{f(r.bias)}</td><td>{f(r.output)}</td></tr
+										>{/each}</tbody
+								>
+							</table>
 							<p>
-								Each 192D projection splits into three independent 64D heads. Learned position
-								embeddings are already in x; this model has no RoPE or shared K/V heads.
-							</p>{/if}
-						{@const which = stage === 'qkv' ? projection : stage}
-						<div class="formula">
-							{stage === 'qkv'
-								? `${projection.toUpperCase()} = W · LayerNorm(x) + b`
-								: stage === 'up'
-									? 'u = W₁ · LayerNorm(x) + b₁'
-									: 'y = W₂ · GELU(u) + b₂'}
-						</div>
-						{#each coords as c}{@const r = projectionRow(which, c)}{#if r}<div class="dot-product">
-									<strong>{which}[{stage === 'qkv' ? head * 64 + c : c}]</strong>
-									<div class="terms">
-										{#each r.weights.slice(0, 4) as w, d}<span>({f(w)} × {f(r.input[d])})</span
-											>{#if d < 3}<span>+</span>{/if}{/each}
-									</div>
-									<div>
-										+ <span class="remaining"
-											>{f(r.remaining)} <small>remaining {r.input.length - 4} products</small></span
-										>
-										+ {f(r.bias)} <small>bias</small> ≈ <strong>{f(r.output)}</strong>
-									</div>
-								</div>{/if}{/each}
-						<p>
-							{stage === 'up' || stage === 'down'
-								? 'Four captured output rows are shown, using every input coordinate. '
-								: ''}Numbers are recorded float32 values; displayed products are rounded to six
-							decimals.
-						</p>
-					{:else if stage === 'attention'}<div class="attention-detail">
-							<VitAttentionMap
-								layer={data}
-								{head}
-								query={position}
-								on:query={(e) => vitSelectedPosition.set(e.detail)}
-							/>
-							<div>
-								<div class="formula">
-									A = softmax(QKᵀ / √64)<br />context[q,d] = Σₖ₌₀¹⁹⁶ A[q,k] × V[k,d]
+								Mean and variance use all 192 coordinates of this position. Each of the 12 blocks
+								has its own learned normalization parameters.
+							</p>
+						{:else if stage === 'qkv' || stage === 'up' || stage === 'down'}
+							{#if stage === 'qkv'}<div class="segmented">
+									{#each ['query', 'key', 'value'] as p}<button
+											class:active={projection === p}
+											on:click={() => (projection = p)}>{p.toUpperCase()}</button
+										>{/each}
 								</div>
 								<p>
-									Every query can attend to [CLS] and every patch. There is no causal mask. The
-									complete 197 × 197 recorded matrix is shown at left.
-								</p>
-								<table>
-									<thead
-										><tr><th>Key</th><th>Raw Q · K</th><th>÷ 8</th><th>Attention</th></tr></thead
-									><tbody
-										>{#each [0, 1, 2, 3] as k}<tr
-												><td>{document.tokens[k]}</td><td
-													>{f(scalar(data, 'scores', head, position, k))}</td
-												><td>{f(scalar(data, 'scores', head, position, k) / 8)}</td><td
-													>{f(scalar(data, 'attention', head, position, k))}</td
-												></tr
-											>{/each}</tbody
-									>
-								</table>
+									Each 192D projection splits into three independent 64D heads. Learned position
+									embeddings are already in x; this model has no RoPE or shared K/V heads.
+								</p>{/if}
+							{@const which = stage === 'qkv' ? projection : stage}
+							<div class="formula">
+								{stage === 'qkv'
+									? `${projection.toUpperCase()} = W · LayerNorm(x) + b`
+									: stage === 'up'
+										? 'u = W₁ · LayerNorm(x) + b₁'
+										: 'y = W₂ · GELU(u) + b₂'}
 							</div>
-						</div>
-						{#each coords as c}{@const r = contextRow(c)}{#if r}<div class="dot-product">
-									<strong>context[{position},{c}]</strong>
-									<div class="terms">
-										{#each [0, 1, 2, 3] as k}<span>({f(r.probs[k])} × {f(r.values[k])})</span
-											>{#if k < 3}<span>+</span>{/if}{/each}
+							{#each coords as c}{@const r = projectionRow(which, c)}{#if r}<div
+										class="dot-product"
+									>
+										<strong>{which}[{stage === 'qkv' ? head * 64 + c : c}]</strong>
+										<div class="terms">
+											{#each r.weights.slice(0, 4) as w, d}<span>({f(w)} × {f(r.input[d])})</span
+												>{#if d < 3}<span>+</span>{/if}{/each}
+										</div>
+										<div>
+											+ <span class="remaining"
+												>{f(r.remaining)}
+												<small>remaining {r.input.length - 4} products</small></span
+											>
+											+ {f(r.bias)} <small>bias</small> ≈ <strong>{f(r.output)}</strong>
+										</div>
+									</div>{/if}{/each}
+							<p>
+								{stage === 'up' || stage === 'down'
+									? 'Four captured output rows are shown, using every input coordinate. '
+									: ''}Numbers are recorded float32 values; displayed products are rounded to six
+								decimals.
+							</p>
+						{:else if stage === 'attention'}<div class="attention-detail">
+								<VitAttentionMap
+									layer={data}
+									{head}
+									query={position}
+									on:query={(e) => vitSelectedPosition.set(e.detail)}
+								/>
+								<div>
+									<div class="formula">
+										A = softmax(QKᵀ / √64)<br />context[q,d] = Σₖ₌₀¹⁹⁶ A[q,k] × V[k,d]
 									</div>
-									<div>
-										+ <span class="remaining"
-											>{f(r.remaining)} <small>remaining 193 positions</small></span
+									<p>
+										Every query can attend to [CLS] and every patch. There is no causal mask. The
+										complete 197 × 197 recorded matrix is shown at left.
+									</p>
+									<table>
+										<thead
+											><tr><th>Key</th><th>Raw Q · K</th><th>÷ 8</th><th>Attention</th></tr></thead
+										><tbody
+											>{#each [0, 1, 2, 3] as k}<tr
+													><td>{document.tokens[k]}</td><td
+														>{f(scalar(data, 'scores', head, position, k))}</td
+													><td>{f(scalar(data, 'scores', head, position, k) / 8)}</td><td
+														>{f(scalar(data, 'attention', head, position, k))}</td
+													></tr
+												>{/each}</tbody
 										>
-										≈ <strong>{f(r.output)}</strong>
-									</div>
-								</div>{/if}{/each}
-						<p>
-							All three 64D head outputs concatenate to 192D and pass through Woutput + bias before
-							residual addition. Every attention row retains its full softmax denominator.
-						</p>
-					{:else if stage === 'gelu'}<div class="formula">GELU(u) = ½ u · (1 + erf(u / √2))</div>
-						<table>
-							<thead
-								><tr><th>Coordinate</th><th>Up projection u</th><th>Recorded GELU(u)</th></tr
-								></thead
-							><tbody
-								>{#each coords as c}<tr
-										><td>{c}</td><td>{f(scalar(data, 'up', position, c))}</td><td
-											>{f(scalar(data, 'gelu', position, c))}</td
-										></tr
-									>{/each}</tbody
+									</table>
+								</div>
+							</div>
+							{#each coords as c}{@const r = contextRow(c)}{#if r}<div class="dot-product">
+										<strong>context[{position},{c}]</strong>
+										<div class="terms">
+											{#each [0, 1, 2, 3] as k}<span>({f(r.probs[k])} × {f(r.values[k])})</span
+												>{#if k < 3}<span>+</span>{/if}{/each}
+										</div>
+										<div>
+											+ <span class="remaining"
+												>{f(r.remaining)} <small>remaining 193 positions</small></span
+											>
+											≈ <strong>{f(r.output)}</strong>
+										</div>
+									</div>{/if}{/each}
+							<p>
+								All three 64D head outputs concatenate to 192D and pass through Woutput + bias
+								before residual addition. Every attention row retains its full softmax denominator.
+							</p>
+						{:else if stage === 'gelu'}<div class="formula">GELU(u) = ½ u · (1 + erf(u / √2))</div>
+							<table>
+								<thead
+									><tr><th>Coordinate</th><th>Up projection u</th><th>Recorded GELU(u)</th></tr
+									></thead
+								><tbody
+									>{#each coords as c}<tr
+											><td>{c}</td><td>{f(scalar(data, 'up', position, c))}</td><td
+												>{f(scalar(data, 'gelu', position, c))}</td
+											></tr
+										>{/each}</tbody
+								>
+							</table>
+							<p>
+								The same dense 192 → 768 → 192 feed-forward network acts independently on every
+								position. These are the model's exact GELU outputs, without a gate or expert router.
+							</p>
+						{:else if stage === 'residual'}<div class="formula">
+								r₁ = block input + attention output<br />block output = r₁ + feed-forward output
+							</div>
+							<table>
+								<thead
+									><tr
+										><th>d</th><th>Block input</th><th>+ Attention</th><th>= r₁</th><th>+ FFN</th
+										><th>= Block output</th></tr
+									></thead
+								><tbody
+									>{#each coords as c}<tr
+											><td>{c}</td><td>{f(scalar(data, 'input', position, c))}</td><td
+												>{f(scalar(data, 'attentionOutput', position, c))}</td
+											><td>{f(scalar(data, 'residualAfterAttention', position, c))}</td><td
+												>{f(scalar(data, 'down', position, c))}</td
+											><td>{f(scalar(data, 'output', position, c))}</td></tr
+										>{/each}</tbody
+								>
+							</table>
+						{:else if stage === 'classifier'}<div class="formula">
+								logits = Wclassifier · LayerNorm(xblock12)[CLS] + bclassifier<br />p(class) =
+								softmax(logits over all 1,000 classes)
+							</div>
+							<p>
+								Classification reads the final [CLS] position (0), after all 12 blocks. Patch
+								positions are not separate class predictions. This synthetic shape image is outside
+								ImageNet's usual photographs.
+							</p>
+							<table>
+								<thead
+									><tr
+										><th>Class</th><th>First 4 coordinate products</th><th>Remaining 188</th><th
+											>Bias</th
+										><th>Recorded logit</th></tr
+									></thead
+								><tbody
+									>{#each classIndices as candidate}{@const weights = row(
+											common,
+											'classifierWeights',
+											candidate.id
+										)}{@const input = row(common, 'finalHidden', 0)}<tr
+											><td>{document.classLabels[candidate.id]}</td><td
+												>{f(dot(weights.slice(0, 4), input.slice(0, 4)))}</td
+											><td>{f(dot(weights, input, 4))}</td><td
+												>{f(scalar(common, 'classifierBias', candidate.id))}</td
+											><td>{f(candidate.value)}</td></tr
+										>{/each}</tbody
+								>
+							</table>
+						{/if}
+						<footer>
+							Recorded from pretrained {document.model.id} · all 12 blocks / 3 heads / 197 positions.
+							<a
+								href={recordedAssetUrl(`${base}/traces/vit/manifest.json`)}
+								target="_blank"
+								rel="noreferrer">Trace provenance ↗</a
 							>
-						</table>
-						<p>
-							The same dense 192 → 768 → 192 feed-forward network acts independently on every
-							position. These are the model's exact GELU outputs, without a gate or expert router.
-						</p>
-					{:else if stage === 'residual'}<div class="formula">
-							r₁ = block input + attention output<br />block output = r₁ + feed-forward output
-						</div>
-						<table>
-							<thead
-								><tr
-									><th>d</th><th>Block input</th><th>+ Attention</th><th>= r₁</th><th>+ FFN</th><th
-										>= Block output</th
-									></tr
-								></thead
-							><tbody
-								>{#each coords as c}<tr
-										><td>{c}</td><td>{f(scalar(data, 'input', position, c))}</td><td
-											>{f(scalar(data, 'attentionOutput', position, c))}</td
-										><td>{f(scalar(data, 'residualAfterAttention', position, c))}</td><td
-											>{f(scalar(data, 'down', position, c))}</td
-										><td>{f(scalar(data, 'output', position, c))}</td></tr
-									>{/each}</tbody
-							>
-						</table>
-					{:else if stage === 'classifier'}<div class="formula">
-							logits = Wclassifier · LayerNorm(xblock12)[CLS] + bclassifier<br />p(class) =
-							softmax(logits over all 1,000 classes)
-						</div>
-						<p>
-							Classification reads the final [CLS] position (0), after all 12 blocks. Patch
-							positions are not separate class predictions. This synthetic shape image is outside
-							ImageNet's usual photographs.
-						</p>
-						<table>
-							<thead
-								><tr
-									><th>Class</th><th>First 4 coordinate products</th><th>Remaining 188</th><th
-										>Bias</th
-									><th>Recorded logit</th></tr
-								></thead
-							><tbody
-								>{#each classIndices as candidate}{@const weights = row(
-										common,
-										'classifierWeights',
-										candidate.id
-									)}{@const input = row(common, 'finalHidden', 0)}<tr
-										><td>{document.classLabels[candidate.id]}</td><td
-											>{f(dot(weights.slice(0, 4), input.slice(0, 4)))}</td
-										><td>{f(dot(weights, input, 4))}</td><td
-											>{f(scalar(common, 'classifierBias', candidate.id))}</td
-										><td>{f(candidate.value)}</td></tr
-									>{/each}</tbody
-							>
-						</table>
-					{/if}
-					<footer>
-						Recorded from pretrained {document.model.id} · all 12 blocks / 3 heads / 197 positions.
-						<a href={recordedAssetUrl(`${base}/traces/vit/manifest.json`)} target="_blank" rel="noreferrer"
-							>Trace provenance ↗</a
-						>
-					</footer>
-				{/key}
-			{/if}
+						</footer>
+					{/key}
+				{/if}
+			</TokenInspectorLayout>
 		</div>
 	</section>
 </div>
@@ -471,7 +485,6 @@
 		align-items: center;
 		gap: 7px;
 	}
-	.controls select,
 	.controls input {
 		border: 1px solid #ddcbea;
 		background: white;

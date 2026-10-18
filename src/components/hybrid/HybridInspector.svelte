@@ -1,4 +1,6 @@
 <script lang="ts">
+	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
+	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { recordedAssetUrl } from '$lib/recorded-json.js';
 
 	import { createEventDispatcher } from 'svelte';
@@ -42,6 +44,10 @@
 	$: data = $hybridLayer;
 	$: recording = $hybridRecording;
 	$: document = recording?.document;
+	$: tokenOptions = (document?.tokens ?? []).map((text, value) => ({
+		value,
+		label: `${value}: ${text}`
+	}));
 	$: common = recording?.common;
 	$: count = document?.sequenceLength ?? 0;
 	$: token = clamp($moeTokenIndex, Math.max(0, count - 1));
@@ -137,503 +143,515 @@
 			<button class="close" aria-label="Close recorded hybrid operation" on:click={close}>×</button>
 		</header>
 		<div class="body">
-			<nav aria-label="Recorded hybrid operations">
-				{#each stages as [id, label]}<button
-						class:active={current === id}
-						disabled={['attention', 'rope', 'ffn'].includes(id) && !isHybrid}
-						on:click={() => choose(id)}>{label}</button
-					>{/each}
-			</nav>
-			<div class="controls">
-				<div class="control">
-					<span>Token</span>
-					<div class="segmented" aria-label="Token">
-						{#each document?.tokens ?? [] as text, i}<button
-								class:active={token === i}
-								on:click={() => moeTokenIndex.set(i)}>{i}: {text}</button
-							>{/each}
-					</div>
-				</div>
-				{#if mambaStage}<label
-						>Mamba head <select bind:value={mambaHead}
-							>{#each Array.from({ length: 64 }, (_, i) => i) as h}<option value={h}
-									>{h + 1} / 64</option
-								>{/each}</select
-						></label
-					>
-					<div class="control">
-						<span>Channel</span>
-						<div class="segmented" aria-label="Recorded state channel">
-							{#each [0, 1, 2, 3] as c}<button
-									class:active={channel === c}
-									on:click={() => (channel = c)}>{c}</button
-								>{/each}
-						</div>
-					</div>{/if}
-				{#if current === 'scan' || current === 'convolution'}<label
-						>State coordinate <input
-							type="number"
-							min="0"
-							max="127"
-							step="1"
-							bind:value={stateCoordinate}
-						/></label
-					>{/if}
-				{#if attentionStage}<label
-						>Attention head <select
-							value={head}
-							on:change={(e) => selectHead(Number(e.currentTarget.value))}
-							>{#each Array.from({ length: 32 }, (_, i) => i) as h}<option value={h}
-									>{h + 1} / 32</option
-								>{/each}</select
-						></label
-					>{/if}
-				{#if current === 'attention'}<label
-						>V coordinate <input
-							type="number"
-							min="0"
-							max="127"
-							bind:value={attentionCoordinate}
-						/></label
-					>{/if}
-				{#if current === 'rope'}<div class="segmented" aria-label="Rotated vector">
-						<button class:active={ropeKind === 'query'} on:click={() => (ropeKind = 'query')}
-							>Query</button
-						><button class:active={ropeKind === 'key'} on:click={() => (ropeKind = 'key')}
-							>Key</button
+			<TokenInspectorLayout gap="14px"
+				><TokenPicker
+					slot="tokens"
+					label="Hybrid token"
+					options={tokenOptions}
+					bind:value={$moeTokenIndex}
+				/>
+				<nav aria-label="Recorded hybrid operations">
+					{#each stages as [id, label]}<button
+							class:active={current === id}
+							disabled={['attention', 'rope', 'ffn'].includes(id) && !isHybrid}
+							on:click={() => choose(id)}>{label}</button
+						>{/each}
+				</nav>
+				<div class="controls">
+					{#if mambaStage}<label
+							>Mamba head <select bind:value={mambaHead}
+								>{#each Array.from({ length: 64 }, (_, i) => i) as h}<option value={h}
+										>{h + 1} / 64</option
+									>{/each}</select
+							></label
 						>
-					</div>
-					<label
-						>Coordinate <input type="number" min="0" max="63" bind:value={ropeCoordinate} /> ↔ {ropeCoordinate +
-							64}</label
-					>{/if}
-			</div>
-			<div class="content">
-				{#if data && common && document}
-					{#if current === 'convolution' && conv}
-						<div class="subheading">
-							<h3>Four-token causal depthwise convolution</h3>
-							<div class="segmented" aria-label="Convolution stream">
-								{#each ['x', 'B', 'C'] as stream}<button
-										class:active={convStream === stream}
-										on:click={() => (convStream = stream)}>{stream}</button
+						<div class="control">
+							<span>Channel</span>
+							<div class="segmented" aria-label="Recorded state channel">
+								{#each [0, 1, 2, 3] as c}<button
+										class:active={channel === c}
+										on:click={() => (channel = c)}>{c}</button
 									>{/each}
 							</div>
-						</div>
-						<p>
-							Channel {convIndex} of 4,352 · {convStream === 'x'
-								? `x for head ${mambaHead + 1}, channel ${channel}`
-								: `${convStream} state coordinate ${stateCoordinate}, shared across heads`} · future
-							tokens are never used.
-						</p>
-						<table>
-							<thead
-								><tr
-									><th>Source token</th><th>Recorded input</th><th>Kernel weight</th><th>Product</th
-									></tr
-								></thead
-							><tbody
-								>{#each conv.terms as term}<tr
-										><td
-											>{term.position < 0
-												? 'Left padding (zero)'
-												: `${term.position}: ${document.tokens[term.position]}`}</td
-										><td>{f(term.input)}</td><td>{f(term.weight)}</td><td>{f(term.product)}</td></tr
-									>{/each}</tbody
+						</div>{/if}
+					{#if current === 'scan' || current === 'convolution'}<label
+							>State coordinate <input
+								type="number"
+								min="0"
+								max="127"
+								step="1"
+								bind:value={stateCoordinate}
+							/></label
+						>{/if}
+					{#if attentionStage}<label
+							>Attention head <select
+								value={head}
+								on:change={(e) => selectHead(Number(e.currentTarget.value))}
+								>{#each Array.from({ length: 32 }, (_, i) => i) as h}<option value={h}
+										>{h + 1} / 32</option
+									>{/each}</select
+							></label
+						>{/if}
+					{#if current === 'attention'}<label
+							>V coordinate <input
+								type="number"
+								min="0"
+								max="127"
+								bind:value={attentionCoordinate}
+							/></label
+						>{/if}
+					{#if current === 'rope'}<div class="segmented" aria-label="Rotated vector">
+							<button class:active={ropeKind === 'query'} on:click={() => (ropeKind = 'query')}
+								>Query</button
+							><button class:active={ropeKind === 'key'} on:click={() => (ropeKind = 'key')}
+								>Key</button
 							>
-						</table>
-						<div class="formula">
-							Σ four products + bias {f(conv.bias)} = {f(conv.reconstructed)}<br />Recorded
-							convolution = {f(conv.raw)} → SiLU(x) = x / (1 + e<sup>−x</sup>) →
-							<strong>{f(conv.output)}</strong>
 						</div>
-						<p class="note">
-							The same causal convolution supplies x, B and C. B and C each have 128 coordinates; x
-							has 64 heads × 64 channels.
-						</p>
-					{:else if current === 'scan' && state && scan}
-						<div class="formula">
-							Δ = max(0.001, softplus(dtRaw + dtBias)) · decay = e<sup>ΔA</sup><br />S<sub>t</sub
-							>[h,c,s] = decay × S<sub>t−1</sub>[h,c,s] + Δ × B<sub>t</sub>[s] × x<sub>t</sub>[h,c]
-						</div>
-						<div class="facts">
-							<div><span>dtRaw + bias</span><b>{f(state.dtRaw)} + {f(state.bias)}</b></div>
-							<div><span>Recorded Δ</span><b>{f(state.dt)}</b></div>
-							<div><span>A · decay</span><b>{f(state.A)} · {f(state.decay)}</b></div>
-							<div><span>B[{stateCoordinate}] · x</span><b>{f(state.B)} · {f(state.x)}</b></div>
-						</div>
-						<div class="state-equation">
-							<div><span>Previous state</span><b>{f(state.previous)}</b></div>
-							<span>×</span>
-							<div><span>Decay</span><b>{f(state.decay)}</b></div>
-							<span>+</span>
-							<div><span>Δ × B × x</span><b>{f(state.injection)}</b></div>
-							<span>=</span>
-							<div class="result"><span>Reconstructed state</span><b>{f(state.saved)}</b></div>
-						</div>
-						<div class="split">
-							<div>
-								<h3>State over the actual token sequence</h3>
-								<table>
-									<thead
-										><tr><th>Token</th><th>S[h,c,{stateCoordinate}]</th><th>C × state</th></tr
-										></thead
-									><tbody
-										>{#each document.tokens as text, t}{@const step = stateStep(
-												data,
-												t,
-												mambaHead,
-												channel,
-												stateCoordinate
-											)}<tr class:selected={t === token} on:click={() => moeTokenIndex.set(t)}
-												><td
-													><button class="text-button" on:click={() => moeTokenIndex.set(t)}
-														>{t}: {text}</button
-													></td
-												><td>{f(step.saved)}</td><td>{f(step.contribution)}</td></tr
-											>{/each}</tbody
-									>
-								</table>
-							</div>
-							<div>
-								<h3>Read all 128 state coordinates</h3>
-								<div class="formula small">
-									y[h,c] = Σ<sub>s=0…127</sub> S[h,c,s] × C[s] + D[h] × x[h,c]
+						<label
+							>Coordinate <input type="number" min="0" max="63" bind:value={ropeCoordinate} /> ↔ {ropeCoordinate +
+								64}</label
+						>{/if}
+				</div>
+				<div class="content">
+					{#if data && common && document}
+						{#if current === 'convolution' && conv}
+							<div class="subheading">
+								<h3>Four-token causal depthwise convolution</h3>
+								<div class="segmented" aria-label="Convolution stream">
+									{#each ['x', 'B', 'C'] as stream}<button
+											class:active={convStream === stream}
+											on:click={() => (convStream = stream)}>{stream}</button
+										>{/each}
 								</div>
-								<dl>
-									<dt>Selected contribution ({stateCoordinate})</dt>
-									<dd>{f(scan.terms[stateCoordinate])}</dd>
-									<dt>Other 127 contributions</dt>
-									<dd>{f(scan.terms.reduce((a, b) => a + b, 0) - scan.terms[stateCoordinate])}</dd>
-									<dt>Skip D × x</dt>
-									<dd>{f(scan.skip)}</dd>
-									<dt>Sequential reconstruction</dt>
-									<dd>{f(scan.reconstructed)}</dd>
-									<dt>Recorded scan-kernel output</dt>
-									<dd class="strong">{f(scan.recorded)}</dd>
-									<dt>Absolute difference</dt>
-									<dd>{Math.abs(scan.reconstructed - scan.recorded).toExponential(2)}</dd>
-								</dl>
 							</div>
-						</div>
-						<p class="note">
-							State values were reconstructed during capture from the recorded x, B, C, Δ and A. The
-							independent model scan output is recorded directly. All 64 heads and all 128 state
-							coordinates are available for the first four channels of each head; the model computes
-							all 64 channels.
-						</p>
-					{:else if current === 'gate' && gated}
-						<h3>Gate first, then RMSNorm over all 4,096 channels</h3>
-						<div class="formula">
-							z = y ⊙ SiLU(gate)<br />out[d] = z[d] / √(mean(z²) + 0.00001) × γ[d]
-						</div>
-						<div class="facts">
-							<div><span>Mean square over 4,096 values</span><b>{f(gated.meanSquare)}</b></div>
-							<div><span>RMS denominator</span><b>{f(gated.denominator)}</b></div>
-						</div>
-						<table>
-							<thead
-								><tr
-									><th>Head channel</th><th>Recorded y</th><th>Gate</th><th>SiLU(gate)</th><th
-										>y × SiLU</th
-									><th>γ</th><th>Recorded norm output</th></tr
-								></thead
-							><tbody
-								>{#each [0, 1, 2, 3] as c}{@const g = gatedNorm(data, token, mambaHead * 64 + c)}<tr
-										class:selected={c === channel}
-										><td><button class="text-button" on:click={() => (channel = c)}>{c}</button></td
-										><td>{f(g.scan)}</td><td>{f(g.gate)}</td><td>{f(g.activation)}</td><td
-											>{f(g.product)}</td
-										><td>{f(g.weight)}</td><td>{f(g.recorded)}</td></tr
-									>{/each}</tbody
-							>
-						</table>
-						<div class="formula">
-							Channel {channel}: {f(gated.product)} / {f(gated.denominator)} × {f(gated.weight)} ≈
-							<strong>{f(gated.recorded)}</strong>
-						</div>
-						<p class="note">
-							The four displayed channels are a window into the 4,096-value vector. The denominator
-							uses every recorded value, including the 4,092 values outside this table.
-						</p>
-					{:else if current === 'rope' && rotary}
-						<div class="subheading">
-							<h3>{ropeKind === 'query' ? 'Q' : 'K'} head {head + 1} · 128 dimensions</h3>
-							<span>Position {token} · coordinates {rotary.coordinate} and {rotary.partner}</span>
-						</div>
-						<div class="rope-view">
-							<div>
-								<h3>Before RoPE</h3>
-								<div class="value">[{rotary.coordinate}] <b>{f(rotary.a)}</b></div>
-								<div class="value">[{rotary.partner}] <b>{f(rotary.b)}</b></div>
-							</div>
-							<div class="circle">
-								<svg
-									viewBox="0 0 240 225"
-									role="img"
-									aria-label={`Unit circle: cosine ${f(rotary.cos)}, sine ${f(rotary.sin)}`}
-									><circle
-										cx="120"
-										cy="105"
-										r="78"
-										fill="none"
-										stroke="#d7c6e9"
-										stroke-width="2"
-									/><path d="M20 105H220M120 7V203" stroke="#e0d4eb" /><text x="207" y="122"
-										>cos</text
-									><text x="128" y="15">sin</text><line
-										x1="120"
-										y1="105"
-										x2={120 + 78 * rotary.cos}
-										y2={105 - 78 * rotary.sin}
-										stroke="#9661bf"
-										stroke-width="3"
-									/><line
-										x1="120"
-										y1="105"
-										x2={120 + 78 * rotary.cos}
-										y2="105"
-										stroke="#568ac9"
-										stroke-width="3"
-									/><line
-										x1={120 + 78 * rotary.cos}
-										y1="105"
-										x2={120 + 78 * rotary.cos}
-										y2={105 - 78 * rotary.sin}
-										stroke="#d2799e"
-										stroke-width="2"
-										stroke-dasharray="4 3"
-									/><circle
-										cx={120 + 78 * rotary.cos}
-										cy={105 - 78 * rotary.sin}
-										r="5"
-										fill="#9661bf"
-									/><text x="120" y="223" text-anchor="middle"
-										>θ ≈ {((rotary.angle * 180) / Math.PI).toFixed(2)}° · radius 1</text
-									></svg
-								>
-								<p>cos θ = {f(rotary.cos)}<br />sin θ = {f(rotary.sin)}</p>
-							</div>
-							<div>
-								<h3>Recorded after RoPE</h3>
-								<div class="value">[{rotary.coordinate}] <b>{f(rotary.afterA)}</b></div>
-								<div class="value">[{rotary.partner}] <b>{f(rotary.afterB)}</b></div>
-							</div>
-						</div>
-						<div class="formula">
-							x′[{rotary.coordinate}] = {f(rotary.a)} × {f(rotary.cos)} − ({f(rotary.b)} × {f(
-								rotary.sin
-							)}) ≈ <b>{f(rotary.afterA)}</b><br />x′[{rotary.partner}] = {f(rotary.b)} × {f(
-								rotary.cos
-							)} + ({f(rotary.a)} × {f(rotary.sin)}) ≈ <b>{f(rotary.afterB)}</b>
-						</div>
-						<p class="note">
-							All 128 Q and K coordinates are rotated in 64 fixed pairs. V bypasses RoPE. These are
-							the saved pretrained-model tensors and its actual cosine/sine values.
-						</p>
-					{:else if current === 'attention' && isHybrid}
-						<div class="formula">
-							score(q,k) = Σ<sub>d=0…127</sub> Q′[q,d] × K′[k,d] · attention = softmax(score / 8 +
-							causal mask)<br />context[q,{attentionCoordinate}] = Σ<sub>k≤q</sub> attention[q,k] ×
-							V[k,{attentionCoordinate}]
-						</div>
-						<table>
-							<thead
-								><tr
-									><th>Key token</th><th>Recorded Q′K′ dot</th><th>Scaled + mask</th><th
-										>Attention</th
-									><th>V[{attentionCoordinate}]</th><th>Weighted value</th></tr
-								></thead
-							><tbody
-								>{#each document.tokens as text, k}{@const score = scalar(
-										data,
-										'scores',
-										head,
-										token,
-										k
-									)}{@const p = scalar(data, 'attention', head, token, k)}{@const value = scalar(
-										data,
-										'value',
-										head,
-										k,
-										attentionCoordinate
-									)}<tr class:masked={k > token}
-										><td>{k}: {text}</td><td>{f(score)}</td><td
-											>{k > token ? '−∞' : f(score / 8)}</td
-										><td>{(p * 100).toFixed(3)}%</td><td>{f(value)}</td><td>{f(p * value)}</td></tr
-									>{/each}</tbody
-							>
-						</table>
-						<div class="formula">
-							Σ weighted values ≈ <strong
-								>{f(scalar(data, 'context', head, token, attentionCoordinate))}</strong
-							>
-							· recorded context, head {head + 1}
-						</div>
-						<p class="note">
-							All 32 heads and all 128 value coordinates are selectable. Zamba2 uses a scale of 1/8
-							for this attention. Each of the six Transformer blocks uses its own learned adapters
-							with shared base weights.
-						</p>
-					{:else if current === 'ffn' && isHybrid && ffnStage === 'gelu'}
-						<div class="subheading">
-							<h3>Gated GELU feed-forward network</h3>
-							<div class="segmented" aria-label="Feed-forward operation">
-								{#each [['gate', 'Gate projection'], ['up', 'Up projection'], ['gelu', 'GELU × up'], ['down', 'Down projection']] as [id, label]}<button
-										class:active={ffnStage === id}
-										on:click={() => (ffnStage = id)}>{label}</button
-									>{/each}
-							</div>
-						</div>
-						<div class="formula">
-							g = (Wgate + Wadapter)[x] · u = (Wup + Wadapter)[x]<br />GELU(g) = ½g × (1 + erf(g /
-							√2)) · h = GELU(g) ⊙ u
-						</div>
-						<table>
-							<thead
-								><tr
-									><th>Coordinate</th><th>Gate g</th><th>Recorded GELU(g)</th><th>Up u</th><th
-										>Recorded product h</th
-									></tr
-								></thead
-							><tbody
-								>{#each [0, 1, 2, 3] as c}<tr
-										><td>{c}</td><td>{f(scalar(data, 'gateFFN', token, c))}</td><td
-											>{f(scalar(data, 'gelu', token, c))}</td
-										><td>{f(scalar(data, 'up', token, c))}</td><td
-											>{f(scalar(data, 'product', token, c))}</td
+							<p>
+								Channel {convIndex} of 4,352 · {convStream === 'x'
+									? `x for head ${mambaHead + 1}, channel ${channel}`
+									: `${convStream} state coordinate ${stateCoordinate}, shared across heads`} · future
+								tokens are never used.
+							</p>
+							<table>
+								<thead
+									><tr
+										><th>Source token</th><th>Recorded input</th><th>Kernel weight</th><th
+											>Product</th
 										></tr
-									>{/each}</tbody
-							>
-						</table>
-						<p class="note">
-							First 4 of 8,192 coordinates. Gate and up projections include the selected block’s
-							real low-rank adapter. The following down projection uses all 8,192 products.
-						</p>
-					{:else if ['projection', 'output', 'ffn'].includes(current) && projected}
-						<div class="subheading">
-							<h3>
-								{current === 'projection'
-									? '2,048D RMSNorm → 8,512 projected values'
-									: current === 'output'
-										? '4,096D gated output → 2,048D residual update'
-										: `${ffnStage === 'down' ? 'Down' : ffnStage === 'up' ? 'Up' : 'Gate'} projection with actual weights`}
-							</h3>
-							{#if current === 'ffn'}<div class="segmented" aria-label="Feed-forward operation">
-									{#each [['gate', 'Gate'], ['up', 'Up'], ['gelu', 'GELU × up'], ['down', 'Down']] as [id, label]}<button
+									></thead
+								><tbody
+									>{#each conv.terms as term}<tr
+											><td
+												>{term.position < 0
+													? 'Left padding (zero)'
+													: `${term.position}: ${document.tokens[term.position]}`}</td
+											><td>{f(term.input)}</td><td>{f(term.weight)}</td><td>{f(term.product)}</td
+											></tr
+										>{/each}</tbody
+								>
+							</table>
+							<div class="formula">
+								Σ four products + bias {f(conv.bias)} = {f(conv.reconstructed)}<br />Recorded
+								convolution = {f(conv.raw)} → SiLU(x) = x / (1 + e<sup>−x</sup>) →
+								<strong>{f(conv.output)}</strong>
+							</div>
+							<p class="note">
+								The same causal convolution supplies x, B and C. B and C each have 128 coordinates;
+								x has 64 heads × 64 channels.
+							</p>
+						{:else if current === 'scan' && state && scan}
+							<div class="formula">
+								Δ = max(0.001, softplus(dtRaw + dtBias)) · decay = e<sup>ΔA</sup><br />S<sub>t</sub
+								>[h,c,s] = decay × S<sub>t−1</sub>[h,c,s] + Δ × B<sub>t</sub>[s] × x<sub>t</sub
+								>[h,c]
+							</div>
+							<div class="facts">
+								<div><span>dtRaw + bias</span><b>{f(state.dtRaw)} + {f(state.bias)}</b></div>
+								<div><span>Recorded Δ</span><b>{f(state.dt)}</b></div>
+								<div><span>A · decay</span><b>{f(state.A)} · {f(state.decay)}</b></div>
+								<div><span>B[{stateCoordinate}] · x</span><b>{f(state.B)} · {f(state.x)}</b></div>
+							</div>
+							<div class="state-equation">
+								<div><span>Previous state</span><b>{f(state.previous)}</b></div>
+								<span>×</span>
+								<div><span>Decay</span><b>{f(state.decay)}</b></div>
+								<span>+</span>
+								<div><span>Δ × B × x</span><b>{f(state.injection)}</b></div>
+								<span>=</span>
+								<div class="result"><span>Reconstructed state</span><b>{f(state.saved)}</b></div>
+							</div>
+							<div class="split">
+								<div>
+									<h3>State over the actual token sequence</h3>
+									<table>
+										<thead
+											><tr><th>Token</th><th>S[h,c,{stateCoordinate}]</th><th>C × state</th></tr
+											></thead
+										><tbody
+											>{#each document.tokens as text, t}{@const step = stateStep(
+													data,
+													t,
+													mambaHead,
+													channel,
+													stateCoordinate
+												)}<tr class:selected={t === token} on:click={() => moeTokenIndex.set(t)}
+													><td
+														><button class="text-button" on:click={() => moeTokenIndex.set(t)}
+															>{t}: {text}</button
+														></td
+													><td>{f(step.saved)}</td><td>{f(step.contribution)}</td></tr
+												>{/each}</tbody
+										>
+									</table>
+								</div>
+								<div>
+									<h3>Read all 128 state coordinates</h3>
+									<div class="formula small">
+										y[h,c] = Σ<sub>s=0…127</sub> S[h,c,s] × C[s] + D[h] × x[h,c]
+									</div>
+									<dl>
+										<dt>Selected contribution ({stateCoordinate})</dt>
+										<dd>{f(scan.terms[stateCoordinate])}</dd>
+										<dt>Other 127 contributions</dt>
+										<dd>
+											{f(scan.terms.reduce((a, b) => a + b, 0) - scan.terms[stateCoordinate])}
+										</dd>
+										<dt>Skip D × x</dt>
+										<dd>{f(scan.skip)}</dd>
+										<dt>Sequential reconstruction</dt>
+										<dd>{f(scan.reconstructed)}</dd>
+										<dt>Recorded scan-kernel output</dt>
+										<dd class="strong">{f(scan.recorded)}</dd>
+										<dt>Absolute difference</dt>
+										<dd>{Math.abs(scan.reconstructed - scan.recorded).toExponential(2)}</dd>
+									</dl>
+								</div>
+							</div>
+							<p class="note">
+								State values were reconstructed during capture from the recorded x, B, C, Δ and A.
+								The independent model scan output is recorded directly. All 64 heads and all 128
+								state coordinates are available for the first four channels of each head; the model
+								computes all 64 channels.
+							</p>
+						{:else if current === 'gate' && gated}
+							<h3>Gate first, then RMSNorm over all 4,096 channels</h3>
+							<div class="formula">
+								z = y ⊙ SiLU(gate)<br />out[d] = z[d] / √(mean(z²) + 0.00001) × γ[d]
+							</div>
+							<div class="facts">
+								<div><span>Mean square over 4,096 values</span><b>{f(gated.meanSquare)}</b></div>
+								<div><span>RMS denominator</span><b>{f(gated.denominator)}</b></div>
+							</div>
+							<table>
+								<thead
+									><tr
+										><th>Head channel</th><th>Recorded y</th><th>Gate</th><th>SiLU(gate)</th><th
+											>y × SiLU</th
+										><th>γ</th><th>Recorded norm output</th></tr
+									></thead
+								><tbody
+									>{#each [0, 1, 2, 3] as c}{@const g = gatedNorm(
+											data,
+											token,
+											mambaHead * 64 + c
+										)}<tr class:selected={c === channel}
+											><td
+												><button class="text-button" on:click={() => (channel = c)}>{c}</button></td
+											><td>{f(g.scan)}</td><td>{f(g.gate)}</td><td>{f(g.activation)}</td><td
+												>{f(g.product)}</td
+											><td>{f(g.weight)}</td><td>{f(g.recorded)}</td></tr
+										>{/each}</tbody
+								>
+							</table>
+							<div class="formula">
+								Channel {channel}: {f(gated.product)} / {f(gated.denominator)} × {f(gated.weight)} ≈
+								<strong>{f(gated.recorded)}</strong>
+							</div>
+							<p class="note">
+								The four displayed channels are a window into the 4,096-value vector. The
+								denominator uses every recorded value, including the 4,092 values outside this
+								table.
+							</p>
+						{:else if current === 'rope' && rotary}
+							<div class="subheading">
+								<h3>{ropeKind === 'query' ? 'Q' : 'K'} head {head + 1} · 128 dimensions</h3>
+								<span>Position {token} · coordinates {rotary.coordinate} and {rotary.partner}</span>
+							</div>
+							<div class="rope-view">
+								<div>
+									<h3>Before RoPE</h3>
+									<div class="value">[{rotary.coordinate}] <b>{f(rotary.a)}</b></div>
+									<div class="value">[{rotary.partner}] <b>{f(rotary.b)}</b></div>
+								</div>
+								<div class="circle">
+									<svg
+										viewBox="0 0 240 225"
+										role="img"
+										aria-label={`Unit circle: cosine ${f(rotary.cos)}, sine ${f(rotary.sin)}`}
+										><circle
+											cx="120"
+											cy="105"
+											r="78"
+											fill="none"
+											stroke="#d7c6e9"
+											stroke-width="2"
+										/><path d="M20 105H220M120 7V203" stroke="#e0d4eb" /><text x="207" y="122"
+											>cos</text
+										><text x="128" y="15">sin</text><line
+											x1="120"
+											y1="105"
+											x2={120 + 78 * rotary.cos}
+											y2={105 - 78 * rotary.sin}
+											stroke="#9661bf"
+											stroke-width="3"
+										/><line
+											x1="120"
+											y1="105"
+											x2={120 + 78 * rotary.cos}
+											y2="105"
+											stroke="#568ac9"
+											stroke-width="3"
+										/><line
+											x1={120 + 78 * rotary.cos}
+											y1="105"
+											x2={120 + 78 * rotary.cos}
+											y2={105 - 78 * rotary.sin}
+											stroke="#d2799e"
+											stroke-width="2"
+											stroke-dasharray="4 3"
+										/><circle
+											cx={120 + 78 * rotary.cos}
+											cy={105 - 78 * rotary.sin}
+											r="5"
+											fill="#9661bf"
+										/><text x="120" y="223" text-anchor="middle"
+											>θ ≈ {((rotary.angle * 180) / Math.PI).toFixed(2)}° · radius 1</text
+										></svg
+									>
+									<p>cos θ = {f(rotary.cos)}<br />sin θ = {f(rotary.sin)}</p>
+								</div>
+								<div>
+									<h3>Recorded after RoPE</h3>
+									<div class="value">[{rotary.coordinate}] <b>{f(rotary.afterA)}</b></div>
+									<div class="value">[{rotary.partner}] <b>{f(rotary.afterB)}</b></div>
+								</div>
+							</div>
+							<div class="formula">
+								x′[{rotary.coordinate}] = {f(rotary.a)} × {f(rotary.cos)} − ({f(rotary.b)} × {f(
+									rotary.sin
+								)}) ≈ <b>{f(rotary.afterA)}</b><br />x′[{rotary.partner}] = {f(rotary.b)} × {f(
+									rotary.cos
+								)} + ({f(rotary.a)} × {f(rotary.sin)}) ≈ <b>{f(rotary.afterB)}</b>
+							</div>
+							<p class="note">
+								All 128 Q and K coordinates are rotated in 64 fixed pairs. V bypasses RoPE. These
+								are the saved pretrained-model tensors and its actual cosine/sine values.
+							</p>
+						{:else if current === 'attention' && isHybrid}
+							<div class="formula">
+								score(q,k) = Σ<sub>d=0…127</sub> Q′[q,d] × K′[k,d] · attention = softmax(score / 8 +
+								causal mask)<br />context[q,{attentionCoordinate}] = Σ<sub>k≤q</sub> attention[q,k]
+								× V[k,{attentionCoordinate}]
+							</div>
+							<table>
+								<thead
+									><tr
+										><th>Key token</th><th>Recorded Q′K′ dot</th><th>Scaled + mask</th><th
+											>Attention</th
+										><th>V[{attentionCoordinate}]</th><th>Weighted value</th></tr
+									></thead
+								><tbody
+									>{#each document.tokens as text, k}{@const score = scalar(
+											data,
+											'scores',
+											head,
+											token,
+											k
+										)}{@const p = scalar(data, 'attention', head, token, k)}{@const value = scalar(
+											data,
+											'value',
+											head,
+											k,
+											attentionCoordinate
+										)}<tr class:masked={k > token}
+											><td>{k}: {text}</td><td>{f(score)}</td><td
+												>{k > token ? '−∞' : f(score / 8)}</td
+											><td>{(p * 100).toFixed(3)}%</td><td>{f(value)}</td><td>{f(p * value)}</td
+											></tr
+										>{/each}</tbody
+								>
+							</table>
+							<div class="formula">
+								Σ weighted values ≈ <strong
+									>{f(scalar(data, 'context', head, token, attentionCoordinate))}</strong
+								>
+								· recorded context, head {head + 1}
+							</div>
+							<p class="note">
+								All 32 heads and all 128 value coordinates are selectable. Zamba2 uses a scale of
+								1/8 for this attention. Each of the six Transformer blocks uses its own learned
+								adapters with shared base weights.
+							</p>
+						{:else if current === 'ffn' && isHybrid && ffnStage === 'gelu'}
+							<div class="subheading">
+								<h3>Gated GELU feed-forward network</h3>
+								<div class="segmented" aria-label="Feed-forward operation">
+									{#each [['gate', 'Gate projection'], ['up', 'Up projection'], ['gelu', 'GELU × up'], ['down', 'Down projection']] as [id, label]}<button
 											class:active={ffnStage === id}
 											on:click={() => (ffnStage = id)}>{label}</button
 										>{/each}
-								</div>{:else}<div class="segmented" aria-label="Projection output row">
-									{#each [0, 1, 2, 3] as c}<button
-											class:active={projectionIndex === c}
-											on:click={() => (projectionIndex = c)}>Row {c}</button
-										>{/each}
-								</div>{/if}
-						</div>
-						{#if current === 'projection'}<p>
-								Split into gate (4,096), convolution inputs x/B/C (4,352), and dtRaw (64). These
-								saved matrix rows produce gate coordinates 0–3.
-							</p>{/if}
-						{#if current === 'ffn'}<div class="control">
-								<span>Output row</span>
-								<div class="segmented" aria-label="Feed-forward output row">
-									{#each [0, 1, 2, 3] as c}<button
-											class:active={projectionIndex === c}
-											on:click={() => (projectionIndex = c)}>{c}</button
-										>{/each}
 								</div>
-							</div>{/if}
-						<table>
-							<thead
-								><tr
-									><th>Input coordinate</th><th>Recorded weight[{projectionIndex},d]</th><th
-										>Recorded input[d]</th
-									><th>Product</th></tr
-								></thead
-							><tbody
-								>{#each [0, 1, 2, 3] as c}<tr
-										><td>{c}</td><td>{f(projected.weights[c])}</td><td>{f(projected.input[c])}</td
-										><td>{f(projected.weights[c] * projected.input[c])}</td></tr
-									>{/each}</tbody
-							>
-						</table>
-						<div class="formula">
-							First 4 contributions {f(projected.first)} + remaining {projected.input.length - 4} contributions
-							{f(projected.remaining)} ≈ <b>{f(projected.output)}</b>
-						</div>
-						{#if current === 'output'}<div class="facts">
-								{#each [0, 1, 2, 3] as c}<div>
-										<span>Residual output [{c}]</span><b
-											>{f(scalar(data, 'input', token, c))} + {f(
-												scalar(data, 'mambaOutput', token, c)
-											)}</b
-										><strong>= {f(scalar(data, 'output', token, c))}</strong>
-									</div>{/each}
 							</div>
-							<p class="note">
-								{isHybrid
-									? 'In this hybrid block the Transformer output is added before Mamba input RMSNorm. The final residual adds the Mamba result to the original block input.'
-									: 'The block adds the projected Mamba output to its original residual input.'}
-							</p>{:else if current === 'projection'}<p class="note">
-								The input is the recorded RMSNorm result. {isHybrid
-									? 'RMSNorm receives the residual stream plus this block’s Transformer output.'
-									: 'RMSNorm receives the residual stream.'} Matrix rows 0–3 are captured in full; omitted
-								contributions above are calculated from every saved input coordinate.
-							</p>{:else}<p class="note">
-								First four output rows are captured in full. Gate/up matrices combine shared weights
-								and the selected block’s learned adapter; down projection uses all 8,192 products.
-							</p>{/if}
-					{:else if current === 'classifier'}
-						<h3>All 38 blocks → final RMSNorm → 32,000 vocabulary logits</h3>
-						<p>
-							The prediction uses the last token ({count - 1}: {document.tokens[count - 1]}) after
-							the complete model, independent of the block being inspected.
-						</p>
-						<div class="formula">
-							logit[v] = Σ<sub>d=0…2047</sub> Wembedding[v,d] × finalHidden[d]<br />P(v) =
-							exp(logit[v] − maxLogit) / Σ<sub>j=0…31999</sub> exp(logit[j] − maxLogit)
-						</div>
-						<table>
-							<thead
-								><tr
-									><th>Candidate token</th><th>First 4 contributions</th><th>Remaining 2,044</th><th
-										>Recorded logit</th
-									><th>Probability</th></tr
-								></thead
-							><tbody
-								>{#each Array.from(tensor(common, 'classifierTokenIds')) as id, i}{@const weights =
-										row(common, 'classifierWeights', i)}{@const input = row(
-										common,
-										'finalHidden',
-										count - 1
-									)}<tr
-										><td>{document.vocabulary[id]}</td><td>{f(dot(weights.slice(0, 4), input))}</td
-										><td>{f(dot(weights, input, 4))}</td><td>{f(logits[id])}</td><td
-											>{((Math.exp(logits[id] - logitMax) / partition) * 100).toFixed(3)}%</td
+							<div class="formula">
+								g = (Wgate + Wadapter)[x] · u = (Wup + Wadapter)[x]<br />GELU(g) = ½g × (1 + erf(g /
+								√2)) · h = GELU(g) ⊙ u
+							</div>
+							<table>
+								<thead
+									><tr
+										><th>Coordinate</th><th>Gate g</th><th>Recorded GELU(g)</th><th>Up u</th><th
+											>Recorded product h</th
 										></tr
-									>{/each}</tbody
-							>
-						</table>
-						<div class="formula">Recorded next token: <b>{document.nextToken}</b></div>
-						<p class="note">
-							The vocabulary projection is tied to the pretrained token embeddings. Probabilities
-							are normalized over all 32,000 saved logits, including candidates outside this table.
-						</p>
-					{:else}<p>
-							Select a recorded operation for this block. Attention, RoPE and gated GELU are
-							available in Transformer + Mamba2 blocks 6, 12, 18, 24, 30 and 36.
-						</p>{/if}
-				{:else}<p class="loading" role="status">Loading recorded block values…</p>{/if}
-			</div>
-			<footer>
-				Pretrained Zamba2-1.2B · complete 38-block forward pass · calculations use full saved
-				precision; numbers are rounded for display. <a
-					href={recordedAssetUrl(`${base}/traces/hybrid/manifest.json`)}
-					target="_blank"
-					rel="noreferrer">Trace provenance ↗</a
-				>
-			</footer>
+									></thead
+								><tbody
+									>{#each [0, 1, 2, 3] as c}<tr
+											><td>{c}</td><td>{f(scalar(data, 'gateFFN', token, c))}</td><td
+												>{f(scalar(data, 'gelu', token, c))}</td
+											><td>{f(scalar(data, 'up', token, c))}</td><td
+												>{f(scalar(data, 'product', token, c))}</td
+											></tr
+										>{/each}</tbody
+								>
+							</table>
+							<p class="note">
+								First 4 of 8,192 coordinates. Gate and up projections include the selected block’s
+								real low-rank adapter. The following down projection uses all 8,192 products.
+							</p>
+						{:else if ['projection', 'output', 'ffn'].includes(current) && projected}
+							<div class="subheading">
+								<h3>
+									{current === 'projection'
+										? '2,048D RMSNorm → 8,512 projected values'
+										: current === 'output'
+											? '4,096D gated output → 2,048D residual update'
+											: `${ffnStage === 'down' ? 'Down' : ffnStage === 'up' ? 'Up' : 'Gate'} projection with actual weights`}
+								</h3>
+								{#if current === 'ffn'}<div class="segmented" aria-label="Feed-forward operation">
+										{#each [['gate', 'Gate'], ['up', 'Up'], ['gelu', 'GELU × up'], ['down', 'Down']] as [id, label]}<button
+												class:active={ffnStage === id}
+												on:click={() => (ffnStage = id)}>{label}</button
+											>{/each}
+									</div>{:else}<div class="segmented" aria-label="Projection output row">
+										{#each [0, 1, 2, 3] as c}<button
+												class:active={projectionIndex === c}
+												on:click={() => (projectionIndex = c)}>Row {c}</button
+											>{/each}
+									</div>{/if}
+							</div>
+							{#if current === 'projection'}<p>
+									Split into gate (4,096), convolution inputs x/B/C (4,352), and dtRaw (64). These
+									saved matrix rows produce gate coordinates 0–3.
+								</p>{/if}
+							{#if current === 'ffn'}<div class="control">
+									<span>Output row</span>
+									<div class="segmented" aria-label="Feed-forward output row">
+										{#each [0, 1, 2, 3] as c}<button
+												class:active={projectionIndex === c}
+												on:click={() => (projectionIndex = c)}>{c}</button
+											>{/each}
+									</div>
+								</div>{/if}
+							<table>
+								<thead
+									><tr
+										><th>Input coordinate</th><th>Recorded weight[{projectionIndex},d]</th><th
+											>Recorded input[d]</th
+										><th>Product</th></tr
+									></thead
+								><tbody
+									>{#each [0, 1, 2, 3] as c}<tr
+											><td>{c}</td><td>{f(projected.weights[c])}</td><td>{f(projected.input[c])}</td
+											><td>{f(projected.weights[c] * projected.input[c])}</td></tr
+										>{/each}</tbody
+								>
+							</table>
+							<div class="formula">
+								First 4 contributions {f(projected.first)} + remaining {projected.input.length - 4} contributions
+								{f(projected.remaining)} ≈ <b>{f(projected.output)}</b>
+							</div>
+							{#if current === 'output'}<div class="facts">
+									{#each [0, 1, 2, 3] as c}<div>
+											<span>Residual output [{c}]</span><b
+												>{f(scalar(data, 'input', token, c))} + {f(
+													scalar(data, 'mambaOutput', token, c)
+												)}</b
+											><strong>= {f(scalar(data, 'output', token, c))}</strong>
+										</div>{/each}
+								</div>
+								<p class="note">
+									{isHybrid
+										? 'In this hybrid block the Transformer output is added before Mamba input RMSNorm. The final residual adds the Mamba result to the original block input.'
+										: 'The block adds the projected Mamba output to its original residual input.'}
+								</p>{:else if current === 'projection'}<p class="note">
+									The input is the recorded RMSNorm result. {isHybrid
+										? 'RMSNorm receives the residual stream plus this block’s Transformer output.'
+										: 'RMSNorm receives the residual stream.'} Matrix rows 0–3 are captured in full;
+									omitted contributions above are calculated from every saved input coordinate.
+								</p>{:else}<p class="note">
+									First four output rows are captured in full. Gate/up matrices combine shared
+									weights and the selected block’s learned adapter; down projection uses all 8,192
+									products.
+								</p>{/if}
+						{:else if current === 'classifier'}
+							<h3>All 38 blocks → final RMSNorm → 32,000 vocabulary logits</h3>
+							<p>
+								The prediction uses the last token ({count - 1}: {document.tokens[count - 1]}) after
+								the complete model, independent of the block being inspected.
+							</p>
+							<div class="formula">
+								logit[v] = Σ<sub>d=0…2047</sub> Wembedding[v,d] × finalHidden[d]<br />P(v) =
+								exp(logit[v] − maxLogit) / Σ<sub>j=0…31999</sub> exp(logit[j] − maxLogit)
+							</div>
+							<table>
+								<thead
+									><tr
+										><th>Candidate token</th><th>First 4 contributions</th><th>Remaining 2,044</th
+										><th>Recorded logit</th><th>Probability</th></tr
+									></thead
+								><tbody
+									>{#each Array.from(tensor(common, 'classifierTokenIds')) as id, i}{@const weights =
+											row(common, 'classifierWeights', i)}{@const input = row(
+											common,
+											'finalHidden',
+											count - 1
+										)}<tr
+											><td>{document.vocabulary[id]}</td><td
+												>{f(dot(weights.slice(0, 4), input))}</td
+											><td>{f(dot(weights, input, 4))}</td><td>{f(logits[id])}</td><td
+												>{((Math.exp(logits[id] - logitMax) / partition) * 100).toFixed(3)}%</td
+											></tr
+										>{/each}</tbody
+								>
+							</table>
+							<div class="formula">Recorded next token: <b>{document.nextToken}</b></div>
+							<p class="note">
+								The vocabulary projection is tied to the pretrained token embeddings. Probabilities
+								are normalized over all 32,000 saved logits, including candidates outside this
+								table.
+							</p>
+						{:else}<p>
+								Select a recorded operation for this block. Attention, RoPE and gated GELU are
+								available in Transformer + Mamba2 blocks 6, 12, 18, 24, 30 and 36.
+							</p>{/if}
+					{:else}<p class="loading" role="status">Loading recorded block values…</p>{/if}
+				</div>
+				<footer>
+					Pretrained Zamba2-1.2B · complete 38-block forward pass · calculations use full saved
+					precision; numbers are rounded for display. <a
+						href={recordedAssetUrl(`${base}/traces/hybrid/manifest.json`)}
+						target="_blank"
+						rel="noreferrer">Trace provenance ↗</a
+					>
+				</footer>
+			</TokenInspectorLayout>
 		</div>
 	</div>
 </div>

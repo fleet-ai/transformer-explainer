@@ -1,8 +1,9 @@
 <script lang="ts">
+	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
+	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { createEventDispatcher } from 'svelte';
 	import { blockIdx, attentionHeadIdx, moeTokenIndex, moeExample, tokens } from '~/store';
 	import { t5Document, t5Example, t5Stack, t5Inspector } from '$lib/seq2seq/store';
-	import TraceSelector from '../moe/TraceSelector.svelte';
 	import type { T5Attention } from '$lib/seq2seq/types';
 	const dispatch = createEventDispatcher();
 	let selectedKey = 0,
@@ -80,201 +81,204 @@
 		>
 	</nav>
 	<div class="body">
-		{#if stage !== 'output'}<div class="selector-row">
-				<span>Token</span><TraceSelector
-					label="Token"
+		<TokenInspectorLayout showTokens={stage !== 'output'}
+			><svelte:fragment slot="tokens"
+				><TokenPicker
+					heading={stage === 'ffn' ? 'Token' : 'Query token'}
+					label="Query token"
 					options={tokenOptions}
 					bind:value={$moeTokenIndex}
-				/>
-			</div>{/if}
-		{#if stage === 'self' || stage === 'cross'}
-			<p class="explanation">
-				{stage === 'cross'
-					? 'Queries come from the decoder; keys and values come from the final encoder memory. Every source token is visible.'
-					: $t5Stack === 'encoder'
-						? 'Every encoder token attends to every source token. A learned relative-position bias is added to QKᵀ.'
-						: 'Decoder self-attention adds a learned relative-position bias and masks future positions.'}
-				T5 uses unscaled dot products and no RoPE.
-			</p>
-			<div class="selector-row">
-				<span>Key</span><TraceSelector
-					label="Key token"
-					options={keyOptions}
-					bind:value={selectedKey}
-				/>
-			</div>
-			<div class="equation">
-				<strong>Q[{token}] · K[{safeKey}]</strong> = {#each q.slice(0, 4) as value, i}<span
-						>({fmt(value)} × {fmt(k[i])}) +
-					</span>{/each}<span class="omitted"
-					>{fmt((dot ?? 0) - dotFirst)} <small>remaining 60 terms</small></span
-				>
-				≈ <b>{fmt(dot)}</b>
-			</div>
-			<div class="stat-grid">
-				<div>Recorded dot product<b>{fmt(dot)}</b></div>
-				<div>
-					{stage === 'cross' ? 'Position bias' : 'Relative bias + mask'}<b
-						>{Math.abs(bias) > 1e30 ? '−∞' : fmt(bias)}</b
+				/>{#if stage === 'self' || stage === 'cross'}<TokenPicker
+						heading="Key token"
+						label="Key token"
+						options={keyOptions}
+						bind:value={selectedKey}
+					/>{/if}</svelte:fragment
+			>
+			{#if stage === 'self' || stage === 'cross'}
+				<p class="explanation">
+					{stage === 'cross'
+						? 'Queries come from the decoder; keys and values come from the final encoder memory. Every source token is visible.'
+						: $t5Stack === 'encoder'
+							? 'Every encoder token attends to every source token. A learned relative-position bias is added to QKᵀ.'
+							: 'Decoder self-attention adds a learned relative-position bias and masks future positions.'}
+					T5 uses unscaled dot products and no RoPE.
+				</p>
+				<div class="equation">
+					<strong>Q[{token}] · K[{safeKey}]</strong> = {#each q.slice(0, 4) as value, i}<span
+							>({fmt(value)} × {fmt(k[i])}) +
+						</span>{/each}<span class="omitted"
+						>{fmt((dot ?? 0) - dotFirst)} <small>remaining 60 terms</small></span
+					>
+					≈ <b>{fmt(dot)}</b>
+				</div>
+				<div class="stat-grid">
+					<div>Recorded dot product<b>{fmt(dot)}</b></div>
+					<div>
+						{stage === 'cross' ? 'Position bias' : 'Relative bias + mask'}<b
+							>{Math.abs(bias) > 1e30 ? '−∞' : fmt(bias)}</b
+						>
+					</div>
+					<div>
+						Softmax over {keyTokens?.length} keys<b>{((probability ?? 0) * 100).toFixed(4)}%</b>
+					</div>
+				</div>
+				<div class="coordinate">
+					<label
+						>Output coordinate <input
+							type="number"
+							min="0"
+							max="63"
+							bind:value={coordinate}
+							on:change={() =>
+								(coordinate = Math.max(0, Math.min(63, Math.trunc(coordinate || 0))))}
+						/></label
+					><span
+						>Σ A[{token}, j] × V[j, {coordinate}] =
+						<b>{fmt(ops?.attentionContext?.[$attentionHeadIdx]?.[token]?.[coordinate])}</b></span
 					>
 				</div>
-				<div>
-					Softmax over {keyTokens?.length} keys<b>{((probability ?? 0) * 100).toFixed(4)}%</b>
-				</div>
-			</div>
-			<div class="coordinate">
-				<label
-					>Output coordinate <input
-						type="number"
-						min="0"
-						max="63"
-						bind:value={coordinate}
-						on:change={() => (coordinate = Math.max(0, Math.min(63, Math.trunc(coordinate || 0))))}
-					/></label
-				><span
-					>Σ A[{token}, j] × V[j, {coordinate}] =
-					<b>{fmt(ops?.attentionContext?.[$attentionHeadIdx]?.[token]?.[coordinate])}</b></span
-				>
-			</div>
-			<table>
-				<thead
-					><tr
-						><th>Key token</th><th>Attention A</th><th>Value V[{coordinate}]</th><th
-							>Contribution A × V</th
-						></tr
-					></thead
-				><tbody
-					>{#each keyTokens ?? [] as key, index}<tr
-							><td>{key.index}: {key.text}</td><td
-								>{fmt(ops?.probabilities[$attentionHeadIdx]?.[token]?.[index])}</td
-							><td>{fmt(ops?.value[$attentionHeadIdx]?.[index]?.[coordinate])}</td><td
-								>{fmt(
-									(ops?.probabilities[$attentionHeadIdx]?.[token]?.[index] ?? 0) *
-										(ops?.value[$attentionHeadIdx]?.[index]?.[coordinate] ?? 0)
-								)}</td
-							></tr
-						>{/each}</tbody
-				>
-			</table>
-			<p class="footnote">
-				All key contributions are shown. Eight 64D head outputs are concatenated and multiplied by
-				Wₒ to return a 512D residual update. Values come from the recorded forward pass.
-			</p>
-		{:else if stage === 'ffn' && ff}
-			<div class="flow">
-				<button class:chosen={projection === 'up'} on:click={() => (projection = 'up')}
-					>Wᵢ × x · 512 → 2048</button
-				><span>→</span><button
-					class:chosen={projection === 'relu'}
-					on:click={() => (projection = 'relu')}>ReLU: max(0, u)</button
-				><span>→</span><button
-					class:chosen={projection === 'down'}
-					on:click={() => (projection = 'down')}>Wₒ × h · 2048 → 512</button
-				>
-			</div>
-			{#if projection === 'relu'}<table>
+				<table>
 					<thead
-						><tr><th>Coordinate</th><th>Up projection u</th><th>ReLU(u) = max(0, u)</th></tr></thead
+						><tr
+							><th>Key token</th><th>Attention A</th><th>Value V[{coordinate}]</th><th
+								>Contribution A × V</th
+							></tr
+						></thead
 					><tbody
-						>{#each ff.activation as value, i}<tr
-								><td>{i}</td><td>{fmt(ff.up.output[i])}</td><td>{fmt(value)}</td></tr
+						>{#each keyTokens ?? [] as key, index}<tr
+								><td>{key.index}: {key.text}</td><td
+									>{fmt(ops?.probabilities[$attentionHeadIdx]?.[token]?.[index])}</td
+								><td>{fmt(ops?.value[$attentionHeadIdx]?.[index]?.[coordinate])}</td><td
+									>{fmt(
+										(ops?.probabilities[$attentionHeadIdx]?.[token]?.[index] ?? 0) *
+											(ops?.value[$attentionHeadIdx]?.[index]?.[coordinate] ?? 0)
+									)}</td
+								></tr
 							>{/each}</tbody
 					>
 				</table>
 				<p class="footnote">
-					First 4 of 2,048 recorded intermediate coordinates. This is a dense ReLU network: all
-					intermediate units are evaluated for every token.
+					All key contributions are shown. Eight 64D head outputs are concatenated and multiplied by
+					Wₒ to return a 512D residual update. Values come from the recorded forward pass.
 				</p>
-			{:else if operation && input}<h3>
-					{projection === 'up' ? 'Up' : 'Down'} projection · {projection === 'up'
-						? '2048 × 512'
-						: '512 × 2048'} weights
-				</h3>
-				<table class="weights">
-					<thead
-						><tr
-							><th>Output</th>{#each [0, 1, 2, 3] as i}<th>W[{i}] × x[{i}]</th>{/each}<th
-								>Remaining {projection === 'up' ? 508 : 2044} terms</th
-							><th>Recorded result</th></tr
-						></thead
-					><tbody
-						>{#each operation.weights as weights, i}<tr
-								class:active={row === i}
-								on:click={() => (row = i)}
-								>{#each [i] as output}<td
-										><button aria-label={`Select output ${i}`} on:click={() => (row = i)}
-											>{i}</button
-										></td
-									>{/each}{#each weights as weight, j}<td
-										>{fmt(weight)}<small>× {fmt(input[j])}</small></td
-									>{/each}<td>{fmt(operation.omittedContribution[i])}</td><td
-									><b>{fmt(operation.output[i])}</b></td
-								></tr
-							>{/each}</tbody
+			{:else if stage === 'ffn' && ff}
+				<div class="flow">
+					<button class:chosen={projection === 'up'} on:click={() => (projection = 'up')}
+						>Wᵢ × x · 512 → 2048</button
+					><span>→</span><button
+						class:chosen={projection === 'relu'}
+						on:click={() => (projection = 'relu')}>ReLU: max(0, u)</button
+					><span>→</span><button
+						class:chosen={projection === 'down'}
+						on:click={() => (projection = 'down')}>Wₒ × h · 2048 → 512</button
 					>
-				</table>
+				</div>
+				{#if projection === 'relu'}<table>
+						<thead
+							><tr><th>Coordinate</th><th>Up projection u</th><th>ReLU(u) = max(0, u)</th></tr
+							></thead
+						><tbody
+							>{#each ff.activation as value, i}<tr
+									><td>{i}</td><td>{fmt(ff.up.output[i])}</td><td>{fmt(value)}</td></tr
+								>{/each}</tbody
+						>
+					</table>
+					<p class="footnote">
+						First 4 of 2,048 recorded intermediate coordinates. This is a dense ReLU network: all
+						intermediate units are evaluated for every token.
+					</p>
+				{:else if operation && input}<h3>
+						{projection === 'up' ? 'Up' : 'Down'} projection · {projection === 'up'
+							? '2048 × 512'
+							: '512 × 2048'} weights
+					</h3>
+					<table class="weights">
+						<thead
+							><tr
+								><th>Output</th>{#each [0, 1, 2, 3] as i}<th>W[{i}] × x[{i}]</th>{/each}<th
+									>Remaining {projection === 'up' ? 508 : 2044} terms</th
+								><th>Recorded result</th></tr
+							></thead
+						><tbody
+							>{#each operation.weights as weights, i}<tr
+									class:active={row === i}
+									on:click={() => (row = i)}
+									>{#each [i] as output}<td
+											><button aria-label={`Select output ${i}`} on:click={() => (row = i)}
+												>{i}</button
+											></td
+										>{/each}{#each weights as weight, j}<td
+											>{fmt(weight)}<small>× {fmt(input[j])}</small></td
+										>{/each}<td>{fmt(operation.omittedContribution[i])}</td><td
+										><b>{fmt(operation.output[i])}</b></td
+									></tr
+								>{/each}</tbody
+						>
+					</table>
+					<div class="equation">
+						y[{row}] = {#each operation.weights[row] as weight, i}<span
+								>({fmt(weight)} × {fmt(input[i])}) +
+							</span>{/each}{fmt(operation.omittedContribution[row])} ≈
+						<b>{fmt(operation.output[row])}</b>
+					</div>{/if}
+				<div class="residual">
+					<h3>Residual stream · first four coordinates</h3>
+					<table>
+						<thead
+							><tr
+								><th>Coordinate</th><th>Feed-forward input after RMSNorm</th><th
+									>Feed-forward output</th
+								><th>Block output after residual addition</th></tr
+							></thead
+						><tbody
+							>{#each ff.inputPreview as value, i}<tr
+									><td>{i}</td><td>{fmt(value)}</td><td>{fmt(ff.down.output[i])}</td><td
+										>{fmt(layer?.blockOutputPreview?.[token]?.[i])}</td
+									></tr
+								>{/each}</tbody
+						>
+					</table>
+				</div>
+			{:else if stage === 'output' && example}
+				<p class="explanation">
+					The full decoder generated <b>{example.translation}</b> from the source prompt. These logits
+					predict the next token after that generated prefix. The tied vocabulary matrix scores all 32,128
+					tokens.
+				</p>
 				<div class="equation">
-					y[{row}] = {#each operation.weights[row] as weight, i}<span
-							>({fmt(weight)} × {fmt(input[i])}) +
-						</span>{/each}{fmt(operation.omittedContribution[row])} ≈
-					<b>{fmt(operation.output[row])}</b>
-				</div>{/if}
-			<div class="residual">
-				<h3>Residual stream · first four coordinates</h3>
+					Final RMSNorm hidden state × 1/√512 ({fmt(example.lmHead.scale)}) → scaled 512D vector →
+					vocabulary projection → softmax.
+				</div>
 				<table>
 					<thead
 						><tr
-							><th>Coordinate</th><th>Feed-forward input after RMSNorm</th><th
-								>Feed-forward output</th
-							><th>Block output after residual addition</th></tr
+							><th>Candidate</th>{#each [0, 1, 2, 3] as i}<th>W[{i}] × x[{i}]</th>{/each}<th
+								>Remaining 508</th
+							><th>Recorded logit</th></tr
 						></thead
 					><tbody
-						>{#each ff.inputPreview as value, i}<tr
-								><td>{i}</td><td>{fmt(value)}</td><td>{fmt(ff.down.output[i])}</td><td
-									>{fmt(layer?.blockOutputPreview?.[token]?.[i])}</td
+						>{#each example.lmHead.candidateLabels as label, i}<tr
+								><td>{label}</td>{#each example.lmHead.weights[i] as weight, j}<td
+										>{fmt(weight)}<small>× {fmt(example.lmHead.inputPreview[j])}</small></td
+									>{/each}<td>{fmt(example.lmHead.omittedContribution[i])}</td><td
+									><b>{fmt(example.lmHead.logits[i])}</b></td
 								></tr
 							>{/each}</tbody
 					>
 				</table>
-			</div>
-		{:else if stage === 'output' && example}
-			<p class="explanation">
-				The full decoder generated <b>{example.translation}</b> from the source prompt. These logits
-				predict the next token after that generated prefix. The tied vocabulary matrix scores all 32,128
-				tokens.
-			</p>
-			<div class="equation">
-				Final RMSNorm hidden state × 1/√512 ({fmt(example.lmHead.scale)}) → scaled 512D vector →
-				vocabulary projection → softmax.
-			</div>
-			<table>
-				<thead
-					><tr
-						><th>Candidate</th>{#each [0, 1, 2, 3] as i}<th>W[{i}] × x[{i}]</th>{/each}<th
-							>Remaining 508</th
-						><th>Recorded logit</th></tr
-					></thead
-				><tbody
-					>{#each example.lmHead.candidateLabels as label, i}<tr
-							><td>{label}</td>{#each example.lmHead.weights[i] as weight, j}<td
-									>{fmt(weight)}<small>× {fmt(example.lmHead.inputPreview[j])}</small></td
-								>{/each}<td>{fmt(example.lmHead.omittedContribution[i])}</td><td
-								><b>{fmt(example.lmHead.logits[i])}</b></td
-							></tr
-						>{/each}</tbody
-				>
-			</table>
-			<p class="footnote">
-				Four vocabulary rows are shown with the exact recorded contribution of the other 508
-				coordinates. The probability sidebar uses the complete vocabulary logits.
-			</p>
-		{/if}
-		<footer>
-			Recorded from <a href={$t5Document?.model.url} target="_blank" rel="noreferrer"
-				>google-t5/t5-small</a
-			> · all 6 encoder + 6 decoder blocks · all 8 heads. Rounded for display; actual tensors retain
-			float32 precision.
-		</footer>
+				<p class="footnote">
+					Four vocabulary rows are shown with the exact recorded contribution of the other 508
+					coordinates. The probability sidebar uses the complete vocabulary logits.
+				</p>
+			{/if}
+			<footer>
+				Recorded from <a href={$t5Document?.model.url} target="_blank" rel="noreferrer"
+					>google-t5/t5-small</a
+				> · all 6 encoder + 6 decoder blocks · all 8 heads. Rounded for display; actual tensors retain
+				float32 precision.
+			</footer>
+		</TokenInspectorLayout>
 	</div>
 </section>
 
@@ -346,20 +350,6 @@
 		padding: 14px 24px 20px;
 		overflow: auto;
 		min-height: 0;
-	}
-	.selector-row {
-		display: flex;
-		gap: 12px;
-		align-items: center;
-		margin-bottom: 10px;
-	}
-	.selector-row > span {
-		width: 38px;
-		flex-shrink: 0;
-	}
-	.selector-row :global(.selector) {
-		min-width: 0;
-		flex: 1;
 	}
 	.explanation {
 		margin: 10px 0 14px;

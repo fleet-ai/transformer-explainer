@@ -1,4 +1,6 @@
 <script lang="ts">
+	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
+	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import {
@@ -13,7 +15,6 @@
 	import { headMapping, loadAttentionOperations } from '$lib/moe/attention';
 	import { traceAssetUrl } from '$lib/moe/live';
 	import { tokenLabel } from '$lib/moe/format';
-	import TraceSelector from '../moe/TraceSelector.svelte';
 	import Katex from '~/utils/Katex.svelte';
 	let panel: HTMLDivElement;
 	let error = '';
@@ -184,50 +185,51 @@
 		<details class="recorded-details">
 			<summary>Inspect recorded Q · K · V values</summary>
 			<div class="recorded-body">
-				<div class="token-row">
-					<span>Token</span><TraceSelector
+				<TokenInspectorLayout
+					><TokenPicker
+						slot="tokens"
 						label="Projection token"
 						options={tokenOptions}
 						bind:value={$moeTokenIndex}
 					/>
-				</div>
-				<div class="recording-heading">
-					<h3>Recorded outputs · before RoPE</h3>
-					<div class="coordinates">
-						<span>{coordinate}–{Math.min(coordinate + 3, headSize - 1)}</span><button
-							aria-label="Previous projection coordinates"
-							disabled={coordinate === 0}
-							on:click={() => (coordinate = Math.max(0, coordinate - 4))}>‹</button
-						><button
-							aria-label="Next projection coordinates"
-							disabled={coordinate + 4 >= headSize}
-							on:click={() => (coordinate = Math.min(headSize - 4, coordinate + 4))}>›</button
+					<div class="recording-heading">
+						<h3>Recorded outputs · before RoPE</h3>
+						<div class="coordinates">
+							<span>{coordinate}–{Math.min(coordinate + 3, headSize - 1)}</span><button
+								aria-label="Previous projection coordinates"
+								disabled={coordinate === 0}
+								on:click={() => (coordinate = Math.max(0, coordinate - 4))}>‹</button
+							><button
+								aria-label="Next projection coordinates"
+								disabled={coordinate + 4 >= headSize}
+								on:click={() => (coordinate = Math.min(headSize - 4, coordinate + 4))}>›</button
+							>
+						</div>
+					</div>
+					{#if loading}<p role="status">Loading recorded projections…</p>{:else if error}<p
+							role="alert"
 						>
-					</div>
-				</div>
-				{#if loading}<p role="status">Loading recorded projections…</p>{:else if error}<p
-						role="alert"
-					>
-						{error} <button on:click={() => $moeExample && load($moeExample.id)}>Retry</button>
-					</p>{:else if layer}
-					<div class="tensor-grid">
-						{#each vectors as vector}<section class={vector.color}>
-								<h4>{vector.label}</h4>
-								{#each coordinates as index}<div class="value-row">
-										<span>[{index}]</span><b>{vector.values?.[index]?.toFixed(6) ?? '—'}</b>
-									</div>{/each}
-							</section>{/each}
-					</div>
-				{/if}
-				<p class="footnote">
-					Weights are shown by shape, not as recorded cells. The values above are captured
-					projection outputs, indexed by head; splitting into heads does not change them. V bypasses
-					RoPE. <a
-						href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
-						target="_blank"
-						rel="noreferrer">Trace JSON ↗</a
-					>
-				</p>
+							{error} <button on:click={() => $moeExample && load($moeExample.id)}>Retry</button>
+						</p>{:else if layer}
+						<div class="tensor-grid">
+							{#each vectors as vector}<section class={vector.color}>
+									<h4>{vector.label}</h4>
+									{#each coordinates as index}<div class="value-row">
+											<span>[{index}]</span><b>{vector.values?.[index]?.toFixed(6) ?? '—'}</b>
+										</div>{/each}
+								</section>{/each}
+						</div>
+					{/if}
+					<p class="footnote">
+						Weights are shown by shape, not as recorded cells. The values above are captured
+						projection outputs, indexed by head; splitting into heads does not change them. V
+						bypasses RoPE. <a
+							href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
+							target="_blank"
+							rel="noreferrer">Trace JSON ↗</a
+						>
+					</p>
+				</TokenInspectorLayout>
 			</div>
 		</details>
 	</div>
@@ -307,12 +309,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
-	}
-	.token-row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		min-width: 0;
 	}
 	.description {
 		margin: 0;

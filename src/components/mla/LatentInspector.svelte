@@ -1,4 +1,6 @@
 <script lang="ts">
+	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
+	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import {
@@ -11,7 +13,6 @@
 	} from '~/store';
 	import { loadAttentionOperations } from '$lib/moe/attention';
 	import { traceAssetUrl } from '$lib/moe/live';
-	import TraceSelector from '../moe/TraceSelector.svelte';
 	import ProjectionOperation from '../common/ProjectionOperation.svelte';
 	import { tokenLabel } from '$lib/moe/format';
 	export let stage = 'compression';
@@ -203,107 +204,112 @@
 		>
 	</header>
 	<div class="inspector-body">
-		<div class="token-row">
-			<span>Token</span><TraceSelector
+		<TokenInspectorLayout gap="16px"
+			><TokenPicker
+				slot="tokens"
 				label="MLA token"
 				options={tokenOptions}
 				bind:value={$moeTokenIndex}
 			/>
-		</div>
-		<div class="stage-tabs" aria-label="MLA operation">
-			{#each stages as item}<button
-					class:chosen={stage === item.id}
-					aria-pressed={stage === item.id}
-					on:click={() => {
-						stage = item.id;
-						coordinate = 0;
-					}}>{item.label}</button
-				>{/each}
-		</div>
-		{#if loading}<p role="status">Loading recorded MLA tensors…</p>{:else if error}<p role="alert">
-				{error}
-				<button class="text-button" on:click={() => $moeExample && load($moeExample.id)}
-					>Retry</button
+			<div class="stage-tabs" aria-label="MLA operation">
+				{#each stages as item}<button
+						class:chosen={stage === item.id}
+						aria-pressed={stage === item.id}
+						on:click={() => {
+							stage = item.id;
+							coordinate = 0;
+						}}>{item.label}</button
+					>{/each}
+			</div>
+			{#if loading}<p role="status">Loading recorded MLA tensors…</p>{:else if error}<p
+					role="alert"
 				>
-			</p>{:else if layer}
-			<div class="explanation">
-				{#if projectionRows.length}<ProjectionOperation rows={projectionRows} />{/if}
-				{#if stage === 'query'}
-					<p>
-						Each head splits into {model?.contentKeySize} content coordinates and {model?.rotarySize}
-						positional coordinates. Only the positional branch receives RoPE. Concatenating both branches
-						gives a {model?.attentionHeadSize}D query.
-					</p>
-					<button class="text-button" on:click={() => dispatch('rope')}
-						>Inspect recorded RoPE rotations →</button
+					{error}
+					<button class="text-button" on:click={() => $moeExample && load($moeExample.id)}
+						>Retry</button
 					>
-				{:else if stage === 'compression'}
-					<p>
-						A {model?.hiddenSize}D hidden vector produces a {model?.kvLatentSize}D latent and a
-						separate {model?.rotarySize}D rotary key. RMSNorm normalizes the latent. The cache
-						stores the normalized latent and rotated key:
-						<b>{(model?.kvLatentSize ?? 512) + (model?.rotarySize ?? 64)} coordinates per token</b> shared
-						by every head.
-					</p>
-					<button class="text-button" on:click={() => dispatch('rope')}
-						>Inspect the shared rotary key →</button
-					>
-				{:else if stage === 'expansion'}
-					<p>
-						Each head has its own learned expansion from the same {model?.kvLatentSize}D latent into {model?.contentKeySize}
-						content-key and {model?.valueHeadSize} value coordinates. The {model?.rotarySize}D
-						rotated key is shared across all heads. Content keys and values bypass RoPE.
-					</p>
-				{:else}
-					<h3>
-						o<sub>h</sub> = softmax((q<sup>C</sup>k<sup>Cᵀ</sup> + q<sup>R</sup>k<sup>Rᵀ</sup>) ×
-						scale + mask) · V<sub>h</sub>
-					</h3>
-					<p>
-						Content and positional dot products combine before softmax. Each head returns {model?.valueHeadSize}
-						coordinates. The {model?.attentionHeads} heads concatenate and pass through W<sup>O</sup
+				</p>{:else if layer}
+				<div class="explanation">
+					{#if projectionRows.length}<ProjectionOperation rows={projectionRows} />{/if}
+					{#if stage === 'query'}
+						<p>
+							Each head splits into {model?.contentKeySize} content coordinates and {model?.rotarySize}
+							positional coordinates. Only the positional branch receives RoPE. Concatenating both branches
+							gives a {model?.attentionHeadSize}D query.
+						</p>
+						<button class="text-button" on:click={() => dispatch('rope')}
+							>Inspect recorded RoPE rotations →</button
 						>
-						to {model?.hiddenSize}D, followed by residual addition.
-					</p>
-					<button class="text-button" on:click={() => dispatch('attention')}
-						>Inspect scores, causal mask, and softmax →</button
-					>
-				{/if}
-			</div>
-			<div class="recording-heading">
-				<h3>Recorded values · {selected.label}</h3>
-				<div class="coordinates">
-					<span>Coordinates {coordinate}–{Math.min(coordinate + 3, maximum)}</span><button
-						aria-label="Previous MLA coordinates"
-						disabled={coordinate === 0}
-						on:click={() => (coordinate = Math.max(0, coordinate - 4))}>‹</button
-					><button
-						aria-label="Next MLA coordinates"
-						disabled={coordinate + 4 > maximum}
-						on:click={() => (coordinate = Math.min(maximum, coordinate + 4))}>›</button
-					>
+					{:else if stage === 'compression'}
+						<p>
+							A {model?.hiddenSize}D hidden vector produces a {model?.kvLatentSize}D latent and a
+							separate {model?.rotarySize}D rotary key. RMSNorm normalizes the latent. The cache
+							stores the normalized latent and rotated key:
+							<b>{(model?.kvLatentSize ?? 512) + (model?.rotarySize ?? 64)} coordinates per token</b
+							> shared by every head.
+						</p>
+						<button class="text-button" on:click={() => dispatch('rope')}
+							>Inspect the shared rotary key →</button
+						>
+					{:else if stage === 'expansion'}
+						<p>
+							Each head has its own learned expansion from the same {model?.kvLatentSize}D latent
+							into {model?.contentKeySize}
+							content-key and {model?.valueHeadSize} value coordinates. The {model?.rotarySize}D
+							rotated key is shared across all heads. Content keys and values bypass RoPE.
+						</p>
+					{:else}
+						<h3>
+							o<sub>h</sub> = softmax((q<sup>C</sup>k<sup>Cᵀ</sup> + q<sup>R</sup>k<sup>Rᵀ</sup>) ×
+							scale + mask) · V<sub>h</sub>
+						</h3>
+						<p>
+							Content and positional dot products combine before softmax. Each head returns {model?.valueHeadSize}
+							coordinates. The {model?.attentionHeads} heads concatenate and pass through W<sup
+								>O</sup
+							>
+							to {model?.hiddenSize}D, followed by residual addition.
+						</p>
+						<button class="text-button" on:click={() => dispatch('attention')}
+							>Inspect scores, causal mask, and softmax →</button
+						>
+					{/if}
 				</div>
-			</div>
-			<div class="tensor-grid" style={`--columns:${vectors.length}`}>
-				{#each vectors as vector}<section class={vector.color}>
-						<h4>{vector.label}</h4>
-						<small>{vector.values?.length ?? 0} recorded coordinates</small
-						>{#each coords as index}<div class="value-row">
-								<span>[{index}]</span><b>{number(vector.values?.[index])}</b>
-							</div>{/each}
-					</section>{/each}
-			</div>
-			<p class="footnote">
-				Matrix boxes show shapes; values below each stage are recorded tensors. All {model?.numLayers}
-				transformer blocks execute before the vocabulary prediction. The diagram reuses this block's
-				recorded tensors; changing a head or token selects a different slice of that computation.
-				<a
-					href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
-					target="_blank"
-					rel="noreferrer">Trace JSON ↗</a
-				>
-			</p>
-		{/if}
+				<div class="recording-heading">
+					<h3>Recorded values · {selected.label}</h3>
+					<div class="coordinates">
+						<span>Coordinates {coordinate}–{Math.min(coordinate + 3, maximum)}</span><button
+							aria-label="Previous MLA coordinates"
+							disabled={coordinate === 0}
+							on:click={() => (coordinate = Math.max(0, coordinate - 4))}>‹</button
+						><button
+							aria-label="Next MLA coordinates"
+							disabled={coordinate + 4 > maximum}
+							on:click={() => (coordinate = Math.min(maximum, coordinate + 4))}>›</button
+						>
+					</div>
+				</div>
+				<div class="tensor-grid" style={`--columns:${vectors.length}`}>
+					{#each vectors as vector}<section class={vector.color}>
+							<h4>{vector.label}</h4>
+							<small>{vector.values?.length ?? 0} recorded coordinates</small
+							>{#each coords as index}<div class="value-row">
+									<span>[{index}]</span><b>{number(vector.values?.[index])}</b>
+								</div>{/each}
+						</section>{/each}
+				</div>
+				<p class="footnote">
+					Matrix boxes show shapes; values below each stage are recorded tensors. All {model?.numLayers}
+					transformer blocks execute before the vocabulary prediction. The diagram reuses this block's
+					recorded tensors; changing a head or token selects a different slice of that computation.
+					<a
+						href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
+						target="_blank"
+						rel="noreferrer">Trace JSON ↗</a
+					>
+				</p>
+			{/if}
+		</TokenInspectorLayout>
 	</div>
 </div>
 
@@ -369,12 +375,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-	}
-	.token-row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		min-width: 0;
 	}
 	.stage-tabs {
 		display: grid;
