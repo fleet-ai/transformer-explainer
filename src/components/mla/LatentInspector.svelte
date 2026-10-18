@@ -1,5 +1,5 @@
 <script lang="ts">
-	import OperationFlow from '../common/OperationFlow.svelte';
+	import LatentProjectionFlow from './LatentProjectionFlow.svelte';
 	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
 	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { createEventDispatcher, onMount } from 'svelte';
@@ -17,7 +17,7 @@
 	import ProjectionOperation from '../common/ProjectionOperation.svelte';
 	import { tokenLabel } from '$lib/moe/format';
 	export let stage = 'compression';
-	const dispatch = createEventDispatcher<{ close: void; rope: void; attention: void }>();
+	const dispatch = createEventDispatcher<{ close: void; rope: 'query' | 'key'; attention: void }>();
 	const stages = [
 		{ id: 'query', label: 'Query projection' },
 		{ id: 'compression', label: 'KV compression' },
@@ -212,17 +212,23 @@
 		>
 	</header>
 	<div class="inspector-body">
-		<TokenInspectorLayout gap="16px"
+		<TokenInspectorLayout gap="10px"
 			><TokenPicker
 				slot="tokens"
 				label="MLA token"
 				options={tokenOptions}
 				bind:value={$moeTokenIndex}
 			/>
-			<OperationFlow
-				items={stages}
+			<LatentProjectionFlow
 				selected={stage}
-				label="MLA operations"
+				hiddenSize={model?.hiddenSize ?? 2048}
+				heads={model?.attentionHeads ?? 16}
+				contentSize={model?.contentKeySize ?? 128}
+				rotarySize={model?.rotarySize ?? 64}
+				latentSize={model?.kvLatentSize ?? 512}
+				valueSize={model?.valueHeadSize ?? 128}
+				on:rope={() => dispatch('rope', 'query')}
+				on:attention={() => dispatch('attention')}
 				on:select={(e) => {
 					stage = e.detail;
 					coordinate = 0;
@@ -244,9 +250,6 @@
 							positional coordinates. Only the positional branch receives RoPE. Concatenating both branches
 							gives a {model?.attentionHeadSize}D query.
 						</p>
-						<button class="text-button" on:click={() => dispatch('rope')}
-							>Inspect recorded RoPE rotations →</button
-						>
 					{:else if stage === 'compression'}
 						<p>
 							A {model?.hiddenSize}D hidden vector produces a {model?.kvLatentSize}D latent and a
@@ -255,9 +258,6 @@
 							<b>{(model?.kvLatentSize ?? 512) + (model?.rotarySize ?? 64)} coordinates per token</b
 							> shared by every head.
 						</p>
-						<button class="text-button" on:click={() => dispatch('rope')}
-							>Inspect the shared rotary key →</button
-						>
 					{:else if stage === 'expansion'}
 						<p>
 							Each head has its own learned expansion from the same {model?.kvLatentSize}D latent
@@ -266,10 +266,6 @@
 							rotated key is shared across all heads. Content keys and values bypass RoPE.
 						</p>
 					{:else}
-						<h3>
-							o<sub>h</sub> = softmax((q<sup>C</sup>k<sup>Cᵀ</sup> + q<sup>R</sup>k<sup>Rᵀ</sup>) ×
-							scale + mask) · V<sub>h</sub>
-						</h3>
 						<p>
 							Content and positional dot products combine before softmax. Each head returns {model?.valueHeadSize}
 							coordinates. The {model?.attentionHeads} heads concatenate and pass through W<sup
@@ -277,9 +273,6 @@
 							>
 							to {model?.hiddenSize}D, followed by residual addition.
 						</p>
-						<button class="text-button" on:click={() => dispatch('attention')}
-							>Inspect scores, causal mask, and softmax →</button
-						>
 					{/if}
 				</div>
 				<details class="recorded-details">
@@ -309,9 +302,8 @@
 					</div>
 				</details>
 				<p class="footnote">
-					Matrix boxes show shapes; values below each stage are recorded tensors. All {model?.numLayers}
-					transformer blocks execute before the vocabulary prediction. The diagram reuses this block's
-					recorded tensors; changing a head or token selects a different slice of that computation.
+					Full-model recording · {model?.numLayers} blocks ·
+
 					<a
 						href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
 						target="_blank"
@@ -328,8 +320,8 @@
 		position: fixed;
 		right: 16px;
 		bottom: 16px;
-		width: min(1080px, calc(100vw - 32px));
-		height: min(580px, calc(100dvh - 32px));
+		width: min(1180px, calc(100vw - 32px));
+		max-height: calc(100dvh - 32px);
 		z-index: 1200;
 		display: flex;
 		flex-direction: column;
@@ -386,40 +378,11 @@
 		flex-direction: column;
 		gap: 16px;
 	}
-	.stage-tabs {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		padding: 4px;
-		border: 1px solid #e9dff0;
-		border-radius: 6px;
-		background: #fcfaff;
-	}
-	.stage-tabs button {
-		padding: 9px 4px;
-		color: #89729d;
-		border: 1px solid transparent;
-		border-radius: 4px;
-		background: transparent;
-		font: inherit;
-		cursor: pointer;
-	}
-	.stage-tabs .chosen {
-		background: #f1e6f8;
-		border-color: #ddc7eb;
-		color: #81549f;
-	}
 	.explanation {
-		min-height: 130px;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-	}
-	.explanation h3 {
-		font:
-			18px Georgia,
-			serif;
-		color: #805a9b;
-		margin: 0 0 6px;
 	}
 	.explanation p {
 		margin: 0 0 6px;
@@ -536,9 +499,6 @@
 		}
 		.value-row {
 			padding: 6px 8px;
-		}
-		.stage-tabs button {
-			padding: 6px 4px;
 		}
 	}
 </style>

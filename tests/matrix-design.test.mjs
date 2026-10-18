@@ -5,10 +5,10 @@ import { render } from 'svelte/server';
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 const directory = await mkdtemp(new URL('./.matrix-render-', import.meta.url));
-after(() => rm(directory, { recursive: true, force: true }));
-async function component(name) {
+after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+async function component(name, folder = 'common') {
 	const source = await readFile(
-		new URL(`../src/components/common/${name}.svelte`, import.meta.url),
+		new URL(`../src/components/${folder}/${name}.svelte`, import.meta.url),
 		'utf8'
 	);
 	const file = `${directory}/${name}.mjs`;
@@ -72,4 +72,31 @@ test('Dense-style flow omits the gate and exposes GELU', () => {
 	assert.doesNotMatch(body, /Inspect gate/);
 	assert.match(body, /Inspect GELU operation/);
 	assert.match(body, /3072/);
+});
+
+const LatentFlow = await component('LatentProjectionFlow', 'mla');
+test('MLA flow renders one query and KV projection with a shared RoPE inspector control', () => {
+	const { body } = render(LatentFlow, { props: { selected: 'compression' } });
+	assert.equal((body.match(/data-node="query"/g) ?? []).length, 1);
+	assert.equal((body.match(/data-node="compression"/g) ?? []).length, 1);
+	assert.equal((body.match(/RoPE · Rotate Q and K/g) ?? []).length, 1);
+	assert.match(body, /Q content bypasses RoPE/);
+	assert.match(body, /16 × \(128 \+ 64\)/);
+	assert.match(body, /Latent 512 \+ rotary K 64/);
+	assert.match(body, /data-node="compression" aria-pressed="true"/);
+});
+test('MLA flow derives dimensions from the selected model', () => {
+	const { body } = render(LatentFlow, {
+		props: {
+			hiddenSize: 4096,
+			heads: 32,
+			latentSize: 256,
+			rotarySize: 32,
+			contentSize: 64,
+			valueSize: 64
+		}
+	});
+	assert.match(body, /32 × \(64 \+ 32\)/);
+	assert.match(body, /Latent 256 \+ rotary K 32/);
+	assert.match(body, /32 × 64 → 4096D/);
 });
