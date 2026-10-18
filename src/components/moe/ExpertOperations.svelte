@@ -128,24 +128,24 @@
 	}
 	.heading span {
 		color: #927b9f;
-		font-size: 11px;
+		font-size: 13px;
 	}
 	.operation-detail {
 		min-height: 0;
 		overflow: auto;
-		padding: 0 2px 8px;
+		padding: 0 2px 2px;
 	}
 	h3 {
 		font:
-			17px Georgia,
+			19px Georgia,
 			serif;
 		margin: 0 0 10px;
 	}
 	details {
 		border-top: 1px solid #ede5f4;
-		margin-top: 12px;
+		margin-top: 8px;
 		padding-top: 10px;
-		font-size: 11px;
+		font-size: 13px;
 	}
 	summary {
 		cursor: pointer;
@@ -154,7 +154,7 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		margin-top: 12px;
+		margin-top: 8px;
 	}
 	td,
 	th {

@@ -227,8 +227,8 @@
 		right: 16px;
 		bottom: 16px;
 		width: min(1080px, calc(100vw - 32px));
-		height: min(680px, calc(100vh - 32px));
-		height: min(680px, calc(100dvh - 32px));
+		height: min(600px, calc(100vh - 32px));
+		height: min(600px, calc(100dvh - 32px));
 		box-sizing: border-box;
 		overflow: hidden;
 		z-index: 1200;
@@ -259,7 +259,7 @@
 	}
 	h2 {
 		margin: 0;
-		font-size: 17px;
+		font-size: 20px;
 		font-weight: 600;
 		color: #624685;
 	}

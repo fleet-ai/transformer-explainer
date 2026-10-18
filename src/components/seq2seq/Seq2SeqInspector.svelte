@@ -328,7 +328,7 @@
 		right: 22px;
 		bottom: 22px;
 		width: min(1120px, calc(100vw - 44px));
-		height: min(740px, calc(100vh - 44px));
+		height: min(640px, calc(100vh - 44px));
 		display: flex;
 		flex-direction: column;
 		background: #fff;

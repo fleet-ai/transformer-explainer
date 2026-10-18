@@ -8,8 +8,9 @@
 	export let token = 'x';
 	const dispatch = createEventDispatcher<{ select: string }>();
 	let width = 700;
-	$: height = gated ? 172 : 120;
-	$: left = 55;
+	$: height = gated ? 164 : 112;
+	$: left = 60;
+	$: boxWidth = Math.max(60, Math.min(100, width * 0.18));
 	$: up = width * 0.31;
 	$: act = width * 0.51;
 	$: product = width * 0.7;
@@ -70,23 +71,23 @@
 					}
 				}}
 			/>{/each}
-		<rect x={left - 4} y={mid - 13} width="8" height="26" /><rect
+		<rect x={left - 4} y={mid - 18} width="8" height="36" /><rect
 			x={right - 4}
-			y={mid - 13}
+			y={mid - 18}
 			width="8"
-			height="26"
+			height="36"
 		/>
 		<text x={left - 9} y={mid + 4} text-anchor="end"
 			>{token.length > 7 ? token.slice(0, 6) + '…' : token}</text
 		>
-		<text x={left} y={mid + 34} text-anchor="middle">{hiddenSize}</text>
-		<text x={up} y="25" text-anchor="middle">{intermediateSize}</text>
-		<text x={right} y={mid + 34} text-anchor="end">{hiddenSize}</text>
+		<text x={left} y={mid + 40} text-anchor="middle">{hiddenSize}</text>
+		<text x={up} y="21" text-anchor="middle">{intermediateSize}</text>
+		<text x={right} y={mid + 40} text-anchor="end">{hiddenSize}</text>
 		{#each boxes as box}<foreignObject
-				x={box.x - (box.id === 'product' ? 14 : 30)}
-				y={box.y - 16}
-				width={box.id === 'product' ? 28 : 60}
-				height="34"
+				x={box.x - (box.id === 'product' ? 22 : boxWidth / 2)}
+				y={box.y - 22}
+				width={box.id === 'product' ? 44 : boxWidth}
+				height="46"
 				><button
 					type="button"
 					aria-label={`Inspect ${box.id === 'activation' ? activation : box.id} operation`}
@@ -101,13 +102,13 @@
 	.feed-forward-flow {
 		width: 100%;
 		min-width: 0;
-		margin: 8px 0;
+		margin: 4px 0;
 	}
 	.hint {
 		font:
-			11px Arial,
+			14px Arial,
 			sans-serif;
-		color: #927c9f;
+		color: #7e668d;
 		margin-bottom: 4px;
 	}
 	svg {
@@ -117,14 +118,14 @@
 	}
 	path {
 		fill: none;
-		stroke: #e9e4f5;
-		stroke-width: 17;
+		stroke: #ded4ee;
+		stroke-width: 28;
 		pointer-events: bounding-box;
 		cursor: pointer;
 	}
 	path.chosen,
 	path:hover {
-		stroke: #d3b9e7;
+		stroke: #bf99da;
 	}
 	path:focus-visible {
 		outline: 2px solid #a779c8;
@@ -134,25 +135,25 @@
 	}
 	text {
 		font:
-			11px Arial,
+			14px Arial,
 			sans-serif;
-		fill: #887299;
+		fill: #725687;
 	}
 	button {
 		width: 100%;
-		height: 32px;
+		height: 44px;
 		padding: 0 2px;
-		border: 1px solid #ded0eb;
+		border: 1.5px solid #cbb4df;
 		border-radius: 4px;
 		background: #faf7fd;
-		color: #826397;
+		color: #694684;
 		font:
-			11px Arial,
+			14px Arial,
 			sans-serif;
 		cursor: pointer;
 	}
 	button[aria-pressed='true'] {
-		background: #e8d7f3;
+		background: #e0c8ef;
 		border-color: #b28bce;
 	}
 	button:focus-visible {

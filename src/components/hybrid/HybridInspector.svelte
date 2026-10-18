@@ -742,7 +742,7 @@
 	}
 	.hybrid-inspector {
 		width: min(1240px, calc(100vw - 40px));
-		height: min(840px, calc(100dvh - 40px));
+		height: min(720px, calc(100dvh - 40px));
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;

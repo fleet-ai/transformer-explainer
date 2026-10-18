@@ -28,7 +28,7 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
 		gap: 8px 14px;
-		margin: 8px 0 16px;
+		margin: 4px 0 8px;
 	}
 	.operation-branch {
 		display: flex;
@@ -45,21 +45,21 @@
 	}
 	.band i {
 		display: block;
-		background: #e8e3f6;
-		height: 13px;
+		background: #ded4ee;
+		height: 20px;
 		border-radius: 50% 0 0 50%;
 	}
 	.box {
 		font:
-			12px/1.4 Arial,
+			14px/1.4 Arial,
 			sans-serif;
 		border: 1px solid #ded2eb;
 		background: #faf8fc;
 		border-radius: 4px;
-		color: #806492;
+		color: #694684;
 		padding: 8px;
 		flex: 1;
-		min-height: 36px;
+		min-height: 44px;
 		cursor: pointer;
 	}
 	.active .band i {

@@ -329,7 +329,7 @@
 		right: 16px;
 		bottom: 16px;
 		width: min(1080px, calc(100vw - 32px));
-		height: min(710px, calc(100dvh - 32px));
+		height: min(580px, calc(100dvh - 32px));
 		z-index: 1200;
 		display: flex;
 		flex-direction: column;
