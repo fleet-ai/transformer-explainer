@@ -134,182 +134,194 @@
 		>
 	</header>
 	<div class="inspector-body">
-		<div class="controls">
-			<div class="kind-picker" aria-label="Vector to inspect">
-				<button
-					class:chosen={kind === 'query'}
-					aria-pressed={kind === 'query'}
-					on:click={() => (kind = 'query')}>Query {$attentionHeadIdx + 1}</button
-				>
-				<button
-					class:chosen={kind === 'key'}
-					aria-pressed={kind === 'key'}
-					on:click={() => (kind = 'key')}
-					>{isMLA ? 'Shared rotary key' : `Shared Key ${mapping.keyValueHead + 1}`}</button
-				>
-			</div>
-			<div class="selector-row token-selector">
-				<span class="selector-label">Token</span>
-				<TraceSelector label="RoPE token" options={tokenOptions} bind:value={$moeTokenIndex} />
-			</div>
-			<div class="selector-row coordinate-selector">
-				<span class="selector-label"
-					>Coordinate
-					<small id="rope-coordinate-range">0–{pairCount - 1}</small>
-				</span>
-				<TraceSelector
-					label="RoPE coordinate"
-					options={coordinateOptions}
-					rows={2}
-					bind:value={selectedCoordinate}
-				/>
-			</div>
-		</div>
-		{#if loading}<p class="message" role="status">Loading recorded rotations…</p>
-		{:else if error}<p class="message" role="alert">
-				{error}
-				<button class="text-button" on:click={() => $moeExample && load($moeExample.id)}
-					>Try again</button
-				>
-			</p>
-		{:else if !coordinate}<p class="message" role="status">
-				Choose a whole coordinate from 0 to {pairCount - 1}.
-			</p>
-		{:else if pairs && value}
-			<div class="rotation-summary">
-				<span
-					>{kind === 'query' ? 'Q' : 'K'}
-					{isMLA ? 'rotary branch' : 'head'} · {headSize}D → RoPE · position {position} → {headSize}D</span
-				>
-				<span aria-live="polite"
-					>Selected {coordinate.coordinate} ↔ fixed partner {coordinate.partner} · j = i + {pairCount}</span
-				>
-				<span class="position-note"
-					>{position === 0
-						? 'Position 0: no rotation; before/after lines overlap.'
-						: 'Four coordinates · two pairs · recorded rotations'}</span
-				>
-			</div>
-			<div class="rotation-formula" aria-label="RoPE rotation formula">
-				<span
-					>x′<sub>i</sub> = x<sub>i</sub> cos θ<sub>i</sub> − x<sub>j</sub> sin θ<sub>i</sub></span
-				>
-				<span
-					>x′<sub>j</sub> = x<sub>j</sub> cos θ<sub>i</sub> + x<sub>i</sub> sin θ<sub>i</sub></span
-				>
-			</div>
-			<div class="pair-grid">
-				{#each pairs as pair}
-					<section
-						class="rotation-pair"
-						aria-label={`Rotation pair ${pair.indices[0]} and ${pair.indices[1]}`}
+		<aside class="token-sidebar" aria-label="Token selection">
+			<span class="token-heading">Token</span>
+			<TraceSelector
+				label="RoPE token"
+				options={tokenOptions}
+				bind:value={$moeTokenIndex}
+				vertical
+			/>
+		</aside>
+		<div class="rotation-content">
+			<div class="controls">
+				<div class="kind-picker" aria-label="Vector to inspect">
+					<button
+						class:chosen={kind === 'query'}
+						aria-pressed={kind === 'query'}
+						on:click={() => (kind = 'query')}>Query {$attentionHeadIdx + 1}</button
 					>
-						<div class="pair-heading">
-							<strong>Pair {pair.indices[0]} ↔ {pair.indices[1]}</strong><span
-								>θ<sub>{pair.indices[0]}</sub> · position {position}</span
-							>
-						</div>
-						<div class="rotation" class:key={kind === 'key'}>
-							<div class="pair-column">
-								<span>Before RoPE</span>
-								<div class:focused-coordinate={coordinate.coordinate === pair.indices[0]}>
-									<small>[{pair.indices[0]}]</small><b>{number(pair.before[0])}</b>
-								</div>
-								<div class:focused-coordinate={coordinate.coordinate === pair.indices[1]}>
-									<small>[{pair.indices[1]}]</small><b>{number(pair.before[1])}</b>
-								</div>
-							</div>
-							<div class="circle-comparison">
-								<div class="circle-view">
-									<h3>{kind === 'query' ? 'Q' : 'K'} coordinate pair</h3>
-									<RoPEValueCircle
-										compact
-										before={pair.before}
-										after={pair.recorded}
-										indices={pair.indices}
-										cosine={pair.cosine}
-										sine={pair.sine}
-										selectedCoordinate={coordinate.coordinate}
-									/>
-								</div>
-								<div class="circle-view">
-									<h3>cos / sin · unit circle</h3>
-									<RoPEUnitCircle
-										compact
-										cosine={pair.cosine}
-										sine={pair.sine}
-										pairIndex={pair.indices[0]}
-										selected={coordinate.pairIndex === pair.indices[0]}
-									/>
-								</div>
-							</div>
-							<div class="pair-column">
-								<span>Recorded after RoPE</span>
-								<div class:focused-coordinate={coordinate.coordinate === pair.indices[0]}>
-									<small>[{pair.indices[0]}]</small><b>{number(pair.recorded[0])}</b>
-								</div>
-								<div class:focused-coordinate={coordinate.coordinate === pair.indices[1]}>
-									<small>[{pair.indices[1]}]</small><b>{number(pair.recorded[1])}</b>
-								</div>
-							</div>
-						</div>
-						<div class="equations">
-							<p class:focused-equation={coordinate.coordinate === pair.indices[0]}>
-								<span>x′[{pair.indices[0]}]</span> = {number(pair.before[0])} × {number(
-									pair.cosine
-								)} − ({number(pair.before[1])} × {number(pair.sine)})
-								<b>≈ {number(pair.recorded[0])}</b>
-							</p>
-							<p class:focused-equation={coordinate.coordinate === pair.indices[1]}>
-								<span>x′[{pair.indices[1]}]</span> = {number(pair.before[1])} × {number(
-									pair.cosine
-								)} + ({number(pair.before[0])} × {number(pair.sine)})
-								<b>≈ {number(pair.recorded[1])}</b>
-							</p>
-						</div>
-					</section>
-				{/each}
-			</div>
-			<div class="model-notes">
-				<div class="shared-note">
-					{#if isMLA}<strong>All {$moeModel?.attentionHeads} heads share this rotary key</strong
-						><span
-							>Only 64 rotary coordinates rotate; 128 content coordinates bypass RoPE. DeepSeek
-							reorders adjacent projection pairs into this half-split view before rotation.</span
-						>{:else}<strong
-							>Q {mapping.sharedQueryHeads.map((head) => head + 1).join(' + ')} share K/V {mapping.keyValueHead +
-								1}</strong
-						><span>Both query heads use the same rotated K and unchanged V.</span>{/if}
-				</div>
-				<div class="value-bypass">
-					<strong>V bypasses RoPE</strong><span
-						>V[{coordinate.coordinate}] = {number(value[coordinate.coordinate])} → {number(
-							value[coordinate.coordinate]
-						)}</span
+					<button
+						class:chosen={kind === 'key'}
+						aria-pressed={kind === 'key'}
+						on:click={() => (kind = 'key')}
+						>{isMLA ? 'Shared rotary key' : `Shared Key ${mapping.keyValueHead + 1}`}</button
 					>
 				</div>
+
+				<div class="selector-row coordinate-selector">
+					<span class="selector-label"
+						>Coordinate
+						<small id="rope-coordinate-range">0–{pairCount - 1}</small>
+					</span>
+					<TraceSelector
+						label="RoPE coordinate"
+						options={coordinateOptions}
+						rows={2}
+						bind:value={selectedCoordinate}
+					/>
+				</div>
 			</div>
-			<div class="next-operation">
-				<span>After RoPE</span>
-				<p>
-					{isMLA ? '(QᶜKᶜᵀ + QʳKʳᵀ)' : 'Q′K′ᵀ'} × {$moeModel?.attentionMultiplier?.toPrecision(5) ??
-						'1/64'} → causal mask → softmax → × V
+			{#if loading}<p class="message" role="status">Loading recorded rotations…</p>
+			{:else if error}<p class="message" role="alert">
+					{error}
+					<button class="text-button" on:click={() => $moeExample && load($moeExample.id)}
+						>Try again</button
+					>
 				</p>
-				<button class="text-button" on:click={() => dispatch('attention')}
-					>See attention operations →</button
-				>
-			</div>
-			<p class="footnote">
-				Recorded forward-pass values · rounded for display · max float32 reconstruction difference: {Math.max(
-					...pairs.flatMap((pair) => pair.difference.map(Math.abs))
-				).toExponential(2)}.
-				<a
-					href={traceAssetUrl(recording?.example.id ?? '', 'attention', base)}
-					target="_blank"
-					rel="noreferrer">Trace JSON ↗</a
-				>
-			</p>
-		{/if}
+			{:else if !coordinate}<p class="message" role="status">
+					Choose a whole coordinate from 0 to {pairCount - 1}.
+				</p>
+			{:else if pairs && value}
+				<div class="rotation-summary">
+					<span
+						>{kind === 'query' ? 'Q' : 'K'}
+						{isMLA ? 'rotary branch' : 'head'} · {headSize}D → RoPE · position {position} → {headSize}D</span
+					>
+					<span aria-live="polite"
+						>Selected {coordinate.coordinate} ↔ fixed partner {coordinate.partner} · j = i + {pairCount}</span
+					>
+					<span class="position-note"
+						>{position === 0
+							? 'Position 0: no rotation; before/after lines overlap.'
+							: 'Four coordinates · two pairs · recorded rotations'}</span
+					>
+				</div>
+				<div class="rotation-formula" aria-label="RoPE rotation formula">
+					<span
+						>x′<sub>i</sub> = x<sub>i</sub> cos θ<sub>i</sub> − x<sub>j</sub> sin θ<sub>i</sub
+						></span
+					>
+					<span
+						>x′<sub>j</sub> = x<sub>j</sub> cos θ<sub>i</sub> + x<sub>i</sub> sin θ<sub>i</sub
+						></span
+					>
+				</div>
+				<div class="pair-grid">
+					{#each pairs as pair}
+						<section
+							class="rotation-pair"
+							aria-label={`Rotation pair ${pair.indices[0]} and ${pair.indices[1]}`}
+						>
+							<div class="pair-heading">
+								<strong>Pair {pair.indices[0]} ↔ {pair.indices[1]}</strong><span
+									>θ<sub>{pair.indices[0]}</sub> · position {position}</span
+								>
+							</div>
+							<div class="rotation" class:key={kind === 'key'}>
+								<div class="pair-column">
+									<span>Before RoPE</span>
+									<div class:focused-coordinate={coordinate.coordinate === pair.indices[0]}>
+										<small>[{pair.indices[0]}]</small><b>{number(pair.before[0])}</b>
+									</div>
+									<div class:focused-coordinate={coordinate.coordinate === pair.indices[1]}>
+										<small>[{pair.indices[1]}]</small><b>{number(pair.before[1])}</b>
+									</div>
+								</div>
+								<div class="circle-comparison">
+									<div class="circle-view">
+										<h3>{kind === 'query' ? 'Q' : 'K'} coordinate pair</h3>
+										<RoPEValueCircle
+											compact
+											before={pair.before}
+											after={pair.recorded}
+											indices={pair.indices}
+											cosine={pair.cosine}
+											sine={pair.sine}
+											selectedCoordinate={coordinate.coordinate}
+										/>
+									</div>
+									<div class="circle-view">
+										<h3>cos / sin · unit circle</h3>
+										<RoPEUnitCircle
+											compact
+											cosine={pair.cosine}
+											sine={pair.sine}
+											pairIndex={pair.indices[0]}
+											selected={coordinate.pairIndex === pair.indices[0]}
+										/>
+									</div>
+								</div>
+								<div class="pair-column">
+									<span>Recorded after RoPE</span>
+									<div class:focused-coordinate={coordinate.coordinate === pair.indices[0]}>
+										<small>[{pair.indices[0]}]</small><b>{number(pair.recorded[0])}</b>
+									</div>
+									<div class:focused-coordinate={coordinate.coordinate === pair.indices[1]}>
+										<small>[{pair.indices[1]}]</small><b>{number(pair.recorded[1])}</b>
+									</div>
+								</div>
+							</div>
+							<div class="equations">
+								<p class:focused-equation={coordinate.coordinate === pair.indices[0]}>
+									<span>x′[{pair.indices[0]}]</span> = {number(pair.before[0])} × {number(
+										pair.cosine
+									)} − ({number(pair.before[1])} × {number(pair.sine)})
+									<b>≈ {number(pair.recorded[0])}</b>
+								</p>
+								<p class:focused-equation={coordinate.coordinate === pair.indices[1]}>
+									<span>x′[{pair.indices[1]}]</span> = {number(pair.before[1])} × {number(
+										pair.cosine
+									)} + ({number(pair.before[0])} × {number(pair.sine)})
+									<b>≈ {number(pair.recorded[1])}</b>
+								</p>
+							</div>
+						</section>
+					{/each}
+				</div>
+				<div class="model-notes">
+					<div class="shared-note">
+						{#if isMLA}<strong>All {$moeModel?.attentionHeads} heads share this rotary key</strong
+							><span
+								>Only 64 rotary coordinates rotate; 128 content coordinates bypass RoPE. DeepSeek
+								reorders adjacent projection pairs into this half-split view before rotation.</span
+							>{:else}<strong
+								>Q {mapping.sharedQueryHeads.map((head) => head + 1).join(' + ')} share K/V {mapping.keyValueHead +
+									1}</strong
+							><span>Both query heads use the same rotated K and unchanged V.</span>{/if}
+					</div>
+					<div class="value-bypass">
+						<strong>V bypasses RoPE</strong><span
+							>V[{coordinate.coordinate}] = {number(value[coordinate.coordinate])} → {number(
+								value[coordinate.coordinate]
+							)}</span
+						>
+					</div>
+				</div>
+				<div class="next-operation">
+					<span>After RoPE</span>
+					<p>
+						{isMLA ? '(QᶜKᶜᵀ + QʳKʳᵀ)' : 'Q′K′ᵀ'} × {$moeModel?.attentionMultiplier?.toPrecision(
+							5
+						) ?? '1/64'} → causal mask → softmax → × V
+					</p>
+					<button class="text-button" on:click={() => dispatch('attention')}
+						>See attention operations →</button
+					>
+				</div>
+				<p class="footnote">
+					Recorded forward-pass values · rounded for display · max float32 reconstruction
+					difference: {Math.max(
+						...pairs.flatMap((pair) => pair.difference.map(Math.abs))
+					).toExponential(2)}.
+					<a
+						href={traceAssetUrl(recording?.example.id ?? '', 'attention', base)}
+						target="_blank"
+						rel="noreferrer">Trace JSON ↗</a
+					>
+				</p>
+			{/if}
+		</div>
 	</div>
 </div>
 
@@ -370,13 +382,33 @@
 	}
 	.inspector-body {
 		padding: 8px 14px;
-		overflow: auto;
+		display: grid;
+		grid-template-columns: 112px minmax(0, 1fr);
+		gap: 14px;
 		min-height: 0;
+		flex: 1;
+		overflow: hidden;
+	}
+	.token-sidebar {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		min-height: 0;
+		font-size: 12px;
+	}
+	.token-heading {
+		color: #91849e;
+		padding: 5px 10px 0;
+	}
+	.rotation-content {
+		min-width: 0;
+		min-height: 0;
+		overflow: auto;
 		overscroll-behavior: contain;
 	}
 	.controls {
 		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr);
 		gap: 6px 16px;
 		align-items: center;
 		font-size: 12px;
@@ -394,9 +426,6 @@
 		display: block;
 		font-size: 11px;
 		color: #a694b7;
-	}
-	.token-selector .selector-label {
-		flex-basis: auto;
 	}
 	.coordinate-selector {
 		grid-column: 1 / -1;
@@ -646,6 +675,11 @@
 		}
 	}
 	@media (max-width: 560px) {
+		.inspector-body {
+			grid-template-columns: 88px minmax(0, 1fr);
+			gap: 8px;
+			padding: 8px;
+		}
 		.controls {
 			grid-template-columns: minmax(0, 1fr);
 		}

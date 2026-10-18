@@ -5,17 +5,31 @@
 	export let options: { value: number; label: string }[];
 	export let value: number;
 	export let rows = 1;
+	export let vertical = false;
 	let rail: HTMLDivElement;
 	let buttons: HTMLButtonElement[] = [];
 	$: selectedIndex = options.findIndex((option) => option.value === value);
 	$: columns = Math.ceil(options.length / rows);
-	$: revealSelection(value, options, rows);
+	$: revealSelection(value, options, rows, vertical);
 
-	async function revealSelection(_value: number, _options: typeof options, rowCount: number) {
+	async function revealSelection(
+		_value: number,
+		_options: typeof options,
+		rowCount: number,
+		isVertical: boolean
+	) {
 		if (rowCount > 1) return;
 		await tick();
 		const selected = rail?.querySelector<HTMLButtonElement>('[aria-checked="true"]');
 		if (!selected) return;
+		if (isVertical) {
+			const top = selected.offsetTop;
+			const bottom = top + selected.offsetHeight;
+			if (top < rail.scrollTop) rail.scrollTop = top;
+			else if (bottom > rail.scrollTop + rail.clientHeight)
+				rail.scrollTop = bottom - rail.clientHeight;
+			return;
+		}
 		const left = selected.offsetLeft;
 		const right = left + selected.offsetWidth;
 		if (left < rail.scrollLeft) rail.scrollLeft = left;
@@ -61,10 +75,10 @@
 	}
 </script>
 
-<svelte:window on:resize={() => revealSelection(value, options, rows)} />
+<svelte:window on:resize={() => revealSelection(value, options, rows, vertical)} />
 
-<div class="selector" class:multirow={rows > 1} style={`--columns:${columns};`}>
-	{#if rows === 1}
+<div class="selector" class:multirow={rows > 1} class:vertical style={`--columns:${columns};`}>
+	{#if rows === 1 && !vertical}
 		<button
 			type="button"
 			class="step"
@@ -73,7 +87,13 @@
 			on:click={() => choose(selectedIndex - 1)}>‹</button
 		>
 	{/if}
-	<div class="segments" role="radiogroup" aria-label={label} bind:this={rail}>
+	<div
+		class="segments"
+		role="radiogroup"
+		aria-label={label}
+		aria-orientation={vertical ? 'vertical' : undefined}
+		bind:this={rail}
+	>
 		{#each options as option, index (option.value)}
 			<button
 				type="button"
@@ -88,7 +108,7 @@
 			>
 		{/each}
 	</div>
-	{#if rows === 1}
+	{#if rows === 1 && !vertical}
 		<button
 			type="button"
 			class="step"
@@ -149,6 +169,26 @@
 		background: #a379ce;
 		border-color: #a379ce;
 		color: white;
+	}
+	.vertical {
+		min-height: 0;
+	}
+	.vertical .segments {
+		flex-direction: column;
+		width: 100%;
+		overflow-x: hidden;
+		overflow-y: auto;
+		border-radius: 4px;
+	}
+	.vertical .segments button {
+		max-width: none;
+		width: 100%;
+		text-align: left;
+		padding: 9px 10px;
+	}
+	.vertical .segments button + button {
+		border-left: 1px solid #e1d7ed;
+		border-top: 0;
 	}
 	button:hover:not(:disabled):not(.chosen) {
 		background: #f0e7f8;
