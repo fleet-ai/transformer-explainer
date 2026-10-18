@@ -1,4 +1,9 @@
 <script lang="ts">
+	import FeedForwardFlow from '../../../../src/components/common/FeedForwardFlow.svelte';
+	import { weightPopover } from '~/store';
+	import MatrixProduct from '../../../../src/components/common/MatrixProduct.svelte';
+	let showActivation = false;
+
 	import { modelMeta, tokens, rootRem } from '~/store';
 	import * as d3 from 'd3';
 	import { gsap } from '~/utils/gsap';
@@ -304,8 +309,37 @@
 	};
 </script>
 
-<WeightPopoverCard id="mlp-down" title={'MLP Compression'} bind:isAnimationActive {timeline}>
-	<div class="mlp-weight-popover weight-popover-content flex items-center justify-start">
+<WeightPopoverCard
+	id="mlp-down"
+	title={showActivation ? 'MLP · GELU' : 'MLP Compression'}
+	bind:isAnimationActive
+	{timeline}
+>
+	<FeedForwardFlow
+		hiddenSize={$modelMeta.dimension}
+		intermediateSize={$modelMeta.dimension * 4}
+		gated={false}
+		activation="GELU"
+		selected={showActivation ? 'activation' : 'down'}
+		on:select={(e) => {
+			showActivation = e.detail === 'activation';
+			if (e.detail === 'up') weightPopover.set('mlpUp');
+			else if (e.detail === 'down') weightPopover.set('mlpDown');
+		}}
+	/>
+
+	{#if showActivation}<MatrixProduct
+			input="Expanded U"
+			output="GELU(U)"
+			activation="GELU"
+			inputSize={$modelMeta.dimension * 4}
+			outputSize={$modelMeta.dimension * 4}
+			rows={$tokens.length}
+		/>{/if}
+	<div
+		class:activation-hidden={showActivation}
+		class="mlp-weight-popover weight-popover-content flex items-center justify-start"
+	>
 		<div class="matrix flex flex-col items-center">
 			<div class="tokens" style={`gap:${tokenGap}px`}>
 				{#each $tokens as token, index}
@@ -315,7 +349,7 @@
 		</div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Expanded Embeddings <HelpPopover id="mlp-down-emgeddings" 
+				Expanded Embeddings <HelpPopover id="mlp-down-emgeddings"
 					>{`Expanded latent vectors through MLP expansion layer.`}</HelpPopover
 				>
 			</div>
@@ -339,7 +373,7 @@
 		</div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Compression Weights <HelpPopover id="mlp-down-weights" 
+				Compression Weights <HelpPopover id="mlp-down-weights"
 					>{`Projects expanded latent vectors back to original space. \nParameters that learned in training, fixed in prediction.`}</HelpPopover
 				>
 			</div>
@@ -362,7 +396,7 @@
 		<div class="operator"><div class="symbol plus px-3">+</div></div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Compression Bias <HelpPopover id="mlp-down-bias" 
+				Compression Bias <HelpPopover id="mlp-down-bias"
 					>{`Offsets added after compression. \nParameters that learned in training, fixed in prediction.`}</HelpPopover
 				>
 			</div>
@@ -402,13 +436,13 @@
 			<div class="size">({tokenLen}, {$modelMeta.dimension})</div>
 		</div>
 	</div>
-	<div class="formula">
+	<div class="formula" class:activation-hidden={showActivation}>
 		<div class="first-row flex items-center justify-center gap-1">
 			<span class="part1">
 				<Katex
 					displayMode
 					math={`
-	(Emb_{1,1}×W_{1,1} + \\cdots + Emb_{1,768}×W_{768,1})`}
+	(Emb_{1,1}×W_{1,1} + \\cdots + Emb_{1,3072}×W_{3072,1})`}
 				/>
 			</span>
 			<span class="part2">
@@ -419,7 +453,7 @@
 			<Katex
 				displayMode
 				math={`
-	\\sum_{d=1}^{768} Emb_{id} \\cdot Weights_{dj} + Bias_j = Compressed_Emb{ij} 
+	\\sum_{d=1}^{3072} Emb_{id} \\cdot Weights_{dj} + Bias_j = Compressed_Emb{ij} 
 	`}
 			/>
 		</div>
@@ -427,6 +461,9 @@
 </WeightPopoverCard>
 
 <style lang="scss">
+	.activation-hidden {
+		display: none !important;
+	}
 	.weight-popover-content {
 		padding: 3rem 4rem 1.5rem 1rem;
 		gap: 1rem;

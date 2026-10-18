@@ -1,4 +1,7 @@
 <script lang="ts">
+	import OperationFlow from '../common/OperationFlow.svelte';
+	import MatrixProduct from '../common/MatrixProduct.svelte';
+	import FeedForwardFlow from '../common/FeedForwardFlow.svelte';
 	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
 	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { recordedAssetUrl } from '$lib/recorded-json.js';
@@ -77,7 +80,7 @@
 	$: projectionKind =
 		current === 'projection'
 			? ['inWeights', 'norm1', 'mambaProjection']
-			: current === 'ffn' && ffnStage !== 'gelu'
+			: current === 'ffn' && !['gelu', 'activation'].includes(ffnStage)
 				? ffnStage === 'down'
 					? ['downWeights', 'product', 'down']
 					: [
@@ -150,13 +153,15 @@
 					options={tokenOptions}
 					bind:value={$moeTokenIndex}
 				/>
-				<nav aria-label="Recorded hybrid operations">
-					{#each stages as [id, label]}<button
-							class:active={current === id}
-							disabled={['attention', 'rope', 'ffn'].includes(id) && !isHybrid}
-							on:click={() => choose(id)}>{label}</button
-						>{/each}
-				</nav>
+				<OperationFlow
+					items={stages.map(([id, label]) => ({
+						id,
+						label,
+						disabled: ['attention', 'rope', 'ffn'].includes(id) && !isHybrid
+					}))}
+					selected={current}
+					on:select={(e) => choose(e.detail)}
+				/>
 				<div class="controls">
 					{#if mambaStage}<label
 							>Mamba head <select bind:value={mambaHead}
@@ -214,6 +219,15 @@
 				</div>
 				<div class="content">
 					{#if data && common && document}
+						{#if current === 'ffn' && isHybrid}<FeedForwardFlow
+								hiddenSize={2048}
+								intermediateSize={8192}
+								activation="GELU"
+								selected={ffnStage === 'gelu' ? 'product' : ffnStage}
+								token={document.tokens[token]}
+								on:select={(e) => (ffnStage = e.detail === 'product' ? 'gelu' : e.detail)}
+							/>{/if}
+
 						{#if current === 'convolution' && conv}
 							<div class="subheading">
 								<h3>Four-token causal depthwise convolution</h3>
@@ -445,7 +459,14 @@
 								All 128 Q and K coordinates are rotated in 64 fixed pairs. V bypasses RoPE. These
 								are the saved pretrained-model tensors and its actual cosine/sine values.
 							</p>
-						{:else if current === 'attention' && isHybrid}
+						{:else if current === 'attention' && isHybrid}<MatrixProduct
+								input="Attention A"
+								weight="Value V"
+								output="Head context"
+								inputSize={count}
+								outputSize={128}
+								token={document.tokens[token]}
+							/>
 							<div class="formula">
 								score(q,k) = Σ<sub>d=0…127</sub> Q′[q,d] × K′[k,d] · attention = softmax(score / 8 +
 								causal mask)<br />context[q,{attentionCoordinate}] = Σ<sub>k≤q</sub> attention[q,k]
@@ -490,15 +511,26 @@
 								1/8 for this attention. Each of the six Transformer blocks uses its own learned
 								adapters with shared base weights.
 							</p>
-						{:else if current === 'ffn' && isHybrid && ffnStage === 'gelu'}
+						{:else if current === 'ffn' && isHybrid && ffnStage === 'activation'}<MatrixProduct
+								input="Gate G"
+								output="GELU(G)"
+								activation="GELU"
+								inputSize={8192}
+								outputSize={8192}
+								token={document.tokens[token]}
+								inputValues={[0, 1, 2, 3].map((c) => scalar(data, 'gateFFN', token, c))}
+								outputValues={[0, 1, 2, 3].map((c) => scalar(data, 'gelu', token, c))}
+							/>{:else if current === 'ffn' && isHybrid && ffnStage === 'gelu'}<MatrixProduct
+								input="GELU(G)"
+								weight="Up U"
+								output="Hidden H"
+								inputSize={8192}
+								outputSize={8192}
+								elementwise
+								token={document.tokens[token]}
+							/>
 							<div class="subheading">
 								<h3>Gated GELU feed-forward network</h3>
-								<div class="segmented" aria-label="Feed-forward operation">
-									{#each [['gate', 'Gate projection'], ['up', 'Up projection'], ['gelu', 'GELU × up'], ['down', 'Down projection']] as [id, label]}<button
-											class:active={ffnStage === id}
-											on:click={() => (ffnStage = id)}>{label}</button
-										>{/each}
-								</div>
 							</div>
 							<div class="formula">
 								g = (Wgate + Wadapter)[x] · u = (Wup + Wadapter)[x]<br />GELU(g) = ½g × (1 + erf(g /
@@ -525,82 +557,123 @@
 								First 4 of 8,192 coordinates. Gate and up projections include the selected block’s
 								real low-rank adapter. The following down projection uses all 8,192 products.
 							</p>
-						{:else if ['projection', 'output', 'ffn'].includes(current) && projected}
-							<div class="subheading">
-								<h3>
-									{current === 'projection'
-										? '2,048D RMSNorm → 8,512 projected values'
-										: current === 'output'
-											? '4,096D gated output → 2,048D residual update'
-											: `${ffnStage === 'down' ? 'Down' : ffnStage === 'up' ? 'Up' : 'Gate'} projection with actual weights`}
-								</h3>
-								{#if current === 'ffn'}<div class="segmented" aria-label="Feed-forward operation">
-										{#each [['gate', 'Gate'], ['up', 'Up'], ['gelu', 'GELU × up'], ['down', 'Down']] as [id, label]}<button
-												class:active={ffnStage === id}
-												on:click={() => (ffnStage = id)}>{label}</button
-											>{/each}
-									</div>{:else}<div class="segmented" aria-label="Projection output row">
-										{#each [0, 1, 2, 3] as c}<button
-												class:active={projectionIndex === c}
-												on:click={() => (projectionIndex = c)}>Row {c}</button
-											>{/each}
-									</div>{/if}
-							</div>
-							{#if current === 'projection'}<p>
-									Split into gate (4,096), convolution inputs x/B/C (4,352), and dtRaw (64). These
-									saved matrix rows produce gate coordinates 0–3.
-								</p>{/if}
-							{#if current === 'ffn'}<div class="control">
-									<span>Output row</span>
-									<div class="segmented" aria-label="Feed-forward output row">
-										{#each [0, 1, 2, 3] as c}<button
-												class:active={projectionIndex === c}
-												on:click={() => (projectionIndex = c)}>{c}</button
-											>{/each}
-									</div>
-								</div>{/if}
-							<table>
-								<thead
-									><tr
-										><th>Input coordinate</th><th>Recorded weight[{projectionIndex},d]</th><th
-											>Recorded input[d]</th
-										><th>Product</th></tr
-									></thead
-								><tbody
-									>{#each [0, 1, 2, 3] as c}<tr
-											><td>{c}</td><td>{f(projected.weights[c])}</td><td>{f(projected.input[c])}</td
-											><td>{f(projected.weights[c] * projected.input[c])}</td></tr
-										>{/each}</tbody
-								>
-							</table>
-							<div class="formula">
-								First 4 contributions {f(projected.first)} + remaining {projected.input.length - 4} contributions
-								{f(projected.remaining)} ≈ <b>{f(projected.output)}</b>
-							</div>
-							{#if current === 'output'}<div class="facts">
-									{#each [0, 1, 2, 3] as c}<div>
-											<span>Residual output [{c}]</span><b
-												>{f(scalar(data, 'input', token, c))} + {f(
-													scalar(data, 'mambaOutput', token, c)
-												)}</b
-											><strong>= {f(scalar(data, 'output', token, c))}</strong>
-										</div>{/each}
+						{:else if ['projection', 'output', 'ffn'].includes(current) && projected}<MatrixProduct
+								input={current === 'projection'
+									? 'RMSNorm(X)'
+									: current === 'output'
+										? 'Gated H'
+										: ffnStage === 'down'
+											? 'Hidden H'
+											: 'FFN input'}
+								weight={current === 'projection'
+									? 'Winᵀ'
+									: current === 'output'
+										? 'Woutᵀ'
+										: ffnStage === 'down'
+											? 'Wdownᵀ'
+											: ffnStage === 'up'
+												? '(Wup + adapter)ᵀ'
+												: '(Wgate + adapter)ᵀ'}
+								output={current === 'projection'
+									? 'Gate + xBC + Δ'
+									: current === 'output' || ffnStage === 'down'
+										? 'Output Y'
+										: ffnStage === 'up'
+											? 'Up U'
+											: 'Gate G'}
+								inputSize={projected.input.length}
+								outputSize={current === 'projection'
+									? 8512
+									: current === 'output' || ffnStage === 'down'
+										? 2048
+										: 8192}
+								token={document.tokens[token]}
+								inputValues={projected.input}
+								outputValues={[projected.output]}
+							/>
+							<details class="recorded-details">
+								<summary>Recorded values and products</summary>
+								<div class="subheading">
+									<h3>
+										{current === 'projection'
+											? '2,048D RMSNorm → 8,512 projected values'
+											: current === 'output'
+												? '4,096D gated output → 2,048D residual update'
+												: `${ffnStage === 'down' ? 'Down' : ffnStage === 'up' ? 'Up' : 'Gate'} projection with actual weights`}
+									</h3>
+									{#if current === 'ffn'}{:else}<div
+											class="segmented"
+											aria-label="Projection output row"
+										>
+											{#each [0, 1, 2, 3] as c}<button
+													class:active={projectionIndex === c}
+													on:click={() => (projectionIndex = c)}>Row {c}</button
+												>{/each}
+										</div>{/if}
 								</div>
-								<p class="note">
-									{isHybrid
-										? 'In this hybrid block the Transformer output is added before Mamba input RMSNorm. The final residual adds the Mamba result to the original block input.'
-										: 'The block adds the projected Mamba output to its original residual input.'}
-								</p>{:else if current === 'projection'}<p class="note">
-									The input is the recorded RMSNorm result. {isHybrid
-										? 'RMSNorm receives the residual stream plus this block’s Transformer output.'
-										: 'RMSNorm receives the residual stream.'} Matrix rows 0–3 are captured in full;
-									omitted contributions above are calculated from every saved input coordinate.
-								</p>{:else}<p class="note">
-									First four output rows are captured in full. Gate/up matrices combine shared
-									weights and the selected block’s learned adapter; down projection uses all 8,192
-									products.
-								</p>{/if}
-						{:else if current === 'classifier'}
+								{#if current === 'projection'}<p>
+										Split into gate (4,096), convolution inputs x/B/C (4,352), and dtRaw (64). These
+										saved matrix rows produce gate coordinates 0–3.
+									</p>{/if}
+								{#if current === 'ffn'}<div class="control">
+										<span>Output row</span>
+										<div class="segmented" aria-label="Feed-forward output row">
+											{#each [0, 1, 2, 3] as c}<button
+													class:active={projectionIndex === c}
+													on:click={() => (projectionIndex = c)}>{c}</button
+												>{/each}
+										</div>
+									</div>{/if}
+								<table>
+									<thead
+										><tr
+											><th>Input coordinate</th><th>Recorded weight[{projectionIndex},d]</th><th
+												>Recorded input[d]</th
+											><th>Product</th></tr
+										></thead
+									><tbody
+										>{#each [0, 1, 2, 3] as c}<tr
+												><td>{c}</td><td>{f(projected.weights[c])}</td><td
+													>{f(projected.input[c])}</td
+												><td>{f(projected.weights[c] * projected.input[c])}</td></tr
+											>{/each}</tbody
+									>
+								</table>
+								<div class="formula">
+									First 4 contributions {f(projected.first)} + remaining {projected.input.length -
+										4} contributions
+									{f(projected.remaining)} ≈ <b>{f(projected.output)}</b>
+								</div>
+								{#if current === 'output'}<div class="facts">
+										{#each [0, 1, 2, 3] as c}<div>
+												<span>Residual output [{c}]</span><b
+													>{f(scalar(data, 'input', token, c))} + {f(
+														scalar(data, 'mambaOutput', token, c)
+													)}</b
+												><strong>= {f(scalar(data, 'output', token, c))}</strong>
+											</div>{/each}
+									</div>
+									<p class="note">
+										{isHybrid
+											? 'In this hybrid block the Transformer output is added before Mamba input RMSNorm. The final residual adds the Mamba result to the original block input.'
+											: 'The block adds the projected Mamba output to its original residual input.'}
+									</p>{:else if current === 'projection'}<p class="note">
+										The input is the recorded RMSNorm result. {isHybrid
+											? 'RMSNorm receives the residual stream plus this block’s Transformer output.'
+											: 'RMSNorm receives the residual stream.'} Matrix rows 0–3 are captured in full;
+										omitted contributions above are calculated from every saved input coordinate.
+									</p>{:else}<p class="note">
+										First four output rows are captured in full. Gate/up matrices combine shared
+										weights and the selected block’s learned adapter; down projection uses all 8,192
+										products.
+									</p>{/if}
+							</details>{:else if current === 'classifier'}<MatrixProduct
+								input="Final RMSNorm"
+								weight="Wvocabularyᵀ"
+								output="Logits"
+								inputSize={2048}
+								outputSize={32000}
+							/>
 							<h3>All 38 blocks → final RMSNorm → 32,000 vocabulary logits</h3>
 							<p>
 								The prediction uses the last token ({count - 1}: {document.tokens[count - 1]}) after

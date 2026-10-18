@@ -1,4 +1,7 @@
 <script lang="ts">
+	import OperationFlow from '../common/OperationFlow.svelte';
+	import MatrixProduct from '../common/MatrixProduct.svelte';
+	import FeedForwardFlow from '../common/FeedForwardFlow.svelte';
 	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
 	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { recordedAssetUrl } from '$lib/recorded-json.js';
@@ -13,6 +16,7 @@
 	import RoPEValueCircle from '../moe/RoPEValueCircle.svelte';
 	export let stage = 'attention';
 	const dispatch = createEventDispatcher<{ close: void }>();
+	let qkvProjection = 'query';
 	let coordinate = 0,
 		visualToken = 0,
 		ropeKind = 'query';
@@ -55,7 +59,7 @@
 			? 31
 			: stage === 'up' || stage === 'down'
 				? 0
-				: stage === 'gate' || stage === 'gelu'
+				: ['gate', 'gelu', 'gate-projection', 'silu'].includes(stage)
 					? (model?.intermediateSize ?? 4) - 4
 					: (model?.hiddenSize ?? 4) - 4;
 	$: if (coordinate > maxCoordinate) coordinate = 0;
@@ -155,7 +159,10 @@
 	>
 		<header>
 			<div>
-				<h2>SmolVLM · {stages.find(([id]) => id === stage)?.[1]}</h2>
+				<h2>
+					SmolVLM · {stages.find(([id]) => id === stage)?.[1] ??
+						(stage === 'silu' ? 'SiLU' : 'Gate projection')}
+				</h2>
 				<p>
 					{#if stage === 'connector'}After all 12 vision blocks · 256 patches → 16 visual tokens{:else if stage === 'output'}After
 						all 30 language blocks · final token → vocabulary{:else}{$vlmPhase === 'vision'
@@ -184,15 +191,14 @@
 							bind:value={$vlmSelectedPosition}
 						/>{/if}</svelte:fragment
 				>
-				<nav>
-					{#each stages as [id, label]}<button
-							class:active={stage === id}
-							on:click={() => {
-								stage = id;
-								coordinate = 0;
-							}}>{label}</button
-						>{/each}
-				</nav>
+				<OperationFlow
+					items={stages.map(([id, label]) => ({ id, label }))}
+					selected={stage}
+					on:select={(e) => {
+						stage = e.detail;
+						coordinate = 0;
+					}}
+				/>
 				{#if !['connector', 'output'].includes(stage)}<div class="controls">
 						{#if ['qkv', 'rope', 'attention'].includes(stage)}<label
 								>Head <select
@@ -213,8 +219,44 @@
 							>{/if}
 					</div>{/if}
 				{#if document && stream && model && common && data && $vlmRecording}
+					{#if ['up', 'down', 'gate', 'gate-projection', 'silu', 'gelu'].includes(stage)}<FeedForwardFlow
+							hiddenSize={model.hiddenSize}
+							intermediateSize={model.intermediateSize}
+							gated={$vlmPhase === 'language'}
+							activation={$vlmPhase === 'language' ? 'SiLU' : 'GELU'}
+							token={stream.tokens[position]}
+							selected={stage === 'gate'
+								? 'product'
+								: stage === 'gate-projection'
+									? 'gate'
+									: stage === 'silu' || stage === 'gelu'
+										? 'activation'
+										: stage}
+							on:select={(e) => {
+								stage =
+									e.detail === 'product'
+										? 'gate'
+										: e.detail === 'gate'
+											? 'gate-projection'
+											: e.detail === 'activation'
+												? $vlmPhase === 'language'
+													? 'silu'
+													: 'gelu'
+												: e.detail;
+								coordinate = 0;
+							}}
+						/>{/if}
 					{#key `${$vlmPhase}:${$blockIdx}:${position}:${head}:${coordinate}:${visualToken}:${ropeKind}:${stage}`}
-						{#if stage === 'embedding'}{#if $vlmPhase === 'vision'}<div class="formula">
+						{#if stage === 'embedding'}{#if $vlmPhase === 'vision'}<MatrixProduct
+									input="Patch pixels"
+									weight="Wpatchᵀ"
+									output="Patch embedding"
+									inputSize={768}
+									outputSize={768}
+									rows={256}
+									bias
+								/>
+								<div class="formula">
 									16 × 16 RGB patches → learned 768D projection + learned position embeddings
 								</div>
 								<div class="image-equation">
@@ -258,7 +300,17 @@
 									Visual and text positions participate in the same causal language self-attention.
 									Image processing and projection run before these 30 decoder blocks.
 								</p>{/if}
-						{:else if stage === 'connector'}<div class="formula">
+						{:else if stage === 'connector'}<MatrixProduct
+								input="Packed patches"
+								weight="Wconnectorᵀ"
+								output="Visual embedding"
+								inputSize={12288}
+								outputSize={576}
+								token={`visual ${visualToken}`}
+								inputValues={row($vlmRecording.connector, 'packed', visualToken)}
+								outputValues={row($vlmRecording.connector, 'projected', visualToken)}
+							/>
+							<div class="formula">
 								256 × 768D vision outputs → 4 × 4 pixel shuffle → 16 × 12,288D → learned projection
 								→ 16 × 576D
 							</div>
@@ -309,52 +361,71 @@
 											>{/if}{/each}</tbody
 								>
 							</table>
-						{:else if stage === 'qkv'}<div class="formula">
-								Q = Wq x{model.normalization === 'layernorm' ? ' + bq' : ''} · K = Wk x{model.normalization ===
-								'layernorm'
-									? ' + bk'
-									: ''} · V = Wv x{model.normalization === 'layernorm' ? ' + bv' : ''}
-							</div>
-							<p>
-								{model.attentionHeads} query heads; {model.keyValueHeads} key/value heads; 64 coordinates
-								per head. {$vlmPhase === 'language'
-									? `Query heads ${kvHead * 3 + 1}–${kvHead * 3 + 3} share KV head ${kvHead + 1}. Q and K below are before RoPE.`
-									: 'Q/K/V have independent heads, with learned position information already included in the input.'}
-							</p>
-							<table>
-								<thead
-									><tr
-										><th>d</th><th>Query head {head + 1}</th><th>Key head {kvHead + 1}</th><th
-											>Value head {kvHead + 1}</th
-										></tr
-									></thead
-								><tbody
-									>{#each coords as c}<tr
-											><td>{c}</td><td
-												>{f(
-													scalar(
-														data,
-														$vlmPhase === 'language' ? 'queryBefore' : 'query',
-														head,
-														position,
-														c
-													)
-												)}</td
-											><td
-												>{f(
-													scalar(
-														data,
-														$vlmPhase === 'language' ? 'keyBefore' : 'key',
-														kvHead,
-														position,
-														c
-													)
-												)}</td
-											><td>{f(scalar(data, 'value', kvHead, position, c))}</td></tr
-										>{/each}</tbody
-								>
-							</table>
-						{:else if stage === 'rope' && $vlmPhase === 'language'}<div class="segmented">
+						{:else if stage === 'qkv'}<OperationFlow
+								items={['query', 'key', 'value'].map((id) => ({ id, label: id.toUpperCase() }))}
+								selected={qkvProjection}
+								on:select={(e) => (qkvProjection = e.detail)}
+							/><MatrixProduct
+								input="Normalized X"
+								weight={qkvProjection + 'ᵀ'}
+								output={qkvProjection.toUpperCase()}
+								inputSize={model.hiddenSize}
+								outputSize={(qkvProjection === 'query'
+									? model.attentionHeads
+									: model.keyValueHeads) * 64}
+								bias={$vlmPhase === 'vision'}
+								token={stream.tokens[position]}
+							/>
+							<details class="recorded-details">
+								<summary>Recorded Q / K / V</summary>
+								<div class="formula">
+									Q = Wq x{model.normalization === 'layernorm' ? ' + bq' : ''} · K = Wk x{model.normalization ===
+									'layernorm'
+										? ' + bk'
+										: ''} · V = Wv x{model.normalization === 'layernorm' ? ' + bv' : ''}
+								</div>
+								<p>
+									{model.attentionHeads} query heads; {model.keyValueHeads} key/value heads; 64 coordinates
+									per head. {$vlmPhase === 'language'
+										? `Query heads ${kvHead * 3 + 1}–${kvHead * 3 + 3} share KV head ${kvHead + 1}. Q and K below are before RoPE.`
+										: 'Q/K/V have independent heads, with learned position information already included in the input.'}
+								</p>
+								<table>
+									<thead
+										><tr
+											><th>d</th><th>Query head {head + 1}</th><th>Key head {kvHead + 1}</th><th
+												>Value head {kvHead + 1}</th
+											></tr
+										></thead
+									><tbody
+										>{#each coords as c}<tr
+												><td>{c}</td><td
+													>{f(
+														scalar(
+															data,
+															$vlmPhase === 'language' ? 'queryBefore' : 'query',
+															head,
+															position,
+															c
+														)
+													)}</td
+												><td
+													>{f(
+														scalar(
+															data,
+															$vlmPhase === 'language' ? 'keyBefore' : 'key',
+															kvHead,
+															position,
+															c
+														)
+													)}</td
+												><td>{f(scalar(data, 'value', kvHead, position, c))}</td></tr
+											>{/each}</tbody
+									>
+								</table>
+							</details>{:else if stage === 'rope' && $vlmPhase === 'language'}<div
+								class="segmented"
+							>
 								{#each ['query', 'key'] as kind}<button
 										class:active={ropeKind === kind}
 										on:click={() => (ropeKind = kind)}
@@ -411,7 +482,15 @@
 								V bypasses RoPE. Query heads sharing this KV head use the same rotated K and the
 								same original V.
 							</p>
-						{:else if stage === 'attention'}<div class="attention-detail">
+						{:else if stage === 'attention'}<MatrixProduct
+								input="Attention A"
+								weight="Value V"
+								output="Head context"
+								inputSize={stream.sequenceLength}
+								outputSize={64}
+								token={stream.tokens[position]}
+							/>
+							<div class="attention-detail">
 								<VitAttentionMap
 									layer={data}
 									{head}
@@ -458,25 +537,74 @@
 											≈ <strong>{f(r.output)}</strong>
 										</div>
 									</div>{/if}{/each}
-						{:else if stage === 'up' || stage === 'down'}<div class="formula">
-								{stage === 'up'
-									? 'u = Wup · normalized input'
-									: 'y = Wdown · activation'}{$vlmPhase === 'vision' ? ' + bias' : ''}
-							</div>
-							{#each [0, 1, 2, 3] as c}{@const r = dotRow(stage, c)}{#if r}<div class="dot-product">
-										<strong>{stage}[{c}]</strong>
-										<div class="terms">
-											{#each r.weights.slice(0, 4) as w, d}<span>({f(w)} × {f(r.input[d])})</span
-												>{#if d < 3}<span>+</span>{/if}{/each}
-										</div>
-										<div>
-											+ <span class="remaining"
-												>{f(r.rest)}<small>remaining {r.input.length - 4} products</small></span
-											>{#if $vlmPhase === 'vision'}
-												+ {f(r.bias)} <small>bias</small>{/if} ≈ <strong>{f(r.output)}</strong>
-										</div>
-									</div>{/if}{/each}
-						{:else if stage === 'gate' && $vlmPhase === 'language'}<div class="formula">
+						{:else if stage === 'gate-projection' && $vlmPhase === 'language'}<MatrixProduct
+								input="Normalized X"
+								weight="Wgateᵀ"
+								output="Gate G"
+								inputSize={model.hiddenSize}
+								outputSize={model.intermediateSize}
+								token={stream.tokens[position]}
+								inputValues={row(data, 'norm2', position)}
+								outputValues={row(data, 'gate', position)}
+							/>
+							<details class="recorded-details">
+								<summary>Recorded gate output</summary>{#each coords as c}<p>
+										[{c}] {f(scalar(data, 'gate', position, c))}
+									</p>{/each}
+							</details>
+						{:else if stage === 'silu' && $vlmPhase === 'language'}<MatrixProduct
+								input="Gate G"
+								output="SiLU(G)"
+								activation="SiLU"
+								inputSize={model.intermediateSize}
+								outputSize={model.intermediateSize}
+								token={stream.tokens[position]}
+								inputValues={row(data, 'gate', position)}
+								outputValues={row(data, 'siluGate', position)}
+							/>
+						{:else if stage === 'up' || stage === 'down'}<MatrixProduct
+								input={stage === 'down' ? 'Activation H' : 'Normalized X'}
+								weight={stage === 'down' ? 'Wdownᵀ' : 'Wupᵀ'}
+								output={stage === 'down' ? 'Output Y' : 'Up U'}
+								inputSize={stage === 'down' ? model.intermediateSize : model.hiddenSize}
+								outputSize={stage === 'down' ? model.hiddenSize : model.intermediateSize}
+								bias={$vlmPhase === 'vision'}
+								token={stream.tokens[position]}
+								inputValues={dotRow(stage, 0)?.input ?? []}
+								outputValues={[0, 1, 2, 3].map((c) => dotRow(stage, c)?.output ?? 0)}
+							/>
+							<details class="recorded-details">
+								<summary>Recorded values and products</summary>
+								<div class="formula">
+									{stage === 'up'
+										? 'u = Wup · normalized input'
+										: 'y = Wdown · activation'}{$vlmPhase === 'vision' ? ' + bias' : ''}
+								</div>
+								{#each [0, 1, 2, 3] as c}{@const r = dotRow(stage, c)}{#if r}<div
+											class="dot-product"
+										>
+											<strong>{stage}[{c}]</strong>
+											<div class="terms">
+												{#each r.weights.slice(0, 4) as w, d}<span>({f(w)} × {f(r.input[d])})</span
+													>{#if d < 3}<span>+</span>{/if}{/each}
+											</div>
+											<div>
+												+ <span class="remaining"
+													>{f(r.rest)}<small>remaining {r.input.length - 4} products</small></span
+												>{#if $vlmPhase === 'vision'}
+													+ {f(r.bias)} <small>bias</small>{/if} ≈ <strong>{f(r.output)}</strong>
+											</div>
+										</div>{/if}{/each}
+							</details>{:else if stage === 'gate' && $vlmPhase === 'language'}<MatrixProduct
+								input="SiLU(G)"
+								weight="Up U"
+								output="Hidden H"
+								inputSize={model.intermediateSize}
+								outputSize={model.intermediateSize}
+								elementwise
+								token={stream.tokens[position]}
+							/>
+							<div class="formula">
 								g = Wgate · x; u = Wup · x<br />h[d] = SiLU(g[d]) × u[d] = g[d] / (1 + exp(−g[d])) ×
 								u[d]
 							</div>
@@ -495,9 +623,14 @@
 										>{/each}</tbody
 								>
 							</table>
-						{:else if stage === 'gelu' && $vlmPhase === 'vision'}<div class="formula">
-								GELU(u) = ½u · (1 + tanh(√(2/π) · (u + 0.044715u³)))
-							</div>
+						{:else if stage === 'gelu' && $vlmPhase === 'vision'}<MatrixProduct
+								input="Up U"
+								output="GELU(U)"
+								activation="GELU"
+								inputSize={model.intermediateSize}
+								outputSize={model.intermediateSize}
+							/>
+							<div class="formula">GELU(u) = ½u · (1 + tanh(√(2/π) · (u + 0.044715u³)))</div>
 							<table>
 								<thead><tr><th>d</th><th>Up projection</th><th>Recorded GELU</th></tr></thead><tbody
 									>{#each coords as c}<tr
@@ -528,7 +661,13 @@
 										>{/each}</tbody
 								>
 							</table>
-						{:else if stage === 'output'}{@const lang = $vlmRecording.common.language}{@const n =
+						{:else if stage === 'output'}<MatrixProduct
+								input="Final hidden state"
+								weight="Wvocabularyᵀ"
+								output="Logits"
+								inputSize={576}
+								outputSize={49280}
+							/>{@const lang = $vlmRecording.common.language}{@const n =
 								document.streams.language.sequenceLength}{@const input = row(
 								lang,
 								'finalHidden',

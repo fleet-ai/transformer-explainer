@@ -1,0 +1,162 @@
+<script lang="ts">
+	import { createEventDispatcher } from 'svelte';
+	export let hiddenSize = 1024;
+	export let intermediateSize = 512;
+	export let gated = true;
+	export let activation = 'SiLU';
+	export let selected = 'up';
+	export let token = 'x';
+	const dispatch = createEventDispatcher<{ select: string }>();
+	let width = 700;
+	$: height = gated ? 172 : 120;
+	$: left = 55;
+	$: up = width * 0.31;
+	$: act = width * 0.51;
+	$: product = width * 0.7;
+	$: right = width - 32;
+	$: mid = gated ? 82 : 65;
+	$: paths = gated
+		? [
+				{
+					id: 'up',
+					d: `M${left} ${mid} C${up - 50} ${mid},${up - 50} 53,${up} 53 H${act} C${product - 35} 53,${product - 35} ${mid},${product} ${mid}`
+				},
+				{ id: 'gate', d: `M${left} ${mid} C${up - 50} ${mid},${up - 50} 116,${up} 116 H${act}` },
+				{
+					id: 'product',
+					d: `M${act} 116 C${product - 35} 116,${product - 35} ${mid},${product} ${mid}`
+				},
+				{ id: 'down', d: `M${product} ${mid} H${right}` }
+			]
+		: [
+				{ id: 'up', d: `M${left} ${mid} H${act}` },
+				{ id: 'activation', d: `M${act} ${mid} H${product}` },
+				{ id: 'down', d: `M${product} ${mid} H${right}` }
+			];
+	$: boxes = gated
+		? [
+				{ id: 'up', label: 'Wup', x: up, y: 53 },
+				{ id: 'gate', label: 'Wgate', x: up, y: 116 },
+				{ id: 'activation', label: activation, x: act, y: 116 },
+				{ id: 'product', label: '⊙', x: product, y: mid },
+				{ id: 'down', label: 'Wdown', x: (product + right) / 2, y: mid }
+			]
+		: [
+				{ id: 'up', label: 'Wup', x: up, y: mid },
+				{ id: 'activation', label: activation, x: act, y: mid },
+				{ id: 'down', label: 'Wdown', x: (product + right) / 2, y: mid }
+			];
+	const select = (id: string) => dispatch('select', id);
+</script>
+
+<div class="feed-forward-flow" bind:clientWidth={width}>
+	<div class="hint">Click a band or box to inspect its operation</div>
+	<svg
+		viewBox={`0 0 ${width} ${height}`}
+		role="group"
+		aria-label={`${hiddenSize} input → ${gated ? 'up and gate projections' : 'up projection'} → ${activation} → ${intermediateSize} intermediate → down projection → ${hiddenSize} output`}
+	>
+		{#each paths as p}<path
+				d={p.d}
+				class:chosen={selected === p.id}
+				role="button"
+				tabindex="0"
+				aria-label={`Inspect ${p.id} band`}
+				on:click={() => select(p.id)}
+				on:keydown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						select(p.id);
+					}
+				}}
+			/>{/each}
+		<rect x={left - 4} y={mid - 13} width="8" height="26" /><rect
+			x={right - 4}
+			y={mid - 13}
+			width="8"
+			height="26"
+		/>
+		<text x={left - 9} y={mid + 4} text-anchor="end"
+			>{token.length > 7 ? token.slice(0, 6) + '…' : token}</text
+		>
+		<text x={left} y={mid + 34} text-anchor="middle">{hiddenSize}</text>
+		<text x={up} y="25" text-anchor="middle">{intermediateSize}</text>
+		<text x={right} y={mid + 34} text-anchor="end">{hiddenSize}</text>
+		{#each boxes as box}<foreignObject
+				x={box.x - (box.id === 'product' ? 14 : 30)}
+				y={box.y - 16}
+				width={box.id === 'product' ? 28 : 60}
+				height="34"
+				><button
+					type="button"
+					aria-label={`Inspect ${box.id === 'activation' ? activation : box.id} operation`}
+					aria-pressed={selected === box.id}
+					on:click={() => select(box.id)}>{box.label}</button
+				></foreignObject
+			>{/each}
+	</svg>
+</div>
+
+<style>
+	.feed-forward-flow {
+		width: 100%;
+		min-width: 0;
+		margin: 8px 0;
+	}
+	.hint {
+		font:
+			11px Arial,
+			sans-serif;
+		color: #927c9f;
+		margin-bottom: 4px;
+	}
+	svg {
+		width: 100%;
+		display: block;
+		overflow: visible;
+	}
+	path {
+		fill: none;
+		stroke: #e9e4f5;
+		stroke-width: 17;
+		pointer-events: bounding-box;
+		cursor: pointer;
+	}
+	path.chosen,
+	path:hover {
+		stroke: #d3b9e7;
+	}
+	path:focus-visible {
+		outline: 2px solid #a779c8;
+	}
+	rect {
+		fill: #bfd8fc;
+	}
+	text {
+		font:
+			11px Arial,
+			sans-serif;
+		fill: #887299;
+	}
+	button {
+		width: 100%;
+		height: 32px;
+		padding: 0 2px;
+		border: 1px solid #ded0eb;
+		border-radius: 4px;
+		background: #faf7fd;
+		color: #826397;
+		font:
+			11px Arial,
+			sans-serif;
+		cursor: pointer;
+	}
+	button[aria-pressed='true'] {
+		background: #e8d7f3;
+		border-color: #b28bce;
+	}
+	button:focus-visible {
+		outline: 2px solid #9362c1;
+		outline-offset: -2px;
+	}
+</style>

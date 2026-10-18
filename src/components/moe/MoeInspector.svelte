@@ -133,6 +133,7 @@
 						{operation}
 						{expert}
 						label={expertLabel}
+						token={tokenLabel($moeExample?.tokens[$moeTokenIndex]?.text ?? 'x')}
 						inputPreview={operationToken.inputPreview}
 						hiddenSize={$moeModel?.hiddenSize ?? 1024}
 						intermediateSize={operation.intermediateSize ??

@@ -1,4 +1,9 @@
 <script lang="ts">
+	import FeedForwardFlow from '../../../../src/components/common/FeedForwardFlow.svelte';
+	import { weightPopover } from '~/store';
+	import MatrixProduct from '../../../../src/components/common/MatrixProduct.svelte';
+	let showActivation = false;
+
 	import { modelMeta, tokens, rootRem } from '~/store';
 	import * as d3 from 'd3';
 	import { gsap } from '~/utils/gsap';
@@ -310,8 +315,37 @@
 	};
 </script>
 
-<WeightPopoverCard id="mlp-up" title={'MLP Expansion'} bind:isAnimationActive {timeline}>
-	<div class="mlp-weight-popover weight-popover-content flex items-center justify-start">
+<WeightPopoverCard
+	id="mlp-up"
+	title={showActivation ? 'MLP · GELU' : 'MLP Expansion'}
+	bind:isAnimationActive
+	{timeline}
+>
+	<FeedForwardFlow
+		hiddenSize={$modelMeta.dimension}
+		intermediateSize={$modelMeta.dimension * 4}
+		gated={false}
+		activation="GELU"
+		selected={showActivation ? 'activation' : 'up'}
+		on:select={(e) => {
+			showActivation = e.detail === 'activation';
+			if (e.detail === 'up') weightPopover.set('mlpUp');
+			else if (e.detail === 'down') weightPopover.set('mlpDown');
+		}}
+	/>
+
+	{#if showActivation}<MatrixProduct
+			input="Expanded U"
+			output="GELU(U)"
+			activation="GELU"
+			inputSize={$modelMeta.dimension * 4}
+			outputSize={$modelMeta.dimension * 4}
+			rows={$tokens.length}
+		/>{/if}
+	<div
+		class:activation-hidden={showActivation}
+		class="mlp-weight-popover weight-popover-content flex items-center justify-start"
+	>
 		<div class="matrix flex flex-col items-center">
 			<div class="tokens" style={`gap:${tokenGap}px`}>
 				{#each $tokens as token, index}
@@ -321,7 +355,7 @@
 		</div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Embeddings<HelpPopover id="mlp-emgeddings" 
+				Embeddings<HelpPopover id="mlp-emgeddings"
 					>{`Embeddings transformed through attention mechanism.`}</HelpPopover
 				>
 			</div>
@@ -340,7 +374,7 @@
 		<div class="operator"><div class="symbol mul">&times;</div></div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Expansion Weights<HelpPopover id="mlp-weights" 
+				Expansion Weights<HelpPopover id="mlp-weights"
 					>{`Projects embedding vectors to expanded latent space. \nParameters were learned in training, fixed in prediction.`}</HelpPopover
 				>
 			</div>
@@ -363,7 +397,7 @@
 		<div class="operator"><div class="symbol plus">+</div></div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Expansion Bias <HelpPopover id="mlp-bias" 
+				Expansion Bias <HelpPopover id="mlp-bias"
 					>{`Offsets added after expansion. \nParameters that learned in training, fixed in prediction.`}</HelpPopover
 				>
 			</div>
@@ -411,7 +445,7 @@
 			<div class="size">({tokenLen}, {$modelMeta.dimension * 4})</div>
 		</div>
 	</div>
-	<div class="formula">
+	<div class="formula" class:activation-hidden={showActivation}>
 		<div class="first-row flex items-center justify-center gap-1">
 			<span class="part1">
 				<Katex
@@ -436,6 +470,9 @@
 >
 
 <style lang="scss">
+	.activation-hidden {
+		display: none !important;
+	}
 	.weight-popover-content {
 		padding: 3rem 3rem 1.5rem 1rem;
 		gap: 0.6rem;

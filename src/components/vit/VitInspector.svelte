@@ -1,4 +1,7 @@
 <script lang="ts">
+	import OperationFlow from '../common/OperationFlow.svelte';
+	import MatrixProduct from '../common/MatrixProduct.svelte';
+	import FeedForwardFlow from '../common/FeedForwardFlow.svelte';
 	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
 	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { recordedAssetUrl } from '$lib/recorded-json.js';
@@ -152,15 +155,14 @@
 					options={tokenOptions}
 					bind:value={$vitSelectedPosition}
 				/>
-				<nav aria-label="Recorded operation">
-					{#each stages as [id, label]}<button
-							class:active={stage === id}
-							on:click={() => {
-								stage = id;
-								coordinate = 0;
-							}}>{label}</button
-						>{/each}
-				</nav>
+				<OperationFlow
+					items={stages.map(([id, label]) => ({ id, label }))}
+					selected={stage}
+					on:select={(e) => {
+						stage = e.detail;
+						coordinate = 0;
+					}}
+				/>
 				<div class="controls">
 					{#if ['qkv', 'attention'].includes(stage)}<div class="segmented" aria-label="Head">
 							{#each [0, 1, 2] as h}<button class:active={head === h} on:click={() => selectHead(h)}
@@ -177,10 +179,28 @@
 						>{/if}
 				</div>
 				{#if data && common && document}
-					{#key `${$blockIdx}:${position}:${head}:${coordinate}:${projection}:${stage}`}
-						{#if stage === 'embedding'}<div class="formula">
-								x₀ = [CLS; patch₀; …; patch₁₉₅] + Eposition
-							</div>
+					{#if ['up', 'gelu', 'down'].includes(stage)}<FeedForwardFlow
+							hiddenSize={192}
+							intermediateSize={768}
+							gated={false}
+							activation="GELU"
+							token={document.tokens[position]}
+							selected={stage === 'gelu' ? 'activation' : stage}
+							on:select={(e) => {
+								stage = e.detail === 'activation' ? 'gelu' : e.detail;
+								coordinate = 0;
+							}}
+						/>{/if}{#key `${$blockIdx}:${position}:${head}:${coordinate}:${projection}:${stage}`}
+						{#if stage === 'embedding'}<MatrixProduct
+								input="Patch pixels"
+								weight="Wpatchᵀ"
+								output="Patch embedding"
+								inputSize={768}
+								outputSize={192}
+								rows={196}
+								bias
+							/>
+							<div class="formula">x₀ = [CLS; patch₀; …; patch₁₉₅] + Eposition</div>
 							<div class="image-equation">
 								<img src={`${base}/${document.image.src}`} alt={document.image.alt} /><span
 									>224 × 224 RGB → 196 patches of 16 × 16<br />Learned projection: 768 pixel
@@ -225,47 +245,70 @@
 								has its own learned normalization parameters.
 							</p>
 						{:else if stage === 'qkv' || stage === 'up' || stage === 'down'}
-							{#if stage === 'qkv'}<div class="segmented">
-									{#each ['query', 'key', 'value'] as p}<button
-											class:active={projection === p}
-											on:click={() => (projection = p)}>{p.toUpperCase()}</button
-										>{/each}
-								</div>
+							{#if stage === 'qkv'}<OperationFlow
+									items={['query', 'key', 'value'].map((id) => ({ id, label: id.toUpperCase() }))}
+									selected={projection}
+									on:select={(e) => (projection = e.detail)}
+								/>
 								<p>
 									Each 192D projection splits into three independent 64D heads. Learned position
 									embeddings are already in x; this model has no RoPE or shared K/V heads.
 								</p>{/if}
-							{@const which = stage === 'qkv' ? projection : stage}
-							<div class="formula">
-								{stage === 'qkv'
-									? `${projection.toUpperCase()} = W · LayerNorm(x) + b`
-									: stage === 'up'
-										? 'u = W₁ · LayerNorm(x) + b₁'
-										: 'y = W₂ · GELU(u) + b₂'}
-							</div>
-							{#each coords as c}{@const r = projectionRow(which, c)}{#if r}<div
-										class="dot-product"
-									>
-										<strong>{which}[{stage === 'qkv' ? head * 64 + c : c}]</strong>
-										<div class="terms">
-											{#each r.weights.slice(0, 4) as w, d}<span>({f(w)} × {f(r.input[d])})</span
-												>{#if d < 3}<span>+</span>{/if}{/each}
-										</div>
-										<div>
-											+ <span class="remaining"
-												>{f(r.remaining)}
-												<small>remaining {r.input.length - 4} products</small></span
-											>
-											+ {f(r.bias)} <small>bias</small> ≈ <strong>{f(r.output)}</strong>
-										</div>
-									</div>{/if}{/each}
-							<p>
-								{stage === 'up' || stage === 'down'
-									? 'Four captured output rows are shown, using every input coordinate. '
-									: ''}Numbers are recorded float32 values; displayed products are rounded to six
-								decimals.
-							</p>
-						{:else if stage === 'attention'}<div class="attention-detail">
+							{@const which = stage === 'qkv' ? projection : stage}<MatrixProduct
+								input={stage === 'down' ? 'GELU(U)' : 'LayerNorm(X)'}
+								weight={stage === 'up' ? 'Wupᵀ' : stage === 'down' ? 'Wdownᵀ' : 'W' + which + 'ᵀ'}
+								output={stage === 'up'
+									? 'Up U'
+									: stage === 'down'
+										? 'Output Y'
+										: which.toUpperCase()}
+								inputSize={stage === 'down' ? 768 : 192}
+								outputSize={stage === 'up' ? 768 : 192}
+								bias
+								token={document.tokens[position]}
+								inputValues={projectionRow(which, 0)?.input ?? []}
+								outputValues={coords.map((c) => projectionRow(which, c)?.output ?? 0)}
+							/>
+							<details class="recorded-details">
+								<summary>Recorded values and products</summary>
+								<div class="formula">
+									{stage === 'qkv'
+										? `${projection.toUpperCase()} = W · LayerNorm(x) + b`
+										: stage === 'up'
+											? 'u = W₁ · LayerNorm(x) + b₁'
+											: 'y = W₂ · GELU(u) + b₂'}
+								</div>
+								{#each coords as c}{@const r = projectionRow(which, c)}{#if r}<div
+											class="dot-product"
+										>
+											<strong>{which}[{stage === 'qkv' ? head * 64 + c : c}]</strong>
+											<div class="terms">
+												{#each r.weights.slice(0, 4) as w, d}<span>({f(w)} × {f(r.input[d])})</span
+													>{#if d < 3}<span>+</span>{/if}{/each}
+											</div>
+											<div>
+												+ <span class="remaining"
+													>{f(r.remaining)}
+													<small>remaining {r.input.length - 4} products</small></span
+												>
+												+ {f(r.bias)} <small>bias</small> ≈ <strong>{f(r.output)}</strong>
+											</div>
+										</div>{/if}{/each}
+								<p>
+									{stage === 'up' || stage === 'down'
+										? 'Four captured output rows are shown, using every input coordinate. '
+										: ''}Numbers are recorded float32 values; displayed products are rounded to six
+									decimals.
+								</p>
+							</details>{:else if stage === 'attention'}<MatrixProduct
+								input="Attention A"
+								weight="Value V"
+								output="Head context"
+								inputSize={197}
+								outputSize={64}
+								token={document.tokens[position]}
+							/>
+							<div class="attention-detail">
 								<VitAttentionMap
 									layer={data}
 									{head}
@@ -312,7 +355,14 @@
 								All three 64D head outputs concatenate to 192D and pass through Woutput + bias
 								before residual addition. Every attention row retains its full softmax denominator.
 							</p>
-						{:else if stage === 'gelu'}<div class="formula">GELU(u) = ½ u · (1 + erf(u / √2))</div>
+						{:else if stage === 'gelu'}<MatrixProduct
+								input="Up U"
+								output="GELU(U)"
+								inputSize={768}
+								outputSize={768}
+								activation="GELU"
+							/>
+							<div class="formula">GELU(u) = ½ u · (1 + erf(u / √2))</div>
 							<table>
 								<thead
 									><tr><th>Coordinate</th><th>Up projection u</th><th>Recorded GELU(u)</th></tr
@@ -348,7 +398,16 @@
 										>{/each}</tbody
 								>
 							</table>
-						{:else if stage === 'classifier'}<div class="formula">
+						{:else if stage === 'classifier'}<MatrixProduct
+								input="Final CLS"
+								weight="Wclassifierᵀ"
+								output="Class logits"
+								inputSize={192}
+								outputSize={1000}
+								bias
+								inputValues={row(common, 'finalHidden', 0)}
+							/>
+							<div class="formula">
 								logits = Wclassifier · LayerNorm(xblock12)[CLS] + bclassifier<br />p(class) =
 								softmax(logits over all 1,000 classes)
 							</div>

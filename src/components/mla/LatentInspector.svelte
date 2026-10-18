@@ -1,4 +1,5 @@
 <script lang="ts">
+	import OperationFlow from '../common/OperationFlow.svelte';
 	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
 	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { createEventDispatcher, onMount } from 'svelte';
@@ -137,7 +138,14 @@
 								output: `K content ${model?.contentKeySize}D + V ${model?.valueHeadSize}D`
 							}
 						]
-					: [];
+					: [
+							{
+								label: 'Wout',
+								weight: `${model?.hiddenSize ?? 2048} × ${(model?.attentionHeads ?? 16) * (model?.valueHeadSize ?? 128)}`,
+								input: 'Concatenated heads',
+								output: 'Attention output'
+							}
+						];
 	$: maximum = Math.max(0, ...vectors.map((v) => (v.values?.length ?? 0) - 1));
 	$: if (coordinate > maximum) coordinate = Math.max(0, maximum - 3);
 	$: coords = [coordinate, coordinate + 1, coordinate + 2, coordinate + 3];
@@ -211,16 +219,15 @@
 				options={tokenOptions}
 				bind:value={$moeTokenIndex}
 			/>
-			<div class="stage-tabs" aria-label="MLA operation">
-				{#each stages as item}<button
-						class:chosen={stage === item.id}
-						aria-pressed={stage === item.id}
-						on:click={() => {
-							stage = item.id;
-							coordinate = 0;
-						}}>{item.label}</button
-					>{/each}
-			</div>
+			<OperationFlow
+				items={stages}
+				selected={stage}
+				label="MLA operations"
+				on:select={(e) => {
+					stage = e.detail;
+					coordinate = 0;
+				}}
+			/>
 			{#if loading}<p role="status">Loading recorded MLA tensors…</p>{:else if error}<p
 					role="alert"
 				>
@@ -275,29 +282,32 @@
 						>
 					{/if}
 				</div>
-				<div class="recording-heading">
-					<h3>Recorded values · {selected.label}</h3>
-					<div class="coordinates">
-						<span>Coordinates {coordinate}–{Math.min(coordinate + 3, maximum)}</span><button
-							aria-label="Previous MLA coordinates"
-							disabled={coordinate === 0}
-							on:click={() => (coordinate = Math.max(0, coordinate - 4))}>‹</button
-						><button
-							aria-label="Next MLA coordinates"
-							disabled={coordinate + 4 > maximum}
-							on:click={() => (coordinate = Math.min(maximum, coordinate + 4))}>›</button
-						>
+				<details class="recorded-details">
+					<summary>Recorded MLA values</summary>
+					<div class="recording-heading">
+						<h3>Recorded values · {selected.label}</h3>
+						<div class="coordinates">
+							<span>Coordinates {coordinate}–{Math.min(coordinate + 3, maximum)}</span><button
+								aria-label="Previous MLA coordinates"
+								disabled={coordinate === 0}
+								on:click={() => (coordinate = Math.max(0, coordinate - 4))}>‹</button
+							><button
+								aria-label="Next MLA coordinates"
+								disabled={coordinate + 4 > maximum}
+								on:click={() => (coordinate = Math.min(maximum, coordinate + 4))}>›</button
+							>
+						</div>
 					</div>
-				</div>
-				<div class="tensor-grid" style={`--columns:${vectors.length}`}>
-					{#each vectors as vector}<section class={vector.color}>
-							<h4>{vector.label}</h4>
-							<small>{vector.values?.length ?? 0} recorded coordinates</small
-							>{#each coords as index}<div class="value-row">
-									<span>[{index}]</span><b>{number(vector.values?.[index])}</b>
-								</div>{/each}
-						</section>{/each}
-				</div>
+					<div class="tensor-grid" style={`--columns:${vectors.length}`}>
+						{#each vectors as vector}<section class={vector.color}>
+								<h4>{vector.label}</h4>
+								<small>{vector.values?.length ?? 0} recorded coordinates</small
+								>{#each coords as index}<div class="value-row">
+										<span>[{index}]</span><b>{number(vector.values?.[index])}</b>
+									</div>{/each}
+							</section>{/each}
+					</div>
+				</details>
 				<p class="footnote">
 					Matrix boxes show shapes; values below each stage are recorded tensors. All {model?.numLayers}
 					transformer blocks execute before the vocabulary prediction. The diagram reuses this block's

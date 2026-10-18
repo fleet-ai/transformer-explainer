@@ -1,4 +1,7 @@
 <script lang="ts">
+	import OperationFlow from '../common/OperationFlow.svelte';
+	import MatrixProduct from '../common/MatrixProduct.svelte';
+	import FeedForwardFlow from '../common/FeedForwardFlow.svelte';
 	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
 	import TokenPicker from '../moe/TokenPicker.svelte';
 	import { createEventDispatcher } from 'svelte';
@@ -68,18 +71,16 @@
 			>×</button
 		>
 	</header>
-	<nav>
-		<button class:chosen={stage === 'self'} on:click={() => selectStage('self')}
-			>Self-attention</button
-		>{#if $t5Stack === 'decoder'}<button
-				class:chosen={stage === 'cross'}
-				on:click={() => selectStage('cross')}>Cross-attention</button
-			>{/if}<button class:chosen={stage === 'ffn'} on:click={() => selectStage('ffn')}
-			>Feed-forward</button
-		><button class:chosen={stage === 'output'} on:click={() => selectStage('output')}
-			>Output projection</button
-		>
-	</nav>
+	<OperationFlow
+		items={[
+			{ id: 'self', label: 'Self-attention' },
+			...($t5Stack === 'decoder' ? [{ id: 'cross', label: 'Cross-attention' }] : []),
+			{ id: 'ffn', label: 'Feed-forward' },
+			{ id: 'output', label: 'Output projection' }
+		]}
+		selected={stage}
+		on:select={(e) => selectStage(e.detail as typeof stage)}
+	/>
 	<div class="body">
 		<TokenInspectorLayout showTokens={stage !== 'output'}
 			><svelte:fragment slot="tokens"
@@ -96,6 +97,21 @@
 					/>{/if}</svelte:fragment
 			>
 			{#if stage === 'self' || stage === 'cross'}
+				<MatrixProduct
+					input="Query Q"
+					weight="Key Kᵀ"
+					output="Scores"
+					inputSize={64}
+					outputSize={keyTokens?.length ?? 0}
+					token={$tokens[token]}
+				/><MatrixProduct
+					input="Attention A"
+					weight="Value V"
+					output="Head context"
+					inputSize={keyTokens?.length ?? 0}
+					outputSize={64}
+					token={$tokens[token]}
+				/>
 				<p class="explanation">
 					{stage === 'cross'
 						? 'Queries come from the decoder; keys and values come from the final encoder memory. Every source token is visible.'
@@ -163,84 +179,107 @@
 					Wₒ to return a 512D residual update. Values come from the recorded forward pass.
 				</p>
 			{:else if stage === 'ffn' && ff}
-				<div class="flow">
-					<button class:chosen={projection === 'up'} on:click={() => (projection = 'up')}
-						>Wᵢ × x · 512 → 2048</button
-					><span>→</span><button
-						class:chosen={projection === 'relu'}
-						on:click={() => (projection = 'relu')}>ReLU: max(0, u)</button
-					><span>→</span><button
-						class:chosen={projection === 'down'}
-						on:click={() => (projection = 'down')}>Wₒ × h · 2048 → 512</button
-					>
-				</div>
-				{#if projection === 'relu'}<table>
-						<thead
-							><tr><th>Coordinate</th><th>Up projection u</th><th>ReLU(u) = max(0, u)</th></tr
-							></thead
-						><tbody
-							>{#each ff.activation as value, i}<tr
-									><td>{i}</td><td>{fmt(ff.up.output[i])}</td><td>{fmt(value)}</td></tr
-								>{/each}</tbody
-						>
-					</table>
-					<p class="footnote">
-						First 4 of 2,048 recorded intermediate coordinates. This is a dense ReLU network: all
-						intermediate units are evaluated for every token.
-					</p>
-				{:else if operation && input}<h3>
-						{projection === 'up' ? 'Up' : 'Down'} projection · {projection === 'up'
-							? '2048 × 512'
-							: '512 × 2048'} weights
-					</h3>
-					<table class="weights">
-						<thead
-							><tr
-								><th>Output</th>{#each [0, 1, 2, 3] as i}<th>W[{i}] × x[{i}]</th>{/each}<th
-									>Remaining {projection === 'up' ? 508 : 2044} terms</th
-								><th>Recorded result</th></tr
-							></thead
-						><tbody
-							>{#each operation.weights as weights, i}<tr
-									class:active={row === i}
-									on:click={() => (row = i)}
-									>{#each [i] as output}<td
-											><button aria-label={`Select output ${i}`} on:click={() => (row = i)}
-												>{i}</button
-											></td
-										>{/each}{#each weights as weight, j}<td
-											>{fmt(weight)}<small>× {fmt(input[j])}</small></td
-										>{/each}<td>{fmt(operation.omittedContribution[i])}</td><td
-										><b>{fmt(operation.output[i])}</b></td
-									></tr
-								>{/each}</tbody
-						>
-					</table>
-					<div class="equation">
-						y[{row}] = {#each operation.weights[row] as weight, i}<span
-								>({fmt(weight)} × {fmt(input[i])}) +
-							</span>{/each}{fmt(operation.omittedContribution[row])} ≈
-						<b>{fmt(operation.output[row])}</b>
-					</div>{/if}
-				<div class="residual">
-					<h3>Residual stream · first four coordinates</h3>
-					<table>
-						<thead
-							><tr
-								><th>Coordinate</th><th>Feed-forward input after RMSNorm</th><th
-									>Feed-forward output</th
-								><th>Block output after residual addition</th></tr
-							></thead
-						><tbody
-							>{#each ff.inputPreview as value, i}<tr
-									><td>{i}</td><td>{fmt(value)}</td><td>{fmt(ff.down.output[i])}</td><td
-										>{fmt(layer?.blockOutputPreview?.[token]?.[i])}</td
-									></tr
-								>{/each}</tbody
-						>
-					</table>
-				</div>
-			{:else if stage === 'output' && example}
+				<FeedForwardFlow
+					hiddenSize={512}
+					intermediateSize={2048}
+					gated={false}
+					activation="ReLU"
+					token={$tokens[token]}
+					selected={projection === 'relu' ? 'activation' : projection}
+					on:select={(e) =>
+						(projection = (e.detail === 'activation' ? 'relu' : e.detail) as typeof projection)}
+				/>
+				<MatrixProduct
+					input={projection === 'down'
+						? 'ReLU(U)'
+						: projection === 'relu'
+							? 'Up U'
+							: 'Normalized X'}
+					weight={projection === 'down' ? 'Wₒᵀ' : 'Wᵢᵀ'}
+					output={projection === 'down' ? 'Output Y' : projection === 'relu' ? 'ReLU(U)' : 'Up U'}
+					activation={projection === 'relu' ? 'ReLU' : ''}
+					inputSize={projection === 'up' ? 512 : 2048}
+					outputSize={projection === 'down' ? 512 : 2048}
+					token={$tokens[token]}
+					inputValues={projection === 'relu' ? ff.up.output : (input ?? [])}
+					outputValues={projection === 'relu' ? ff.activation : (operation?.output ?? [])}
+				/>
+				<details class="recorded-details">
+					<summary>Recorded feed-forward values and products</summary>
+					{#if projection === 'relu'}<table>
+							<thead
+								><tr><th>Coordinate</th><th>Up projection u</th><th>ReLU(u) = max(0, u)</th></tr
+								></thead
+							><tbody
+								>{#each ff.activation as value, i}<tr
+										><td>{i}</td><td>{fmt(ff.up.output[i])}</td><td>{fmt(value)}</td></tr
+									>{/each}</tbody
+							>
+						</table>
+						<p class="footnote">
+							First 4 of 2,048 recorded intermediate coordinates. This is a dense ReLU network: all
+							intermediate units are evaluated for every token.
+						</p>
+					{:else if operation && input}<h3>
+							{projection === 'up' ? 'Up' : 'Down'} projection · {projection === 'up'
+								? '2048 × 512'
+								: '512 × 2048'} weights
+						</h3>
+						<table class="weights">
+							<thead
+								><tr
+									><th>Output</th>{#each [0, 1, 2, 3] as i}<th>W[{i}] × x[{i}]</th>{/each}<th
+										>Remaining {projection === 'up' ? 508 : 2044} terms</th
+									><th>Recorded result</th></tr
+								></thead
+							><tbody
+								>{#each operation.weights as weights, i}<tr
+										class:active={row === i}
+										on:click={() => (row = i)}
+										>{#each [i] as output}<td
+												><button aria-label={`Select output ${i}`} on:click={() => (row = i)}
+													>{i}</button
+												></td
+											>{/each}{#each weights as weight, j}<td
+												>{fmt(weight)}<small>× {fmt(input[j])}</small></td
+											>{/each}<td>{fmt(operation.omittedContribution[i])}</td><td
+											><b>{fmt(operation.output[i])}</b></td
+										></tr
+									>{/each}</tbody
+							>
+						</table>
+						<div class="equation">
+							y[{row}] = {#each operation.weights[row] as weight, i}<span
+									>({fmt(weight)} × {fmt(input[i])}) +
+								</span>{/each}{fmt(operation.omittedContribution[row])} ≈
+							<b>{fmt(operation.output[row])}</b>
+						</div>{/if}
+					<div class="residual">
+						<h3>Residual stream · first four coordinates</h3>
+						<table>
+							<thead
+								><tr
+									><th>Coordinate</th><th>Feed-forward input after RMSNorm</th><th
+										>Feed-forward output</th
+									><th>Block output after residual addition</th></tr
+								></thead
+							><tbody
+								>{#each ff.inputPreview as value, i}<tr
+										><td>{i}</td><td>{fmt(value)}</td><td>{fmt(ff.down.output[i])}</td><td
+											>{fmt(layer?.blockOutputPreview?.[token]?.[i])}</td
+										></tr
+									>{/each}</tbody
+							>
+						</table>
+					</div>
+				</details>{:else if stage === 'output' && example}<MatrixProduct
+					input="Scaled final hidden state"
+					weight="Wvocabularyᵀ"
+					output="Logits"
+					inputSize={512}
+					outputSize={32128}
+					inputValues={example.lmHead.inputPreview}
+				/>
 				<p class="explanation">
 					The full decoder generated <b>{example.translation}</b> from the source prompt. These logits
 					predict the next token after that generated prefix. The tied vocabulary matrix scores all 32,128
