@@ -128,7 +128,7 @@
 		white-space: nowrap;
 	}
 	.cross-card-wrap {
-		padding: 0 2rem 0 2rem;
+		padding: 0 14px 0 16px;
 	}
 	.cross-flow {
 		position: relative;
@@ -163,8 +163,9 @@
 		align-items: center;
 		justify-content: space-between;
 		position: relative;
-		min-height: 480px;
-		padding: 38px 18px 32px 38px;
+		min-height: 0;
+		height: clamp(280px, calc(100dvh - 410px), 610px) !important;
+		padding: 38px 10px 24px 18px;
 	}
 	.cross-input {
 		position: absolute;
@@ -197,10 +198,12 @@
 		width: 5px;
 	}
 	.cross-qkv {
+		position: relative;
+		top: 12px;
 		display: flex;
 		flex-direction: column;
-		gap: 3.3rem;
-		margin-left: 2.8rem;
+		gap: 2.2rem;
+		margin-left: 32px;
 	}
 	.mini-title {
 		position: absolute;

@@ -5,7 +5,7 @@
 	export let className: string | undefined = undefined;
 </script>
 
-{#if $t5Stack === 'decoder'}<LinearSoftmax {className} />{:else}<div
+{#if $t5Stack === 'decoder'}<LinearSoftmax {className} compact />{:else}<div
 		class={`encoder-memory ${className ?? ''}`}
 	>
 		<div class="title">Encoder memory</div>
@@ -49,7 +49,7 @@
 		border-radius: 5px;
 		cursor: pointer;
 		width: 100%;
-		white-space: nowrap;
+		white-space: normal;
 	}
 	.content button small {
 		display: block;

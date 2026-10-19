@@ -32,6 +32,7 @@
 	import TextbookTooltip from '~/components/common/TextbookTooltip.svelte';
 
 	export let className: string | undefined = undefined;
+	export let compact = false;
 
 	setContext('block-id', 'softmax');
 
@@ -160,8 +161,8 @@
 		gsap.set('.steps', { justifyContent: 'start' });
 	};
 
-	let rowHeight = rootRem * 1.4;
-	let rowGap = 0.5 * rootRem;
+	$: rowHeight = compact ? 18 : rootRem * 1.4;
+	$: rowGap = compact ? 4 : 0.5 * rootRem;
 
 	let hoveredIndex: number | null = null;
 

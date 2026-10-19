@@ -45,11 +45,14 @@
 	let active = false;
 	let error = '';
 	let vizHeight = 0;
-	let titleHeight = rootRem * 5;
+	$: titleHeight = $moeModel?.architecture === 'encoder-decoder' ? 60 : rootRem * 5;
 	const calculateVectorHeight = () => {
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
 		const height = Math.min(
-			Math.max((vizHeight - titleHeight - gaps) / $tokens.length / maxVectorScale, minVectorHeight),
+			Math.max(
+				(vizHeight - titleHeight - gaps) / $tokens.length / maxVectorScale,
+				$moeModel?.architecture === 'encoder-decoder' ? 8 : minVectorHeight
+			),
 			maxVectorHeight
 		);
 		vectorHeight.set(height);
@@ -207,13 +210,37 @@
 	}
 
 	.seq2seq .steps {
-		grid-template-columns: auto 7fr 0.45fr 0.85fr;
+		grid-template-columns: 145px minmax(0, 1fr) 60px 160px;
 	}
 	.seq2seq .steps .blocks .block-steps {
-		grid-template-columns: 0.42fr 2.1fr 1.2fr;
+		grid-template-columns: 50px minmax(0, 2.1fr) minmax(170px, 1.2fr);
 	}
 	.seq2seq.decoder .steps .blocks .block-steps {
-		grid-template-columns: 0.42fr 2fr 2fr 1.15fr;
+		grid-template-columns: 50px minmax(0, 1fr) minmax(0, 1fr) 170px;
+	}
+	.seq2seq :global(.step > .title) {
+		font-size: 14px;
+		white-space: normal;
+		padding-bottom: 8px;
+	}
+	.seq2seq .nodes {
+		padding-top: 14px;
+		padding-bottom: 16px;
+	}
+	.seq2seq :global(.embedding:not(.expanded) .content) {
+		padding-left: 6px;
+	}
+	.seq2seq :global(.embedding:not(.expanded) .token-string) {
+		width: 125px;
+	}
+	.seq2seq :global(.embedding:not(.expanded) .title) {
+		padding-left: 20px;
+	}
+	.seq2seq :global(.step) {
+		min-width: 0;
+	}
+	.seq2seq :global(.prob-dim) {
+		bottom: 0;
 	}
 	.hybrid-model .steps {
 		grid-template-columns: auto 6.5fr 0.5fr 0.9fr;

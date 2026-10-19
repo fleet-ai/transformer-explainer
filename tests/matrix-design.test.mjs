@@ -20,6 +20,7 @@ async function component(name, folder = 'common') {
 }
 const Matrix = await component('MatrixProduct');
 const Flow = await component('FeedForwardFlow');
+const LatentFlow = await component('LatentProjectionFlow', 'mla');
 test('matrix view preserves rectangular dimensions and recorded preview', () => {
 	const { body } = render(Matrix, {
 		props: { inputSize: 512, outputSize: 1024, inputValues: [0.125], outputValues: [-0.25] }
@@ -74,7 +75,6 @@ test('Dense-style flow omits the gate and exposes GELU', () => {
 	assert.match(body, /3072/);
 });
 
-const LatentFlow = await component('LatentProjectionFlow', 'mla');
 test('MLA flow renders one query and KV projection with separate query and shared-key RoPE controls', () => {
 	const { body } = render(LatentFlow, { props: { selected: 'compression' } });
 	assert.equal((body.match(/data-node="query"/g) ?? []).length, 1);

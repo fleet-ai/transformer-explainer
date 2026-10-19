@@ -44,17 +44,17 @@
 		height: 100%;
 		display: flex;
 		flex-direction: column;
-		min-width: 1900px;
+		min-width: 0;
 	}
 	.stack-toolbar {
 		position: relative;
 		z-index: 150;
 		height: 42px;
 		flex: 0 0 42px;
-		padding: 0 40px 7px;
+		padding: 0 20px 7px;
 		display: flex;
 		align-items: center;
-		gap: 24px;
+		gap: 16px;
 		color: #9986ab;
 		font:
 			12px Arial,
@@ -82,6 +82,11 @@
 		color: #765889;
 		margin-left: 8px;
 		font-weight: 500;
+	}
+	@media (max-width: 1400px) {
+		.scope {
+			display: none;
+		}
 	}
 	.scope {
 		margin-left: auto;
