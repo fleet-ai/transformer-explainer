@@ -46,7 +46,9 @@
 		</div>
 		<strong
 			>{activation
-				? 'elementwise'
+				? activation === 'Softmax'
+					? 'over key positions'
+					: 'elementwise'
 				: elementwise
 					? `${rows} × ${inputSize}`
 					: `${inputSize} × ${outputSize}`}</strong

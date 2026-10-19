@@ -1,5 +1,6 @@
 <script lang="ts">
-	import OperationFlow from '../common/OperationFlow.svelte';
+	import BlockChooser from '../common/BlockChooser.svelte';
+	import TensorBandFlow from '../common/TensorBandFlow.svelte';
 	import MatrixProduct from '../common/MatrixProduct.svelte';
 	import FeedForwardFlow from '../common/FeedForwardFlow.svelte';
 	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
@@ -9,6 +10,7 @@
 	import { t5Document, t5Example, t5Stack, t5Inspector } from '$lib/seq2seq/store';
 	import type { T5Attention } from '$lib/seq2seq/types';
 	const dispatch = createEventDispatcher();
+	let attentionPart = 'scores';
 	let selectedKey = 0,
 		coordinate = 0,
 		projection: 'up' | 'relu' | 'down' = 'up',
@@ -71,7 +73,7 @@
 			>×</button
 		>
 	</header>
-	<OperationFlow
+	<BlockChooser
 		items={[
 			{ id: 'self', label: 'Self-attention' },
 			...($t5Stack === 'decoder' ? [{ id: 'cross', label: 'Cross-attention' }] : []),
@@ -82,7 +84,7 @@
 		on:select={(e) => selectStage(e.detail as typeof stage)}
 	/>
 	<div class="body">
-		<TokenInspectorLayout showTokens={stage !== 'output'}
+		<TokenInspectorLayout gap="4px" showTokens={stage !== 'output'}
 			><svelte:fragment slot="tokens"
 				><TokenPicker
 					heading={stage === 'ffn' ? 'Token' : 'Query token'}
@@ -97,88 +99,119 @@
 					/>{/if}</svelte:fragment
 			>
 			{#if stage === 'self' || stage === 'cross'}
-				<MatrixProduct
-					input="Query Q"
-					weight="Key Kᵀ"
-					output="Scores"
-					inputSize={64}
-					outputSize={keyTokens?.length ?? 0}
-					token={$tokens[token]}
-				/><MatrixProduct
-					input="Attention A"
-					weight="Value V"
-					output="Head context"
-					inputSize={keyTokens?.length ?? 0}
-					outputSize={64}
-					token={$tokens[token]}
+				<TensorBandFlow
+					kind="attention"
+					label={stage === 'cross' ? 'Cross-attention' : 'Self-attention'}
+					selected={attentionPart}
+					headSize={64}
+					sequenceLength={keyTokens?.length ?? 0}
+					relativeBias={stage !== 'cross'}
+					causal={stage === 'self' && $t5Stack === 'decoder'}
+					scale="unscaled"
+					on:select={(e) => (attentionPart = e.detail)}
 				/>
-				<p class="explanation">
-					{stage === 'cross'
-						? 'Queries come from the decoder; keys and values come from the final encoder memory. Every source token is visible.'
-						: $t5Stack === 'encoder'
-							? 'Every encoder token attends to every source token. A learned relative-position bias is added to QKᵀ.'
-							: 'Decoder self-attention adds a learned relative-position bias and masks future positions.'}
-					T5 uses unscaled dot products and no RoPE.
-				</p>
-				<div class="equation">
-					<strong>Q[{token}] · K[{safeKey}]</strong> = {#each q.slice(0, 4) as value, i}<span
-							>({fmt(value)} × {fmt(k[i])}) +
-						</span>{/each}<span class="omitted"
-						>{fmt((dot ?? 0) - dotFirst)} <small>remaining 60 terms</small></span
-					>
-					≈ <b>{fmt(dot)}</b>
-				</div>
-				<div class="stat-grid">
-					<div>Recorded dot product<b>{fmt(dot)}</b></div>
-					<div>
-						{stage === 'cross' ? 'Position bias' : 'Relative bias + mask'}<b
-							>{Math.abs(bias) > 1e30 ? '−∞' : fmt(bias)}</b
+				{#if attentionPart === 'scores'}<MatrixProduct
+						input="Query Q"
+						weight="Key Kᵀ"
+						output="Scores"
+						inputSize={64}
+						outputSize={keyTokens?.length ?? 0}
+						token={$tokens[token]}
+						inputValues={q}
+						outputValues={ops?.scores[$attentionHeadIdx]?.[token] ?? []}
+					/>
+				{:else if attentionPart === 'softmax'}<MatrixProduct
+						input={stage === 'cross'
+							? 'Scores'
+							: $t5Stack === 'decoder'
+								? 'Scores + bias + causal mask'
+								: 'Scores + relative bias'}
+						output="Attention A"
+						activation="Softmax"
+						inputSize={keyTokens?.length ?? 0}
+						outputSize={keyTokens?.length ?? 0}
+						token={$tokens[token]}
+						outputValues={ops?.probabilities[$attentionHeadIdx]?.[token] ?? []}
+					/>
+				{:else}<MatrixProduct
+						input="Attention A"
+						weight="Value V"
+						output="Head context"
+						inputSize={keyTokens?.length ?? 0}
+						outputSize={64}
+						token={$tokens[token]}
+						inputValues={ops?.probabilities[$attentionHeadIdx]?.[token] ?? []}
+						outputValues={ops?.attentionContext?.[$attentionHeadIdx]?.[token] ?? []}
+					/>{/if}
+				<details class="recorded-details">
+					<summary>Recorded attention values and products</summary>
+					<p class="explanation">
+						{stage === 'cross'
+							? 'Queries come from the decoder; keys and values come from the final encoder memory. Every source token is visible.'
+							: $t5Stack === 'encoder'
+								? 'Every encoder token attends to every source token. A learned relative-position bias is added to QKᵀ.'
+								: 'Decoder self-attention adds a learned relative-position bias and masks future positions.'}
+						T5 uses unscaled dot products and no RoPE.
+					</p>
+					<div class="equation">
+						<strong>Q[{token}] · K[{safeKey}]</strong> = {#each q.slice(0, 4) as value, i}<span
+								>({fmt(value)} × {fmt(k[i])}) +
+							</span>{/each}<span class="omitted"
+							>{fmt((dot ?? 0) - dotFirst)} <small>remaining 60 terms</small></span
+						>
+						≈ <b>{fmt(dot)}</b>
+					</div>
+					<div class="stat-grid">
+						<div>Recorded dot product<b>{fmt(dot)}</b></div>
+						<div>
+							{stage === 'cross' ? 'Position bias' : 'Relative bias + mask'}<b
+								>{Math.abs(bias) > 1e30 ? '−∞' : fmt(bias)}</b
+							>
+						</div>
+						<div>
+							Softmax over {keyTokens?.length} keys<b>{((probability ?? 0) * 100).toFixed(4)}%</b>
+						</div>
+					</div>
+					<div class="coordinate">
+						<label
+							>Output coordinate <input
+								type="number"
+								min="0"
+								max="63"
+								bind:value={coordinate}
+								on:change={() =>
+									(coordinate = Math.max(0, Math.min(63, Math.trunc(coordinate || 0))))}
+							/></label
+						><span
+							>Σ A[{token}, j] × V[j, {coordinate}] =
+							<b>{fmt(ops?.attentionContext?.[$attentionHeadIdx]?.[token]?.[coordinate])}</b></span
 						>
 					</div>
-					<div>
-						Softmax over {keyTokens?.length} keys<b>{((probability ?? 0) * 100).toFixed(4)}%</b>
-					</div>
-				</div>
-				<div class="coordinate">
-					<label
-						>Output coordinate <input
-							type="number"
-							min="0"
-							max="63"
-							bind:value={coordinate}
-							on:change={() =>
-								(coordinate = Math.max(0, Math.min(63, Math.trunc(coordinate || 0))))}
-						/></label
-					><span
-						>Σ A[{token}, j] × V[j, {coordinate}] =
-						<b>{fmt(ops?.attentionContext?.[$attentionHeadIdx]?.[token]?.[coordinate])}</b></span
-					>
-				</div>
-				<table>
-					<thead
-						><tr
-							><th>Key token</th><th>Attention A</th><th>Value V[{coordinate}]</th><th
-								>Contribution A × V</th
-							></tr
-						></thead
-					><tbody
-						>{#each keyTokens ?? [] as key, index}<tr
-								><td>{key.index}: {key.text}</td><td
-									>{fmt(ops?.probabilities[$attentionHeadIdx]?.[token]?.[index])}</td
-								><td>{fmt(ops?.value[$attentionHeadIdx]?.[index]?.[coordinate])}</td><td
-									>{fmt(
-										(ops?.probabilities[$attentionHeadIdx]?.[token]?.[index] ?? 0) *
-											(ops?.value[$attentionHeadIdx]?.[index]?.[coordinate] ?? 0)
-									)}</td
+					<table>
+						<thead
+							><tr
+								><th>Key token</th><th>Attention A</th><th>Value V[{coordinate}]</th><th
+									>Contribution A × V</th
 								></tr
-							>{/each}</tbody
-					>
-				</table>
-				<p class="footnote">
-					All key contributions are shown. Eight 64D head outputs are concatenated and multiplied by
-					Wₒ to return a 512D residual update. Values come from the recorded forward pass.
-				</p>
-			{:else if stage === 'ffn' && ff}
+							></thead
+						><tbody
+							>{#each keyTokens ?? [] as key, index}<tr
+									><td>{key.index}: {key.text}</td><td
+										>{fmt(ops?.probabilities[$attentionHeadIdx]?.[token]?.[index])}</td
+									><td>{fmt(ops?.value[$attentionHeadIdx]?.[index]?.[coordinate])}</td><td
+										>{fmt(
+											(ops?.probabilities[$attentionHeadIdx]?.[token]?.[index] ?? 0) *
+												(ops?.value[$attentionHeadIdx]?.[index]?.[coordinate] ?? 0)
+										)}</td
+									></tr
+								>{/each}</tbody
+						>
+					</table>
+					<p class="footnote">
+						All key contributions are shown. Eight 64D head outputs are concatenated and multiplied
+						by Wₒ to return a 512D residual update. Values come from the recorded forward pass.
+					</p>
+				</details>{:else if stage === 'ffn' && ff}
 				<FeedForwardFlow
 					hiddenSize={512}
 					intermediateSize={2048}
@@ -272,7 +305,13 @@
 							>
 						</table>
 					</div>
-				</details>{:else if stage === 'output' && example}<MatrixProduct
+				</details>{:else if stage === 'output' && example}<TensorBandFlow
+					kind="classifier"
+					label="Scaled hidden × Wvocab"
+					hiddenSize={512}
+					outputSize={32128}
+					selected="classifier"
+				/><MatrixProduct
 					input="Scaled final hidden state"
 					weight="Wvocabularyᵀ"
 					output="Logits"
@@ -280,36 +319,39 @@
 					outputSize={32128}
 					inputValues={example.lmHead.inputPreview}
 				/>
-				<p class="explanation">
-					The full decoder generated <b>{example.translation}</b> from the source prompt. These logits
-					predict the next token after that generated prefix. The tied vocabulary matrix scores all 32,128
-					tokens.
-				</p>
-				<div class="equation">
-					Final RMSNorm hidden state × 1/√512 ({fmt(example.lmHead.scale)}) → scaled 512D vector →
-					vocabulary projection → softmax.
-				</div>
-				<table>
-					<thead
-						><tr
-							><th>Candidate</th>{#each [0, 1, 2, 3] as i}<th>W[{i}] × x[{i}]</th>{/each}<th
-								>Remaining 508</th
-							><th>Recorded logit</th></tr
-						></thead
-					><tbody
-						>{#each example.lmHead.candidateLabels as label, i}<tr
-								><td>{label}</td>{#each example.lmHead.weights[i] as weight, j}<td
-										>{fmt(weight)}<small>× {fmt(example.lmHead.inputPreview[j])}</small></td
-									>{/each}<td>{fmt(example.lmHead.omittedContribution[i])}</td><td
-									><b>{fmt(example.lmHead.logits[i])}</b></td
-								></tr
-							>{/each}</tbody
-					>
-				</table>
-				<p class="footnote">
-					Four vocabulary rows are shown with the exact recorded contribution of the other 508
-					coordinates. The probability sidebar uses the complete vocabulary logits.
-				</p>
+				<details class="recorded-details">
+					<summary>Recorded vocabulary values and products</summary>
+					<p class="explanation">
+						The full decoder generated <b>{example.translation}</b> from the source prompt. These logits
+						predict the next token after that generated prefix. The tied vocabulary matrix scores all
+						32,128 tokens.
+					</p>
+					<div class="equation">
+						Final RMSNorm hidden state × 1/√512 ({fmt(example.lmHead.scale)}) → scaled 512D vector →
+						vocabulary projection → softmax.
+					</div>
+					<table>
+						<thead
+							><tr
+								><th>Candidate</th>{#each [0, 1, 2, 3] as i}<th>W[{i}] × x[{i}]</th>{/each}<th
+									>Remaining 508</th
+								><th>Recorded logit</th></tr
+							></thead
+						><tbody
+							>{#each example.lmHead.candidateLabels as label, i}<tr
+									><td>{label}</td>{#each example.lmHead.weights[i] as weight, j}<td
+											>{fmt(weight)}<small>× {fmt(example.lmHead.inputPreview[j])}</small></td
+										>{/each}<td>{fmt(example.lmHead.omittedContribution[i])}</td><td
+										><b>{fmt(example.lmHead.logits[i])}</b></td
+									></tr
+								>{/each}</tbody
+						>
+					</table>
+					<p class="footnote">
+						Four vocabulary rows are shown with the exact recorded contribution of the other 508
+						coordinates. The probability sidebar uses the complete vocabulary logits.
+					</p>
+				</details>
 			{/if}
 			<footer>
 				Recorded from <a href={$t5Document?.model.url} target="_blank" rel="noreferrer"
@@ -326,9 +368,9 @@
 		position: fixed;
 		z-index: 1300;
 		right: 22px;
-		bottom: 22px;
+		bottom: 12px;
 		width: min(1120px, calc(100vw - 44px));
-		height: min(640px, calc(100vh - 44px));
+		height: min(720px, calc(100dvh - 24px));
 		display: flex;
 		flex-direction: column;
 		background: #fff;

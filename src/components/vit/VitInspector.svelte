@@ -1,5 +1,6 @@
 <script lang="ts">
-	import OperationFlow from '../common/OperationFlow.svelte';
+	import BlockChooser from '../common/BlockChooser.svelte';
+	import TensorBandFlow from '../common/TensorBandFlow.svelte';
 	import MatrixProduct from '../common/MatrixProduct.svelte';
 	import FeedForwardFlow from '../common/FeedForwardFlow.svelte';
 	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
@@ -26,6 +27,7 @@
 		['residual', 'Residuals'],
 		['classifier', 'CLS classifier']
 	];
+	let attentionPart = 'context';
 	let coordinate = 0,
 		projection = 'query';
 	$: data = $vitRecording?.layers[$blockIdx];
@@ -155,7 +157,7 @@
 					options={tokenOptions}
 					bind:value={$vitSelectedPosition}
 				/>
-				<OperationFlow
+				<BlockChooser
 					items={stages.map(([id, label]) => ({ id, label }))}
 					selected={stage}
 					on:select={(e) => {
@@ -179,6 +181,44 @@
 						>{/if}
 				</div>
 				{#if data && common && document}
+					{#if stage === 'attention'}<TensorBandFlow
+							kind="attention"
+							label="ViT attention"
+							selected={attentionPart}
+							headSize={64}
+							sequenceLength={197}
+							scale="÷ √64"
+							on:select={(e) => (attentionPart = e.detail)}
+						/>
+					{:else if stage === 'embedding'}<TensorBandFlow
+							kind="embedding"
+							label="Patch embeddings"
+							hiddenSize={768}
+							outputSize={192}
+							selected="embedding"
+						/>
+					{:else if ['norm1', 'norm2'].includes(stage)}<TensorBandFlow
+							kind="norm"
+							label="Layer normalization"
+							normalization="LayerNorm"
+							hiddenSize={192}
+							outputSize={192}
+							selected="norm"
+						/>
+					{:else if stage === 'residual'}<TensorBandFlow
+							kind="residual"
+							label="Residual additions"
+							hiddenSize={192}
+							selected="residual"
+							on:select={(e) => (stage = e.detail)}
+						/>
+					{:else if stage === 'classifier'}<TensorBandFlow
+							kind="classifier"
+							label="Wclassifier"
+							hiddenSize={192}
+							outputSize={1000}
+							selected="classifier"
+						/>{/if}
 					{#if ['up', 'gelu', 'down'].includes(stage)}<FeedForwardFlow
 							hiddenSize={192}
 							intermediateSize={768}
@@ -245,15 +285,16 @@
 								has its own learned normalization parameters.
 							</p>
 						{:else if stage === 'qkv' || stage === 'up' || stage === 'down'}
-							{#if stage === 'qkv'}<OperationFlow
-									items={['query', 'key', 'value'].map((id) => ({ id, label: id.toUpperCase() }))}
+							{#if stage === 'qkv'}<TensorBandFlow
+									kind="qkv"
+									label="Query Key Value"
+									hiddenSize={192}
+									heads={3}
+									kvHeads={3}
+									headSize={64}
 									selected={projection}
 									on:select={(e) => (projection = e.detail)}
-								/>
-								<p>
-									Each 192D projection splits into three independent 64D heads. Learned position
-									embeddings are already in x; this model has no RoPE or shared K/V heads.
-								</p>{/if}
+								/>{/if}
 							{@const which = stage === 'qkv' ? projection : stage}<MatrixProduct
 								input={stage === 'down' ? 'GELU(U)' : 'LayerNorm(X)'}
 								weight={stage === 'up' ? 'Wupᵀ' : stage === 'down' ? 'Wdownᵀ' : 'W' + which + 'ᵀ'}
@@ -271,6 +312,11 @@
 							/>
 							<details class="recorded-details">
 								<summary>Recorded values and products</summary>
+								{#if stage === 'qkv'}
+									<p>
+										Each 192D projection splits into three independent 64D heads. Learned position
+										embeddings are already in x; this model has no RoPE or shared K/V heads.
+									</p>{/if}
 								<div class="formula">
 									{stage === 'qkv'
 										? `${projection.toUpperCase()} = W · LayerNorm(x) + b`
@@ -300,62 +346,86 @@
 										: ''}Numbers are recorded float32 values; displayed products are rounded to six
 									decimals.
 								</p>
-							</details>{:else if stage === 'attention'}<MatrixProduct
-								input="Attention A"
-								weight="Value V"
-								output="Head context"
-								inputSize={197}
-								outputSize={64}
-								token={document.tokens[position]}
-							/>
-							<div class="attention-detail">
-								<VitAttentionMap
-									layer={data}
-									{head}
-									query={position}
-									on:query={(e) => vitSelectedPosition.set(e.detail)}
+							</details>{:else if stage === 'attention'}
+							{#if attentionPart === 'scores'}<MatrixProduct
+									input="Query Q"
+									weight="Key Kᵀ"
+									output="Scores"
+									inputSize={64}
+									outputSize={197}
+									token={document.tokens[position]}
+									inputValues={coords.map((c) => scalar(data, 'query', head, position, c))}
 								/>
-								<div>
-									<div class="formula">
-										A = softmax(QKᵀ / √64)<br />context[q,d] = Σₖ₌₀¹⁹⁶ A[q,k] × V[k,d]
-									</div>
-									<p>
-										Every query can attend to [CLS] and every patch. There is no causal mask. The
-										complete 197 × 197 recorded matrix is shown at left.
-									</p>
-									<table>
-										<thead
-											><tr><th>Key</th><th>Raw Q · K</th><th>÷ 8</th><th>Attention</th></tr></thead
-										><tbody
-											>{#each [0, 1, 2, 3] as k}<tr
-													><td>{document.tokens[k]}</td><td
-														>{f(scalar(data, 'scores', head, position, k))}</td
-													><td>{f(scalar(data, 'scores', head, position, k) / 8)}</td><td
-														>{f(scalar(data, 'attention', head, position, k))}</td
-													></tr
-												>{/each}</tbody
-										>
-									</table>
-								</div>
-							</div>
-							{#each coords as c}{@const r = contextRow(c)}{#if r}<div class="dot-product">
-										<strong>context[{position},{c}]</strong>
-										<div class="terms">
-											{#each [0, 1, 2, 3] as k}<span>({f(r.probs[k])} × {f(r.values[k])})</span
-												>{#if k < 3}<span>+</span>{/if}{/each}
+							{:else if attentionPart === 'softmax'}<MatrixProduct
+									input="Scaled scores"
+									output="Attention A"
+									activation="Softmax"
+									inputSize={197}
+									outputSize={197}
+									token={document.tokens[position]}
+									outputValues={row(data, 'attention', head * 197 + position)}
+								/>
+							{:else}<MatrixProduct
+									input="Attention A"
+									weight="Value V"
+									output="Head context"
+									inputSize={197}
+									outputSize={64}
+									token={document.tokens[position]}
+									inputValues={row(data, 'attention', head * 197 + position)}
+								/>{/if}
+							<details class="recorded-details">
+								<summary>Recorded attention values and products</summary>
+								<div class="attention-detail">
+									<VitAttentionMap
+										layer={data}
+										{head}
+										query={position}
+										on:query={(e) => vitSelectedPosition.set(e.detail)}
+									/>
+									<div>
+										<div class="formula">
+											A = softmax(QKᵀ / √64)<br />context[q,d] = Σₖ₌₀¹⁹⁶ A[q,k] × V[k,d]
 										</div>
-										<div>
-											+ <span class="remaining"
-												>{f(r.remaining)} <small>remaining 193 positions</small></span
+										<p>
+											Every query can attend to [CLS] and every patch. There is no causal mask. The
+											complete 197 × 197 recorded matrix is shown at left.
+										</p>
+										<table>
+											<thead
+												><tr><th>Key</th><th>Raw Q · K</th><th>÷ 8</th><th>Attention</th></tr
+												></thead
+											><tbody
+												>{#each [0, 1, 2, 3] as k}<tr
+														><td>{document.tokens[k]}</td><td
+															>{f(scalar(data, 'scores', head, position, k))}</td
+														><td>{f(scalar(data, 'scores', head, position, k) / 8)}</td><td
+															>{f(scalar(data, 'attention', head, position, k))}</td
+														></tr
+													>{/each}</tbody
 											>
-											≈ <strong>{f(r.output)}</strong>
-										</div>
-									</div>{/if}{/each}
-							<p>
-								All three 64D head outputs concatenate to 192D and pass through Woutput + bias
-								before residual addition. Every attention row retains its full softmax denominator.
-							</p>
-						{:else if stage === 'gelu'}<MatrixProduct
+										</table>
+									</div>
+								</div>
+								{#each coords as c}{@const r = contextRow(c)}{#if r}<div class="dot-product">
+											<strong>context[{position},{c}]</strong>
+											<div class="terms">
+												{#each [0, 1, 2, 3] as k}<span>({f(r.probs[k])} × {f(r.values[k])})</span
+													>{#if k < 3}<span>+</span>{/if}{/each}
+											</div>
+											<div>
+												+ <span class="remaining"
+													>{f(r.remaining)} <small>remaining 193 positions</small></span
+												>
+												≈ <strong>{f(r.output)}</strong>
+											</div>
+										</div>{/if}{/each}
+								<p>
+									All three 64D head outputs concatenate to 192D and pass through Woutput + bias
+									before residual addition. Every attention row retains its full softmax
+									denominator.
+								</p>
+							</details>{:else if stage === 'gelu'}<MatrixProduct
 								input="Up U"
 								output="GELU(U)"
 								inputSize={768}
@@ -465,8 +535,8 @@
 		padding: 20px;
 	}
 	.vit-inspector {
-		width: min(1100px, calc(100vw - 40px));
-		max-height: calc(100vh - 40px);
+		width: min(1440px, calc(100vw - 24px));
+		max-height: calc(100dvh - 24px);
 		display: flex;
 		flex-direction: column;
 		background: white;
@@ -477,7 +547,7 @@
 		overflow: hidden;
 	}
 	header {
-		padding: 18px 24px;
+		padding: 12px 20px;
 		background: #faf7fc;
 		border-bottom: 1px solid #e7def0;
 		display: flex;
@@ -505,7 +575,7 @@
 		line-height: 26px;
 	}
 	.body {
-		padding: 18px 24px;
+		padding: 8px 20px;
 		overflow: auto;
 		min-height: 0;
 	}
@@ -536,7 +606,7 @@
 		align-items: center;
 		gap: 18px;
 		flex-wrap: wrap;
-		margin-bottom: 16px;
+		margin-bottom: 8px;
 		font-size: 12px;
 	}
 	.controls label {
@@ -645,8 +715,8 @@
 	}
 	footer {
 		font-size: 10px;
-		margin-top: 15px;
-		padding-top: 12px;
+		margin-top: 6px;
+		padding-top: 6px;
 		border-top: 1px solid #eee5f5;
 	}
 	a {

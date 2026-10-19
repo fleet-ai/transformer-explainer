@@ -1,5 +1,6 @@
 <script lang="ts">
-	import OperationFlow from '../common/OperationFlow.svelte';
+	import BlockChooser from '../common/BlockChooser.svelte';
+	import TensorBandFlow from '../common/TensorBandFlow.svelte';
 	import MatrixProduct from '../common/MatrixProduct.svelte';
 	import FeedForwardFlow from '../common/FeedForwardFlow.svelte';
 	import TokenInspectorLayout from '../moe/TokenInspectorLayout.svelte';
@@ -17,6 +18,7 @@
 	export let stage = 'attention';
 	const dispatch = createEventDispatcher<{ close: void }>();
 	let qkvProjection = 'query';
+	let attentionPart = 'context';
 	let coordinate = 0,
 		visualToken = 0,
 		ropeKind = 'query';
@@ -191,7 +193,7 @@
 							bind:value={$vlmSelectedPosition}
 						/>{/if}</svelte:fragment
 				>
-				<OperationFlow
+				<BlockChooser
 					items={stages.map(([id, label]) => ({ id, label }))}
 					selected={stage}
 					on:select={(e) => {
@@ -219,6 +221,61 @@
 							>{/if}
 					</div>{/if}
 				{#if document && stream && model && common && data && $vlmRecording}
+					{#if stage === 'attention'}<TensorBandFlow
+							kind="attention"
+							label="Attention"
+							selected={attentionPart}
+							headSize={64}
+							sequenceLength={stream.sequenceLength}
+							scale="÷ √64"
+							causal={$vlmPhase === 'language'}
+							rotary={$vlmPhase === 'language'}
+							on:select={(e) => (attentionPart = e.detail)}
+						/>
+					{:else if stage === 'connector'}<TensorBandFlow
+							kind="connector"
+							label="Image connector"
+							selected="connector"
+						/>
+					{:else if stage === 'embedding'}<TensorBandFlow
+							kind={$vlmPhase === 'vision' ? 'embedding' : 'language-embedding'}
+							label="Embeddings"
+							hiddenSize={$vlmPhase === 'vision' ? 768 : model.hiddenSize}
+							outputSize={model.hiddenSize}
+							selected="embedding"
+							on:select={(e) => (stage = e.detail)}
+						/>
+					{:else if ['norm1', 'norm2'].includes(stage)}<TensorBandFlow
+							kind="norm"
+							label="Normalization"
+							normalization={model.normalization === 'layernorm' ? 'LayerNorm' : 'RMSNorm'}
+							hiddenSize={model.hiddenSize}
+							outputSize={model.hiddenSize}
+							selected="norm"
+						/>
+					{:else if stage === 'residual'}<TensorBandFlow
+							kind="residual"
+							label="Residual additions"
+							hiddenSize={model.hiddenSize}
+							selected="residual"
+							on:select={(e) => (stage = e.detail)}
+						/>
+					{:else if stage === 'rope'}<TensorBandFlow
+							kind="rope"
+							label="RoPE · Rotate Q and K"
+							headSize={64}
+							selected={ropeKind}
+							on:select={(e) => {
+								if (e.detail !== 'value') ropeKind = e.detail;
+							}}
+						/>
+					{:else if stage === 'output'}<TensorBandFlow
+							kind="classifier"
+							label="Wvocab"
+							hiddenSize={576}
+							outputSize={49280}
+							selected="classifier"
+						/>{/if}
 					{#if ['up', 'down', 'gate', 'gate-projection', 'silu', 'gelu'].includes(stage)}<FeedForwardFlow
 							hiddenSize={model.hiddenSize}
 							intermediateSize={model.intermediateSize}
@@ -310,36 +367,38 @@
 								inputValues={row($vlmRecording.connector, 'packed', visualToken)}
 								outputValues={row($vlmRecording.connector, 'projected', visualToken)}
 							/>
-							<div class="formula">
-								256 × 768D vision outputs → 4 × 4 pixel shuffle → 16 × 12,288D → learned projection
-								→ 16 × 576D
-							</div>
-							<p>
-								The connector rearranges each group of 16 spatial patch vectors, then applies a
-								learned matrix. It does not average the patches or apply cross-attention.
-							</p>
-							{#each [0, 1, 2, 3] as c}{@const input = row(
-									$vlmRecording.connector,
-									'packed',
-									visualToken
-								)}{@const weights = row($vlmRecording.connector, 'weights', c)}
-								<div class="dot-product">
-									<strong>visual[{visualToken},{c}]</strong>
-									<div class="terms">
-										{#each [0, 1, 2, 3] as d}<span>({f(weights[d])} × {f(input[d])})</span
-											>{#if d < 3}<span>+</span>{/if}{/each}
-									</div>
-									<div>
-										+ <span class="remaining"
-											>{f(sum(weights, input, 4))}<small>remaining 12,284 products</small></span
-										>
-										≈
-										<strong
-											>{f(scalar($vlmRecording.connector, 'projected', visualToken, c))}</strong
-										>
-									</div>
-								</div>{/each}
-						{:else if stage === 'norm1' || stage === 'norm2'}<div class="formula">
+							<details class="recorded-details">
+								<summary>Recorded connector values and products</summary>
+								<div class="formula">
+									256 × 768D vision outputs → 4 × 4 pixel shuffle → 16 × 12,288D → learned
+									projection → 16 × 576D
+								</div>
+								<p>
+									The connector rearranges each group of 16 spatial patch vectors, then applies a
+									learned matrix. It does not average the patches or apply cross-attention.
+								</p>
+								{#each [0, 1, 2, 3] as c}{@const input = row(
+										$vlmRecording.connector,
+										'packed',
+										visualToken
+									)}{@const weights = row($vlmRecording.connector, 'weights', c)}
+									<div class="dot-product">
+										<strong>visual[{visualToken},{c}]</strong>
+										<div class="terms">
+											{#each [0, 1, 2, 3] as d}<span>({f(weights[d])} × {f(input[d])})</span
+												>{#if d < 3}<span>+</span>{/if}{/each}
+										</div>
+										<div>
+											+ <span class="remaining"
+												>{f(sum(weights, input, 4))}<small>remaining 12,284 products</small></span
+											>
+											≈
+											<strong
+												>{f(scalar($vlmRecording.connector, 'projected', visualToken, c))}</strong
+											>
+										</div>
+									</div>{/each}
+							</details>{:else if stage === 'norm1' || stage === 'norm2'}<div class="formula">
 								{model.normalization === 'layernorm'
 									? 'LayerNorm(x)[d] = (x[d] − mean(x)) / √(variance(x) + ε) × γ[d] + β[d]'
 									: 'RMSNorm(x)[d] = x[d] / √(mean(x²) + ε) × γ[d]'} · ε={model.rmsNormEps}
@@ -361,8 +420,13 @@
 											>{/if}{/each}</tbody
 								>
 							</table>
-						{:else if stage === 'qkv'}<OperationFlow
-								items={['query', 'key', 'value'].map((id) => ({ id, label: id.toUpperCase() }))}
+						{:else if stage === 'qkv'}<TensorBandFlow
+								kind="qkv"
+								label="Query Key Value"
+								hiddenSize={model.hiddenSize}
+								heads={model.attentionHeads}
+								kvHeads={model.keyValueHeads}
+								headSize={64}
 								selected={qkvProjection}
 								on:select={(e) => (qkvProjection = e.detail)}
 							/><MatrixProduct
@@ -482,61 +546,82 @@
 								V bypasses RoPE. Query heads sharing this KV head use the same rotated K and the
 								same original V.
 							</p>
-						{:else if stage === 'attention'}<MatrixProduct
-								input="Attention A"
-								weight="Value V"
-								output="Head context"
-								inputSize={stream.sequenceLength}
-								outputSize={64}
-								token={stream.tokens[position]}
-							/>
-							<div class="attention-detail">
-								<VitAttentionMap
-									layer={data}
-									{head}
-									query={position}
-									count={stream.sequenceLength}
-									causal={$vlmPhase === 'language'}
-									on:query={(e) => vlmSelectedPosition.set(e.detail)}
+						{:else if stage === 'attention'}
+							{#if attentionPart === 'scores'}<MatrixProduct
+									input={$vlmPhase === 'language' ? 'Query Q′' : 'Query Q'}
+									weight={$vlmPhase === 'language' ? 'Key K′ᵀ' : 'Key Kᵀ'}
+									output="Scores"
+									inputSize={64}
+									outputSize={stream.sequenceLength}
+									token={stream.tokens[position]}
 								/>
-								<div>
-									<div class="formula">
-										A = softmax(QKᵀ / 8{$vlmPhase === 'language' ? ' + causal mask' : ''})<br
-										/>context[q,d] = Σₖ A[q,k] × V[k,d]
-									</div>
-									<p>
-										The matrix contains all {stream.sequenceLength} queries and keys for head {head +
-											1}. {$vlmPhase === 'language'
-											? 'The same mask applies to text and visual token positions.'
-											: 'Every patch attends to the whole image.'}
-									</p>
-									<table>
-										<thead><tr><th>Key</th><th>Q · K</th><th>Recorded attention</th></tr></thead
-										><tbody
-											>{#each [0, 1, 2, 3] as k}<tr
-													><td>{stream.tokens[k]}</td><td
-														>{f(scalar(data, 'scores', head, position, k))}</td
-													><td>{f(scalar(data, 'attention', head, position, k))}</td></tr
-												>{/each}</tbody
-										>
-									</table>
-								</div>
-							</div>
-							{#each coords as c}{@const r = attentionRow(c)}{#if r}<div class="dot-product">
-										<strong>context[{position},{c}]</strong>
-										<div class="terms">
-											{#each [0, 1, 2, 3] as k}<span
-													>({f(r.probabilities[k])} × {f(r.values[k])})</span
-												>{#if k < 3}<span>+</span>{/if}{/each}
+							{:else if attentionPart === 'softmax'}<MatrixProduct
+									input={$vlmPhase === 'language' ? 'Scaled scores + causal mask' : 'Scaled scores'}
+									output="Attention A"
+									activation="Softmax"
+									inputSize={stream.sequenceLength}
+									outputSize={stream.sequenceLength}
+									token={stream.tokens[position]}
+									outputValues={row(data, 'attention', head * stream.sequenceLength + position)}
+								/>
+							{:else}<MatrixProduct
+									input="Attention A"
+									weight="Value V"
+									output="Head context"
+									inputSize={stream.sequenceLength}
+									outputSize={64}
+									token={stream.tokens[position]}
+								/>{/if}
+							<details class="recorded-details">
+								<summary>Recorded attention values and products</summary>
+								<div class="attention-detail">
+									<VitAttentionMap
+										layer={data}
+										{head}
+										query={position}
+										count={stream.sequenceLength}
+										causal={$vlmPhase === 'language'}
+										on:query={(e) => vlmSelectedPosition.set(e.detail)}
+									/>
+									<div>
+										<div class="formula">
+											A = softmax(QKᵀ / 8{$vlmPhase === 'language' ? ' + causal mask' : ''})<br
+											/>context[q,d] = Σₖ A[q,k] × V[k,d]
 										</div>
-										<div>
-											+ <span class="remaining"
-												>{f(r.rest)}
-												<small>remaining {stream.sequenceLength - 4} positions</small></span
+										<p>
+											The matrix contains all {stream.sequenceLength} queries and keys for head {head +
+												1}. {$vlmPhase === 'language'
+												? 'The same mask applies to text and visual token positions.'
+												: 'Every patch attends to the whole image.'}
+										</p>
+										<table>
+											<thead><tr><th>Key</th><th>Q · K</th><th>Recorded attention</th></tr></thead
+											><tbody
+												>{#each [0, 1, 2, 3] as k}<tr
+														><td>{stream.tokens[k]}</td><td
+															>{f(scalar(data, 'scores', head, position, k))}</td
+														><td>{f(scalar(data, 'attention', head, position, k))}</td></tr
+													>{/each}</tbody
 											>
-											≈ <strong>{f(r.output)}</strong>
-										</div>
-									</div>{/if}{/each}
+										</table>
+									</div>
+								</div>
+								{#each coords as c}{@const r = attentionRow(c)}{#if r}<div class="dot-product">
+											<strong>context[{position},{c}]</strong>
+											<div class="terms">
+												{#each [0, 1, 2, 3] as k}<span
+														>({f(r.probabilities[k])} × {f(r.values[k])})</span
+													>{#if k < 3}<span>+</span>{/if}{/each}
+											</div>
+											<div>
+												+ <span class="remaining"
+													>{f(r.rest)}
+													<small>remaining {stream.sequenceLength - 4} positions</small></span
+												>
+												≈ <strong>{f(r.output)}</strong>
+											</div>
+										</div>{/if}{/each}
+							</details>
 						{:else if stage === 'gate-projection' && $vlmPhase === 'language'}<MatrixProduct
 								input="Normalized X"
 								weight="Wgateᵀ"
@@ -727,8 +812,8 @@
 		padding: 20px;
 	}
 	.vlm-inspector {
-		width: min(1100px, calc(100vw - 40px));
-		max-height: calc(100vh - 40px);
+		width: min(1440px, calc(100vw - 24px));
+		max-height: calc(100dvh - 24px);
 		display: flex;
 		flex-direction: column;
 		background: white;
@@ -739,7 +824,7 @@
 		overflow: hidden;
 	}
 	header {
-		padding: 18px 24px;
+		padding: 12px 20px;
 		background: #faf7fc;
 		border-bottom: 1px solid #e7def0;
 		display: flex;
@@ -767,7 +852,7 @@
 		line-height: 26px;
 	}
 	.body {
-		padding: 18px 24px;
+		padding: 8px 20px;
 		overflow: auto;
 		min-height: 0;
 	}
@@ -798,7 +883,7 @@
 		align-items: center;
 		gap: 18px;
 		flex-wrap: wrap;
-		margin-bottom: 16px;
+		margin-bottom: 8px;
 		font-size: 12px;
 	}
 	.controls label {
@@ -908,8 +993,8 @@
 	}
 	footer {
 		font-size: 10px;
-		margin-top: 15px;
-		padding-top: 12px;
+		margin-top: 6px;
+		padding-top: 6px;
 		border-top: 1px solid #eee5f5;
 	}
 	a {
