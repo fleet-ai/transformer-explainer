@@ -219,6 +219,8 @@
 		outline: 2px solid #b28bcb;
 		outline-offset: 3px;
 	}
+	.qkv.latent :global(.guide),
+	.qkv.latent :global(.guide *),
 	.qkv.latent .qkv-weighted :global(.sub-vector),
 	.qkv.latent .qkv-weighted :global(.sub-vector *) {
 		pointer-events: none;
