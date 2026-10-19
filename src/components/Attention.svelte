@@ -4,7 +4,6 @@
 	import { hybridHeadOperations, hybridInspector } from '$lib/hybrid/store';
 	import { vitHeadOperations } from '$lib/vit/store';
 	import { vlmHeadOperations, vlmInspectorStage } from '$lib/vlm/store';
-	import LatentHeadFlow from './mla/LatentHeadFlow.svelte';
 	import LatentInspector from './mla/LatentInspector.svelte';
 	import RoPEInspector from './moe/RoPEInspector.svelte';
 	import VectorCanvas from './common/VectorCanvas.svelte';
@@ -142,12 +141,6 @@
 					class="head-block flex w-full items-center justify-between px-2"
 					style={`height:${Math.max($headContentHeight - 110, 320)}px;min-height:calc(var(--vector-height) * ${($tokens.length * 3) / 16} + ${($tokens.length - 1) * 1.5 + 14}rem);`}
 				>
-					{#if isMLA}<div class="mla-projections resize-watch">
-							<LatentHeadFlow
-								on:inspect={(event) => attentionInspector.set({ kind: 'mla', stage: event.detail })}
-								on:rope={(event) => inspectRoPE(event.detail)}
-							/>
-						</div>{/if}
 					<div class="qkv flex h-full flex-col justify-center gap-[5rem] pl-[6rem]">
 						<div class="column key">
 							<div class="head1 title">
@@ -428,22 +421,6 @@
 		text-align: center;
 	}
 
-	.mla-projections {
-		width: 440px;
-		flex: 0 0 440px;
-		position: relative;
-		z-index: 30;
-		padding: 12px;
-	}
-	.latent .head-block > .qkv {
-		padding-left: 4rem;
-	}
-	.attention.latent .heads {
-		padding-left: 3rem;
-	}
-	.latent .head-block {
-		min-width: 900px;
-	}
 	.head-flow-wrap {
 		position: relative;
 		z-index: 30;

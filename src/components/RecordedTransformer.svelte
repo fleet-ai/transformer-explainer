@@ -206,15 +206,6 @@
 		}
 	}
 
-	.latent-model .steps {
-		grid-template-columns: auto max-content 120px 210px;
-		min-width: 100%;
-		width: max-content;
-	}
-	.latent-model .steps .blocks .block-steps {
-		position: relative;
-		grid-template-columns: 80px max-content 440px;
-	}
 	.seq2seq .steps {
 		grid-template-columns: auto 7fr 0.45fr 0.85fr;
 	}

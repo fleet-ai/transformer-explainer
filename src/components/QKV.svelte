@@ -10,6 +10,9 @@
 	} from '~/store';
 	import classNames from 'classnames';
 	import { onDestroy } from 'svelte';
+	import { attentionInspector } from '$lib/inspectors';
+	import { mlaBankVectors } from '$lib/mla/projections.js';
+	import { moeTokenIndex, weightPopover } from '~/store';
 	import type { AttentionOperationsLayer } from '$lib/moe/attention';
 	import { vlmHeadOperations } from '$lib/vlm/store';
 	import { hybridHeadOperations } from '$lib/hybrid/store';
@@ -35,7 +38,7 @@
 	$: recording = $moeAttentionOperations;
 	let request = 0;
 	$: queryHeads = $moeModel?.attentionHeads ?? 16;
-	$: keyValueHeads = $moeModel?.keyValueHeads ?? 8;
+	$: keyValueHeads = isMLA ? queryHeads : ($moeModel?.keyValueHeads ?? 8);
 	$: headSize = $moeModel?.attentionHeadSize ?? 64;
 	$: isMLA = $moeModel?.architecture === 'mla';
 	$: isPlain = ['vit', 'encoder-decoder'].includes($moeModel?.architecture ?? '');
@@ -67,6 +70,13 @@
 			// The inspector exposes a retry; never replace missing recorded values with generated ones.
 			if (current === request) $moeAttentionOperations = null;
 		}
+	}
+	$: bankVectors = $tokens.map((_, index) => mlaBankVectors(layer, index));
+	function inspectMla(index: number) {
+		if (!isMLA) return;
+		$moeTokenIndex = index;
+		$weightPopover = null;
+		attentionInspector.set({ kind: 'mla', stage: 'query' });
 	}
 	onDestroy(() => request++);
 </script>
@@ -107,121 +117,114 @@
 				<OperationGroup type="ln" id={'embedding-ln'} />
 			</div>
 		</div>
-		{#if isMLA}
-			<div class="column mla-hidden-column">
-				<span class="hidden-heading">RMSNorm(x)</span>
-				{#each $tokens as token, index}
-					<div class="vector bg-gray-300" class:last={index === $tokens.length - 1}>
-						<VectorCanvas
-							colorScale="gray"
-							data={layer?.attentionInput?.[index] ??
-								$moeExample?.layers[$blockIdx]?.attentionInputPreview?.[index]}
-							active={true}
-							label="Recorded normalized hidden state entering MLA; Q, K and V have not been projected yet."
-						/>
-					</div>
-				{/each}
-			</div>
-		{:else}
-			<div class="column qkv-column">
-				{#each $tokens as token, index}
-					<div
-						class="qkv-weighted vector x3 flex flex-col"
-						class:last={index === $tokens.length - 1}
-						on:mouseenter={() => {
-							vectorHoverIdx = index;
-						}}
-						on:mouseleave={() => {
-							vectorHoverIdx = null;
-						}}
-						role="group"
-					>
-						<div class={`sub-vector query relative flex flex-col ${queryVectorColor}`}>
-							<VectorCanvas
-								colorScale="blue"
-								data={(isMLA ? layer?.queryProjection : layer?.queryBefore)?.flatMap(
-									(head) => head[index]
-								)}
-								label={layer
-									? `Recorded QUERY projection before head split, ${queryHeads * headSize} coordinates. Colors normalized within this vector.`
-									: 'Loading recorded projection values.'}
-								active={vectorHoverIdx === index}
-							/>
-							<div
-								class={`sub-vector x1-12 head1 ${queryHeadVectorColor} absolute`}
-								style={`top:${(100 * $attentionHeadIdx) / queryHeads}%;height:${100 / queryHeads}%;`}
-							></div>
-							<div class="sub-vector head-rest">
-								{#if vectorHoverIdx !== index}<span>Q</span>{/if}
-							</div>
-						</div>
-						<div class={`sub-vector key relative flex flex-col ${keyVectorColor}`}>
-							<VectorCanvas
-								colorScale="red"
-								data={isMLA
-									? layer?.keyContent?.flatMap((head) => [
-											...head[index],
-											...(layer?.rawKeyRotary?.[0]?.[index] ?? [])
-										])
-									: layer?.keyBefore.flatMap((head) => head[index])}
-								label={layer
-									? `Recorded ${isMLA ? 'expanded content KEY plus shared rotary key' : 'KEY projection before head split'}, ${keyValueHeads * headSize} coordinates. Colors normalized within this vector.`
-									: 'Loading recorded projection values.'}
-								active={vectorHoverIdx === index}
-							/>
-							<div
-								class={`sub-vector x1-12 head1 ${keyHeadVectorColor} absolute`}
-								style={`top:${(100 * kvHead) / keyValueHeads}%;height:${100 / keyValueHeads}%;`}
-							></div>
-							<div class="sub-vector head-rest">
-								{#if vectorHoverIdx !== index}<span>K</span>{/if}
-							</div>
-						</div>
-						<div class={`sub-vector value relative flex flex-col ${valVectorColor}`}>
-							<VectorCanvas
-								colorScale="green"
-								data={layer?.value.flatMap((head) => head[index])}
-								label={layer
-									? `Recorded ${isMLA ? 'expanded latent VALUE' : 'VALUE projection before head split'}, ${keyValueHeads * valueSize} coordinates. Colors normalized within this vector.`
-									: 'Loading recorded projection values.'}
-								active={vectorHoverIdx === index}
-							/>
-							<div
-								class={`sub-vector x1-12 head1 ${valHeadVectorColor} absolute`}
-								style={`top:${(100 * kvHead) / keyValueHeads}%;height:${100 / keyValueHeads}%;`}
-							></div>
-							<div class="sub-vector head-rest">
-								{#if vectorHoverIdx !== index}<span>V</span>{/if}
-							</div>
-						</div>
-					</div>
-				{/each}
-				<Tooltip class="popover" triggeredBy={'.qkv .qkv-column .vector'} placement="right"
-					>{isMLA
-						? 'MLA projections: content and rotary Q/K; expanded latent V.'
-						: 'Before head split:'} Q {queryHeads * headSize}, K {keyValueHeads * headSize}, V {keyValueHeads *
-						valueSize}. Highlighted head: Q/K {headSize}D, V {valueSize}D.</Tooltip
+		<div class="column qkv-column">
+			{#each $tokens as token, index}
+				<div
+					class="qkv-weighted vector x3 flex flex-col"
+					class:last={index === $tokens.length - 1}
+					on:mouseenter={() => {
+						vectorHoverIdx = index;
+					}}
+					on:mouseleave={() => {
+						vectorHoverIdx = null;
+					}}
+					role="group"
 				>
-			</div>
-		{/if}
+					<div class={`sub-vector query relative flex flex-col ${queryVectorColor}`}>
+						<VectorCanvas
+							colorScale="blue"
+							data={isMLA
+								? bankVectors[index]?.query
+								: layer?.queryBefore?.flatMap((head) => head[index])}
+							label={layer
+								? `Recorded ${isMLA ? 'QUERY content plus rotated position' : 'QUERY projection before head split'}, ${queryHeads * headSize} coordinates. Colors normalized within this vector.`
+								: 'Loading recorded projection values.'}
+							active={vectorHoverIdx === index}
+						/>
+						<div
+							class={`sub-vector x1-12 head1 ${queryHeadVectorColor} absolute`}
+							style={`top:${(100 * $attentionHeadIdx) / queryHeads}%;height:${100 / queryHeads}%;`}
+						></div>
+						<div class="sub-vector head-rest">
+							{#if vectorHoverIdx !== index}<span>{isMLA ? 'Q′' : 'Q'}</span>{/if}
+						</div>
+					</div>
+					<div class={`sub-vector key relative flex flex-col ${keyVectorColor}`}>
+						<VectorCanvas
+							colorScale="red"
+							data={isMLA
+								? bankVectors[index]?.key
+								: layer?.keyBefore.flatMap((head) => head[index])}
+							label={layer
+								? `Recorded ${isMLA ? 'expanded content KEY plus shared rotated key' : 'KEY projection before head split'}, ${keyValueHeads * headSize} coordinates. Colors normalized within this vector.`
+								: 'Loading recorded projection values.'}
+							active={vectorHoverIdx === index}
+						/>
+						<div
+							class={`sub-vector x1-12 head1 ${keyHeadVectorColor} absolute`}
+							style={`top:${(100 * kvHead) / keyValueHeads}%;height:${100 / keyValueHeads}%;`}
+						></div>
+						<div class="sub-vector head-rest">
+							{#if vectorHoverIdx !== index}<span>{isMLA ? 'K′' : 'K'}</span>{/if}
+						</div>
+					</div>
+					<div class={`sub-vector value relative flex flex-col ${valVectorColor}`}>
+						<VectorCanvas
+							colorScale="green"
+							data={isMLA ? bankVectors[index]?.value : layer?.value.flatMap((head) => head[index])}
+							label={layer
+								? `Recorded ${isMLA ? 'expanded latent VALUE' : 'VALUE projection before head split'}, ${keyValueHeads * valueSize} coordinates. Colors normalized within this vector.`
+								: 'Loading recorded projection values.'}
+							active={vectorHoverIdx === index}
+						/>
+						<div
+							class={`sub-vector x1-12 head1 ${valHeadVectorColor} absolute`}
+							style={`top:${(100 * kvHead) / keyValueHeads}%;height:${100 / keyValueHeads}%;`}
+						></div>
+						<div class="sub-vector head-rest">
+							{#if vectorHoverIdx !== index}<span>V</span>{/if}
+						</div>
+					</div>
+					{#if isMLA}<button
+							type="button"
+							class="mla-bank-target"
+							aria-label={`Inspect MLA projections for token ${index}: ${token}`}
+							on:click|stopPropagation={() => inspectMla(index)}
+						></button>{/if}
+				</div>
+			{/each}
+			<Tooltip class="popover" triggeredBy={'.qkv .qkv-column .vector'} placement="right"
+				>{isMLA
+					? 'Click to inspect MLA projections. Q′/K′ include rotated positions; V bypasses RoPE.'
+					: 'Before head split:'} Q {queryHeads * headSize}, K {keyValueHeads * headSize}, V {keyValueHeads *
+					valueSize}. Highlighted head: Q/K {headSize}D, V {valueSize}D.</Tooltip
+			>
+		</div>
 	</div>
 </div>
 
 <style lang="scss">
-	.mla-hidden-column {
-		position: relative;
-		left: 12px;
-		display: flex;
-		flex-direction: column;
-		align-items: end;
-	}
-	.hidden-heading {
+	.mla-bank-target {
 		position: absolute;
-		bottom: calc(100% + 12px);
-		right: -24px;
-		font-size: 10px;
-		white-space: nowrap;
-		color: #7e6a8b;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		border: 0;
+		background: transparent;
+		padding: 0;
+		z-index: 40;
+		cursor: pointer;
+	}
+	.mla-bank-target:focus-visible {
+		outline: 2px solid #b28bcb;
+		outline-offset: 3px;
+	}
+	.qkv.latent .qkv-weighted :global(.sub-vector),
+	.qkv.latent .qkv-weighted :global(.sub-vector *) {
+		pointer-events: none;
+	}
+	.qkv.latent .qkv-weighted {
+		cursor: pointer;
 	}
 
 	.qkv.plain .content .qkv-column .sub-vector.query,

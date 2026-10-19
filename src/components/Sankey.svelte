@@ -96,7 +96,7 @@
 		}
 	];
 	$: backPathMap = {
-		attention: (isMLA ? backPaths.slice(3) : backPaths).map((d) => ({
+		attention: backPaths.map((d) => ({
 			...d,
 			from: `.block-steps.main ${d.from}`,
 			to: `.block-steps.main ${d.to}`
@@ -106,7 +106,7 @@
 	$: qkvPaths = [
 		{
 			from: '.qkv .vector-column .column.vectors .vector',
-			to: isMLA ? '.qkv .mla-hidden-column .vector' : '.qkv .qkv-column .vector',
+			to: '.qkv .qkv-column .vector',
 			gradientId: $blockIdx === 0 ? 'gray-blue' : 'transparent-blue',
 			opacity: EMBEDDING,
 			pathGenerator: (source, target, curve: number) => {
@@ -320,38 +320,8 @@
 			}
 		}
 	];
-	const mlaConnector = (source: DOMRect, target: DOMRect) => {
-		const x1 = source.right + window.scrollX,
-			y1 = (source.top + source.bottom) / 2 + window.scrollY;
-		const x2 = target.left + window.scrollX,
-			y2 = (target.top + target.bottom) / 2 + window.scrollY;
-		const mid = (x1 + x2) / 2;
-		return `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`;
-	};
-	// MLA has one projection pipeline: normalized hidden states enter the flow,
-	// and its final Q′/K′/V outputs feed the existing attention token vectors.
-	$: mlaPaths = [
-		{
-			from: '.qkv .mla-hidden-column',
-			to: '.mla-input',
-			gradientId: 'gray-blue',
-			type: 'stroke',
-			opacity: 0.8,
-			id: 'mla-hidden-input',
-			pathGenerator: mlaConnector
-		},
-		...['key', 'query', 'value'].map((kind, index) => ({
-			from: `.mla-output-${kind}`,
-			to: `.head-block .column.${kind}`,
-			gradientId: ['red-red2', 'blue-blue2', 'green-green2'][index],
-			type: 'stroke',
-			opacity: 0.9,
-			id: `mla-${kind}-output`,
-			pathGenerator: mlaConnector
-		}))
-	];
 	$: attentionPaths = [
-		...(isMLA ? [...mlaPaths, ...selfAttentionPaths.slice(3)] : selfAttentionPaths),
+		...selfAttentionPaths,
 		...(isT5Decoder
 			? [
 					{

@@ -14,16 +14,11 @@
 	} from '~/store';
 	import { loadAttentionOperations } from '$lib/moe/attention';
 	import { traceAssetUrl } from '$lib/moe/live';
-	import ProjectionOperation from '../common/ProjectionOperation.svelte';
+	import MatrixProduct from '../common/MatrixProduct.svelte';
+	import { mlaProjectionView } from '$lib/mla/projections.js';
 	import { tokenLabel } from '$lib/moe/format';
 	export let stage = 'compression';
 	const dispatch = createEventDispatcher<{ close: void; rope: 'query' | 'key'; attention: void }>();
-	const stages = [
-		{ id: 'query', label: 'Query projection' },
-		{ id: 'compression', label: 'KV compression' },
-		{ id: 'expansion', label: 'K / V expansion' },
-		{ id: 'attention', label: 'Attention output' }
-	];
 	let error = '';
 	let loading = false;
 	let request = 0;
@@ -40,112 +35,8 @@
 		value: t.index,
 		label: `${t.index}: ${tokenLabel(t.text)}`
 	}));
-	$: selected = stages.find((s) => s.id === stage) ?? stages[1];
-	$: vectors =
-		stage === 'query'
-			? [
-					{
-						label: `Q content · head ${head + 1}`,
-						values: layer?.queryContent?.[head]?.[token],
-						color: 'query'
-					},
-					{
-						label: 'Q rotary · before RoPE',
-						values: layer?.queryBefore?.[head]?.[token],
-						color: 'query'
-					},
-					{
-						label: 'Q′ rotary · after RoPE',
-						values: layer?.queryAfter?.[head]?.[token],
-						color: 'query'
-					}
-				]
-			: stage === 'compression'
-				? [
-						{
-							label: 'Raw KV latent · down projection',
-							values: layer?.rawLatent?.[token],
-							color: 'latent'
-						},
-						{ label: 'KV latent · RMSNorm', values: layer?.kvLatent?.[token], color: 'latent' },
-						{
-							label: 'Shared rotary key · before RoPE',
-							values: layer?.keyBefore?.[0]?.[token],
-							color: 'key'
-						},
-						{
-							label: 'K′ shared rotary · after RoPE',
-							values: layer?.keyAfter?.[0]?.[token],
-							color: 'key'
-						}
-					]
-				: stage === 'expansion'
-					? [
-							{
-								label: 'Shared normalized KV latent',
-								values: layer?.kvLatent?.[token],
-								color: 'latent'
-							},
-							{
-								label: `K content · head ${head + 1}`,
-								values: layer?.keyContent?.[head]?.[token],
-								color: 'key'
-							},
-							{
-								label: `V · head ${head + 1}`,
-								values: layer?.value?.[head]?.[token],
-								color: 'value'
-							}
-						]
-					: [
-							{
-								label: `Attention-weighted V · head ${head + 1}`,
-								values: layer?.attentionContext?.[head]?.[token],
-								color: 'value'
-							},
-							{
-								label: 'Projected attention output',
-								values: layer?.attentionOutput?.[token],
-								color: 'latent'
-							}
-						];
-	$: projectionRows =
-		stage === 'query'
-			? [
-					{
-						label: 'Wq',
-						weight: `${(model?.attentionHeads ?? 16) * (model?.attentionHeadSize ?? 192)} × ${model?.hiddenSize ?? 2048}`,
-						input: `RMSNorm(x) · ${model?.hiddenSize ?? 2048}D`,
-						output: `Q · ${(model?.attentionHeads ?? 16) * (model?.attentionHeadSize ?? 192)}D`,
-						color: 'query'
-					}
-				]
-			: stage === 'compression'
-				? [
-						{
-							label: 'Wᴰᴷⱽ',
-							weight: `${(model?.kvLatentSize ?? 512) + (model?.rotarySize ?? 64)} × ${model?.hiddenSize ?? 2048}`,
-							input: `RMSNorm(x) · ${model?.hiddenSize ?? 2048}D`,
-							output: `Latent ${model?.kvLatentSize}D + rotary key ${model?.rotarySize}D`
-						}
-					]
-				: stage === 'expansion'
-					? [
-							{
-								label: `Wᵁᴷⱽ · head ${head + 1}`,
-								weight: `${(model?.contentKeySize ?? 128) + (model?.valueHeadSize ?? 128)} × ${model?.kvLatentSize ?? 512}`,
-								input: `Normalized latent · ${model?.kvLatentSize}D`,
-								output: `K content ${model?.contentKeySize}D + V ${model?.valueHeadSize}D`
-							}
-						]
-					: [
-							{
-								label: 'Wout',
-								weight: `${model?.hiddenSize ?? 2048} × ${(model?.attentionHeads ?? 16) * (model?.valueHeadSize ?? 128)}`,
-								input: 'Concatenated heads',
-								output: 'Attention output'
-							}
-						];
+	$: projection = mlaProjectionView(layer, model, head, token, stage);
+	$: vectors = projection.vectors;
 	$: maximum = Math.max(0, ...vectors.map((v) => (v.values?.length ?? 0) - 1));
 	$: if (coordinate > maximum) coordinate = Math.max(0, maximum - 3);
 	$: coords = [coordinate, coordinate + 1, coordinate + 2, coordinate + 3];
@@ -202,7 +93,7 @@
 >
 	<header>
 		<div>
-			<h2>Multi-head Latent Attention</h2>
+			<h2>MLA projections</h2>
 			<p>
 				DeepSeek-V2-Lite · Block {$blockIdx + 1} of {model?.numLayers} · Head {head + 1} of {model?.attentionHeads}
 			</p>
@@ -212,7 +103,7 @@
 		>
 	</header>
 	<div class="inspector-body">
-		<TokenInspectorLayout gap="10px"
+		<TokenInspectorLayout gap="6px"
 			><TokenPicker
 				slot="tokens"
 				label="MLA token"
@@ -227,7 +118,7 @@
 				rotarySize={model?.rotarySize ?? 64}
 				latentSize={model?.kvLatentSize ?? 512}
 				valueSize={model?.valueHeadSize ?? 128}
-				on:rope={() => dispatch('rope', 'query')}
+				on:rope={(e) => dispatch('rope', e.detail)}
 				on:attention={() => dispatch('attention')}
 				on:select={(e) => {
 					stage = e.detail;
@@ -243,7 +134,21 @@
 					>
 				</p>{:else if layer}
 				<div class="explanation">
-					{#if projectionRows.length}<ProjectionOperation rows={projectionRows} />{/if}
+					<h3 class="operation-title">{projection.label}</h3>
+					<MatrixProduct
+						input={projection.input}
+						weight={projection.weight}
+						output={projection.output}
+						inputSize={projection.inputSize}
+						outputSize={projection.outputSize}
+						activation={projection.activation ?? ''}
+						inputValues={projection.inputValues ?? []}
+						outputValues={projection.outputValues ?? []}
+						token={tokenLabel($moeExample?.tokens[token]?.text ?? '')}
+					/>
+				</div>
+				<details class="recorded-details">
+					<summary>Recorded MLA values and details</summary>
 					{#if stage === 'query'}
 						<p>
 							Each head splits into {model?.contentKeySize} content coordinates and {model?.rotarySize}
@@ -258,7 +163,12 @@
 							<b>{(model?.kvLatentSize ?? 512) + (model?.rotarySize ?? 64)} coordinates per token</b
 							> shared by every head.
 						</p>
-					{:else if stage === 'expansion'}
+					{:else if stage === 'norm'}
+						<p>
+							RMSNorm preserves the {model?.kvLatentSize}D latent; the shared positional key
+							bypasses this normalization.
+						</p>
+					{:else if ['expansion', 'key', 'value'].includes(stage)}
 						<p>
 							Each head has its own learned expansion from the same {model?.kvLatentSize}D latent
 							into {model?.contentKeySize}
@@ -274,11 +184,8 @@
 							to {model?.hiddenSize}D, followed by residual addition.
 						</p>
 					{/if}
-				</div>
-				<details class="recorded-details">
-					<summary>Recorded MLA values</summary>
 					<div class="recording-heading">
-						<h3>Recorded values · {selected.label}</h3>
+						<h3>Recorded values · {projection.label}</h3>
 						<div class="coordinates">
 							<span>Coordinates {coordinate}–{Math.min(coordinate + 3, maximum)}</span><button
 								aria-label="Previous MLA coordinates"
@@ -300,16 +207,16 @@
 									</div>{/each}
 							</section>{/each}
 					</div>
-				</details>
-				<p class="footnote">
-					Full-model recording · {model?.numLayers} blocks ·
+					<p class="footnote">
+						Full-model recording · {model?.numLayers} blocks ·
 
-					<a
-						href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
-						target="_blank"
-						rel="noreferrer">Trace JSON ↗</a
-					>
-				</p>
+						<a
+							href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
+							target="_blank"
+							rel="noreferrer">Trace JSON ↗</a
+						>
+					</p>
+				</details>
 			{/if}
 		</TokenInspectorLayout>
 	</div>
@@ -382,7 +289,16 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 0;
+	}
+	.explanation :global(.matrix-product) { margin: 4px 0; }
+	.explanation :global(.shape-note) { margin: 2px 0; }
+	.operation-title {
+		margin: 0;
+		color: #75538e;
+		font:
+			20px Georgia,
+			serif;
 	}
 	.explanation p {
 		margin: 0 0 6px;

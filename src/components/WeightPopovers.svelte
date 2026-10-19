@@ -25,6 +25,7 @@
 
 	$: if ($moeModel?.architecture === 'mla' && $weightPopover === 'qkv') {
 		attentionInspector.set({ kind: 'mla', stage: 'query' });
+		$weightPopover = null;
 	}
 
 	$: if ($moeModel?.architecture === 'vit' && $weightPopover) {

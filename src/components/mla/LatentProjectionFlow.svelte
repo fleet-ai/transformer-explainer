@@ -1,86 +1,65 @@
 <script lang="ts">
 	import { afterUpdate, createEventDispatcher, onMount } from 'svelte';
-	export let selected = 'compression';
+	export let selected = 'query';
 	export let hiddenSize = 2048;
 	export let heads = 16;
 	export let contentSize = 128;
 	export let rotarySize = 64;
 	export let latentSize = 512;
 	export let valueSize = 128;
-	const dispatch = createEventDispatcher<{ select: string; rope: void; attention: void }>();
+	const dispatch = createEventDispatcher<{
+		select: string;
+		rope: 'query' | 'key';
+		attention: void;
+	}>();
 	let map: HTMLDivElement;
-	let paths: { id: string; label: string; d: string }[] = [];
+	let paths: { id: string; label: string; d: string; bridge: boolean }[] = [];
 	const edges = [
-		{ from: 'hidden', to: 'query', id: 'query', label: 'Query projection' },
-		{ from: 'hidden', to: 'compression', id: 'compression', label: 'KV compression' },
-		{ from: 'query', to: 'rope', id: 'rope', label: 'Query rotary coordinates to RoPE' },
-		{ from: 'compression', to: 'rope', id: 'rope', label: 'Shared key rotary coordinates to RoPE' },
-		{
-			from: 'compression',
-			to: 'expansion',
-			id: 'expansion',
-			label: 'Normalized latent to K / V expansion'
-		},
-		{
-			from: 'query',
-			to: 'scores',
-			id: 'scores',
-			label: 'Query content bypasses RoPE',
-			bypass: true
-		},
-		{ from: 'rope', to: 'scores', id: 'scores', label: 'Rotated Q′ and K′ to dot product' },
-		{
-			from: 'expansion',
-			to: 'scores',
-			id: 'scores',
-			label: 'Content K and unchanged V to attention'
-		},
-		{
-			from: 'scores',
-			to: 'attention',
-			id: 'attention',
-			label: 'Concatenate head contexts and project output'
-		}
+		['hidden', 'query', 'query', 'Query projection'],
+		['query', 'query-content', 'query', 'Query content bypass'],
+		['query', 'rope-query', 'rope-query', 'Query rotary coordinates'],
+		['query-content', 'query-output', 'query', 'Query content concatenation'],
+		['rope-query', 'query-output', 'rope-query', 'Rotated query concatenation'],
+		['hidden', 'compression', 'compression', 'KV compression'],
+		['compression', 'norm', 'compression', 'Raw KV latent'],
+		['norm', 'key', 'key', 'Key expansion'],
+		['key', 'key-output', 'key', 'Key content concatenation'],
+		['compression', 'rope-key', 'rope-key', 'Shared key rotary coordinates'],
+		['rope-key', 'key-output', 'rope-key', 'Rotated key concatenation'],
+		['norm', 'value', 'value', 'Value expansion'],
+		['value', 'value-output', 'value', 'Expanded value bypasses RoPE']
 	];
 	function activate(id: string) {
-		if (id === 'rope') dispatch('rope');
-		else if (id === 'scores') dispatch('attention');
+		if (id === 'rope-query' || id === 'rope-key')
+			dispatch('rope', id === 'rope-query' ? 'query' : 'key');
 		else dispatch('select', id);
+	}
+	function keyboard(event: KeyboardEvent, id: string) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			activate(id);
+		}
 	}
 	function measure() {
 		if (!map) return;
 		const parent = map.getBoundingClientRect();
 		if (!parent.width) return;
-		const next = edges.map((edge) => {
-			const a = map
-				.querySelector<HTMLElement>(`[data-node="${edge.from}"]`)!
-				.getBoundingClientRect();
-			const b = map.querySelector<HTMLElement>(`[data-node="${edge.to}"]`)!.getBoundingClientRect();
-			let x1 = a.right - parent.left,
-				y1 = a.top - parent.top + a.height / 2;
-			let x2 = b.left - parent.left,
-				y2 = b.top - parent.top + b.height / 2;
-			let d: string;
-			if (edge.bypass) {
-				x1 = a.left - parent.left + a.width / 2;
-				y1 = a.top - parent.top;
-				x2 = b.left - parent.left + b.width / 2;
-				y2 = b.top - parent.top;
-				d = `M${x1},${y1} V8 H${x2} V${y2}`;
-			} else if (edge.to === 'attention' || Math.abs(a.left - b.left) < 5 || b.top >= a.bottom) {
-				x1 = a.left - parent.left + a.width / 2;
-				y1 = a.bottom - parent.top;
-				x2 = b.left - parent.left + b.width / 2;
-				y2 = b.top - parent.top;
-				const mid = y2 - 12;
-				d = `M${x1},${y1} V${mid} H${x2} V${y2}`;
-			} else {
-				const mid = (x1 + x2) / 2;
-				d = `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`;
-			}
-			return { id: edge.id, label: edge.label, d };
+		const next = edges.map(([from, to, id, label]) => {
+			const a = map.querySelector<HTMLElement>(`[data-node="${from}"]`)!.getBoundingClientRect();
+			const b = map.querySelector<HTMLElement>(`[data-node="${to}"]`)!.getBoundingClientRect();
+			const x = a.right - parent.left,
+				y = a.top - parent.top + a.height / 2;
+			const xx = b.left - parent.left,
+				yy = b.top - parent.top + b.height / 2;
+			const mid = x + (xx - x) / 2;
+			return {
+				id,
+				label,
+				d: `M${x} ${y} C${mid} ${y} ${mid} ${yy} ${xx} ${yy}`,
+				bridge: from === 'norm' && to === 'value'
+			};
 		});
-		if (JSON.stringify(next) !== JSON.stringify(paths)) paths = next;
+		if (JSON.stringify(paths) !== JSON.stringify(next)) paths = next;
 	}
 	onMount(() => {
 		const observer = new ResizeObserver(measure);
@@ -91,9 +70,11 @@
 	afterUpdate(measure);
 </script>
 
+<div class="hint">Click a band or box to inspect its operation</div>
 <div class="latent-flow" bind:this={map} role="group" aria-label="MLA parallel projection branches">
-	<svg aria-label="Projection connections">
+	<svg aria-label="Projection bands">
 		{#each paths as path}
+			{#if path.bridge}<path class="bridge" d={path.d} />{/if}
 			<path
 				d={path.d}
 				class:chosen={selected === path.id}
@@ -101,68 +82,93 @@
 				tabindex="0"
 				aria-label={`Inspect ${path.label} band`}
 				on:click={() => activate(path.id)}
-				on:keydown={(event) => {
-					if (event.key === 'Enter' || event.key === ' ') {
-						event.preventDefault();
-						activate(path.id);
-					}
-				}}
+				on:keydown={(e) => keyboard(e, path.id)}
 			/>
 		{/each}
 	</svg>
-	<div class="hidden-state" data-node="hidden">
-		<b>x</b><span>RMSNorm</span><small>{hiddenSize}D</small>
+	<div class="node hidden-state" data-node="hidden">
+		<b>x</b><small>RMSNorm</small><small>{hiddenSize}D</small>
 	</div>
 	<button
-		class="query"
+		class="node query"
 		data-node="query"
 		aria-pressed={selected === 'query'}
 		on:click={() => activate('query')}
 	>
-		Query projection <small>{heads} × ({contentSize} + {rotarySize})</small>
+		Wq<small>Query projection</small><small>{heads} × ({contentSize} + {rotarySize})</small>
 	</button>
+	<div class="node content" data-node="query-content">
+		Q content<small>{contentSize}D · bypass</small>
+	</div>
 	<button
-		class="compression"
+		class="node rope-query"
+		data-node="rope-query"
+		aria-label="RoPE · Rotate Q and K: query"
+		on:click={() => activate('rope-query')}
+	>
+		RoPE<small>Q position · {rotarySize}D</small>
+	</button>
+	<div class="node result query-result" data-node="query-output">
+		<b>Q′</b><small>{contentSize + rotarySize}D</small><small>{contentSize} + {rotarySize}</small>
+	</div>
+	<button
+		class="node compression"
 		data-node="compression"
 		aria-pressed={selected === 'compression'}
 		on:click={() => activate('compression')}
 	>
-		KV compression <small>Latent {latentSize} + rotary K {rotarySize}</small>
-	</button>
-	<button class="rope" data-node="rope" on:click={() => activate('rope')}>
-		RoPE · Rotate Q and K <small>Rotary {rotarySize}D → Q′ / K′</small>
+		W↓KV<small>Latent {latentSize}</small><small>+ rotary K {rotarySize}</small>
 	</button>
 	<button
-		class="expansion"
-		data-node="expansion"
-		aria-pressed={selected === 'expansion'}
-		on:click={() => activate('expansion')}
+		class="node norm"
+		data-node="norm"
+		aria-pressed={selected === 'norm'}
+		on:click={() => activate('norm')}>RMSNorm<small>Latent · {latentSize}D</small></button
 	>
-		K / V expansion <small>K content {contentSize} · V {valueSize}</small>
-	</button>
-	<button class="scores" data-node="scores" on:click={() => activate('scores')}>
-		Attention <small>Dot product → softmax → × V</small>
-	</button>
 	<button
-		class="output"
-		data-node="attention"
-		aria-pressed={selected === 'attention'}
-		on:click={() => activate('attention')}
+		class="node key"
+		data-node="key"
+		aria-pressed={selected === 'key' || selected === 'expansion'}
+		on:click={() => activate('key')}>W↑K<small>K content · {contentSize}D</small></button
 	>
-		Concat → Output projection <small>{heads} × {valueSize} → {hiddenSize}D</small>
-	</button>
-	<span class="bypass-label">Q content bypasses RoPE</span>
+	<button
+		class="node rope-key"
+		data-node="rope-key"
+		aria-label="RoPE · Rotate Q and K: shared key"
+		on:click={() => activate('rope-key')}>RoPE<small>Shared K · {rotarySize}D</small></button
+	>
+	<div class="node result key-result" data-node="key-output">
+		<b>K′</b><small>{contentSize + rotarySize}D</small><small>{contentSize} + {rotarySize}</small>
+	</div>
+	<button
+		class="node value"
+		data-node="value"
+		aria-pressed={selected === 'value'}
+		on:click={() => activate('value')}>W↑V<small>V · {valueSize}D</small></button
+	>
+	<div class="node result value-result" data-node="value-output">
+		<b>V</b><small>{valueSize}D</small><small>No RoPE</small>
+	</div>
+</div>
+<div class="next-operations">
+	<button on:click={() => dispatch('attention')}>Q′K′ᵀ → softmax → × V ↗</button>
+	<button aria-pressed={selected === 'attention'} on:click={() => activate('attention')}
+		>Output projection · {heads} × {valueSize} → {hiddenSize}D ↗</button
+	>
 </div>
 
 <style>
+	.hint {
+		color: #8b709d;
+		font:
+			12px/1.4 Arial,
+			sans-serif;
+	}
 	.latent-flow {
 		position: relative;
-		display: grid;
-		grid-template-columns: 76px 1fr 1.25fr 1fr;
-		grid-template-rows: 64px 64px 54px;
-		gap: 20px 24px;
-		padding: 27px 0 0;
+		height: 300px;
 		min-width: 0;
+		container-type: inline-size;
 	}
 	svg {
 		position: absolute;
@@ -174,160 +180,184 @@
 	path {
 		fill: none;
 		stroke: #ded4ee;
-		stroke-width: 13;
-		stroke-linejoin: round;
+		stroke-width: 19;
 		cursor: pointer;
 		pointer-events: stroke;
 	}
-	path:hover,
-	path.chosen {
-		stroke: #bf99da;
+	path.chosen,
+	path:hover {
+		stroke: #bb91d2;
+		stroke-width: 23;
+	}
+	path.bridge {
+		stroke: white;
+		stroke-width: 32;
+		pointer-events: none;
 	}
 	path:focus-visible {
 		outline: 2px solid #9362c1;
 	}
-	button {
-		position: relative;
-		z-index: 1;
-		align-self: center;
-		min-height: 58px;
-		width: 100%;
+	.node {
+		position: absolute;
+		transform: translate(-50%, -50%);
+		width: clamp(90px, 12cqw, 122px);
+		min-height: 46px;
+		padding: 7px 4px;
+		background: #faf7fd;
+		color: #75508f;
 		border: 1.5px solid #cbb4df;
 		border-radius: 5px;
-		padding: 8px 6px;
-		background: #faf7fd;
-		color: #694684;
+		text-align: center;
 		font:
-			14px/1.25 Arial,
+			15px/1.2 Arial,
 			sans-serif;
-		cursor: pointer;
 	}
-	button small {
+	.node small {
 		display: block;
-		margin-top: 5px;
-		color: #856795;
+		margin-top: 4px;
 		font-size: 11px;
+		color: #8e779e;
+	}
+	.node b {
+		font-weight: 600;
+	}
+	button {
+		cursor: pointer;
 	}
 	button:hover,
 	button[aria-pressed='true'] {
-		background: #e0c8ef;
+		background: #e1c9ee;
 		border-color: #b28bce;
 	}
 	button:focus-visible {
 		outline: 2px solid #9362c1;
-		outline-offset: 2px;
+		outline-offset: 3px;
 	}
 	.hidden-state {
-		grid-column: 1;
-		grid-row: 1/3;
-		align-self: center;
-		position: relative;
-		z-index: 1;
+		left: 3.5%;
+		top: 158px;
+		width: 52px;
 		background: white;
-		text-align: center;
-		padding: 8px 0;
-		color: #725687;
+		border: 0;
+		border-left: 7px solid #b6d1fa;
+		border-radius: 0;
 	}
 	.hidden-state b {
 		font:
-			italic 24px Georgia,
+			italic 23px Georgia,
 			serif;
 	}
-	.hidden-state span,
-	.hidden-state small {
-		display: block;
-		font:
-			11px/1.5 Arial,
-			sans-serif;
-	}
 	.query {
-		grid-column: 2;
-		grid-row: 1;
+		left: 25%;
+		top: 59px;
+	}
+	.content {
+		left: 67%;
+		top: 24px;
+		background: white;
+		border: 0;
+	}
+	.rope-query {
+		left: 67%;
+		top: 100px;
 	}
 	.compression {
-		grid-column: 2;
-		grid-row: 2;
+		left: 25%;
+		top: 192px;
 	}
-	.rope {
-		grid-column: 3;
-		grid-row: 1;
+	.norm {
+		left: 46%;
+		top: 153px;
 	}
-	.expansion {
-		grid-column: 3;
-		grid-row: 2;
+	.key {
+		left: 68%;
+		top: 153px;
 	}
-	.scores {
-		grid-column: 4;
-		grid-row: 1/3;
+	.rope-key {
+		left: 68%;
+		top: 208px;
 	}
-	.output {
-		grid-column: 3/5;
-		grid-row: 3;
-		justify-self: end;
-		width: 88%;
-		min-height: 50px;
+	.value {
+		left: 68%;
+		top: 265px;
 	}
-	.bypass-label {
-		position: absolute;
-		top: 0;
-		left: 39%;
-		font:
-			11px Arial,
-			sans-serif;
-		color: #856795;
-		padding: 0 6px;
+	.result {
+		left: 95%;
+		width: 64px;
+		border: 0;
+		border-left: 5px solid currentColor;
+		border-radius: 0;
 		background: white;
 	}
-	@media (max-width: 850px) {
-		.latent-flow {
-			grid-template-columns: 55px 1fr 1.2fr 1fr;
-			gap: 22px 12px;
-		}
-		button {
+	.result b {
+		font-size: 21px;
+	}
+	.query-result {
+		top: 59px;
+		color: #75a0e1;
+	}
+	.key-result {
+		top: 192px;
+		color: #cf8793;
+	}
+	.value-result {
+		top: 265px;
+		color: #66af91;
+	}
+	.next-operations {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	.next-operations button {
+		color: #9066ad;
+		background: none;
+		border: 0;
+		padding: 3px 0;
+		font:
+			12px/1.4 Arial,
+			sans-serif;
+	}
+	@container (max-width: 610px) {
+		.node {
 			font-size: 12px;
-			padding: 6px 3px;
+			width: 80px;
+		}
+		.node small {
+			font-size: 10px;
+		}
+		.result {
+			width: 52px;
+			left: 94%;
+		}
+		.hidden-state {
+			width: 42px;
 		}
 	}
 	@media (max-width: 600px) {
 		.latent-flow {
+			display: grid;
 			grid-template-columns: 1fr 1fr;
-			grid-template-rows: 40px 72px 72px 72px 52px;
-			gap: 20px 18px;
+			gap: 14px;
+			height: auto;
+			padding: 8px 0;
 		}
-		.hidden-state {
-			grid-column: 1/3;
-			grid-row: 1;
-			justify-self: start;
-			width: 75px;
+		svg {
+			display: none;
 		}
-		.query {
-			grid-column: 1;
-			grid-row: 2;
-		}
-		.compression {
-			grid-column: 1;
-			grid-row: 3;
-		}
-		.rope {
-			grid-column: 2;
-			grid-row: 2;
-		}
-		.expansion {
-			grid-column: 2;
-			grid-row: 3;
-		}
-		.scores {
-			grid-column: 2;
-			grid-row: 4;
-		}
-		.output {
-			grid-column: 1/3;
-			grid-row: 5;
+		.node {
+			position: relative;
+			left: auto;
+			top: auto;
+			transform: none;
 			width: 100%;
+			min-height: 58px;
+			font-size: 13px;
 		}
-		.bypass-label {
-			left: 25%;
-			font-size: 11px;
+		.hidden-state,
+		.compression {
+			grid-column: 1/3;
 		}
 	}
 </style>

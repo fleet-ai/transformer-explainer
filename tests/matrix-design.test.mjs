@@ -75,14 +75,18 @@ test('Dense-style flow omits the gate and exposes GELU', () => {
 });
 
 const LatentFlow = await component('LatentProjectionFlow', 'mla');
-test('MLA flow renders one query and KV projection with a shared RoPE inspector control', () => {
+test('MLA flow renders one query and KV projection with separate query and shared-key RoPE controls', () => {
 	const { body } = render(LatentFlow, { props: { selected: 'compression' } });
 	assert.equal((body.match(/data-node="query"/g) ?? []).length, 1);
 	assert.equal((body.match(/data-node="compression"/g) ?? []).length, 1);
-	assert.equal((body.match(/RoPE · Rotate Q and K/g) ?? []).length, 1);
-	assert.match(body, /Q content bypasses RoPE/);
+	assert.equal((body.match(/RoPE · Rotate Q and K/g) ?? []).length, 2);
+	assert.match(body, /RoPE · Rotate Q and K: query/);
+	assert.match(body, /RoPE · Rotate Q and K: shared key/);
+	for (const id of ['norm', 'key', 'value']) assert.match(body, new RegExp(`data-node="${id}"`));
+	assert.match(body, /128D · bypass/);
 	assert.match(body, /16 × \(128 \+ 64\)/);
-	assert.match(body, /Latent 512 \+ rotary K 64/);
+	assert.match(body, /Latent 512/);
+	assert.match(body, /\+ rotary K 64/);
 	assert.match(body, /data-node="compression" aria-pressed="true"/);
 });
 test('MLA flow derives dimensions from the selected model', () => {
@@ -97,6 +101,7 @@ test('MLA flow derives dimensions from the selected model', () => {
 		}
 	});
 	assert.match(body, /32 × \(64 \+ 32\)/);
-	assert.match(body, /Latent 256 \+ rotary K 32/);
+	assert.match(body, /Latent 256/);
+	assert.match(body, /\+ rotary K 32/);
 	assert.match(body, /32 × 64 → 4096D/);
 });
