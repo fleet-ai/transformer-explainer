@@ -41,6 +41,7 @@
 	$: keyValueHeads = isMLA ? queryHeads : ($moeModel?.keyValueHeads ?? 8);
 	$: headSize = $moeModel?.attentionHeadSize ?? 64;
 	$: isMLA = $moeModel?.architecture === 'mla';
+	$: isExpertModel = !!$moeModel && ['moe', 'mla'].includes($moeModel.architecture ?? 'moe');
 	$: isPlain = ['vit', 'encoder-decoder'].includes($moeModel?.architecture ?? '');
 	$: valueSize = $moeModel?.valueHeadSize ?? headSize;
 	$: kvHead = Math.floor($attentionHeadIdx / (queryHeads / keyValueHeads));
@@ -72,11 +73,15 @@
 		}
 	}
 	$: bankVectors = $tokens.map((_, index) => mlaBankVectors(layer, index));
-	function inspectMla(index: number) {
-		if (!isMLA) return;
+	function inspectProjection(index: number) {
+		if (!isExpertModel) return;
 		$moeTokenIndex = index;
-		$weightPopover = null;
-		attentionInspector.set({ kind: 'mla', stage: 'query' });
+		if (isMLA) {
+			$weightPopover = null;
+			attentionInspector.set({ kind: 'mla', stage: 'query' });
+		} else {
+			$weightPopover = 'qkv';
+		}
 	}
 	onDestroy(() => request++);
 </script>
@@ -84,6 +89,7 @@
 <div
 	class={classNames('qkv', className)}
 	class:latent={isMLA}
+	class:expert-projections={isExpertModel}
 	class:plain={isPlain}
 	role="none"
 	data-click="qkv-step"
@@ -185,11 +191,11 @@
 							{#if vectorHoverIdx !== index}<span>V</span>{/if}
 						</div>
 					</div>
-					{#if isMLA}<button
+					{#if isExpertModel}<button
 							type="button"
-							class="mla-bank-target"
-							aria-label={`Inspect MLA projections for token ${index}: ${token}`}
-							on:click|stopPropagation={() => inspectMla(index)}
+							class="projection-bank-target"
+							aria-label={`Inspect ${isMLA ? 'MLA' : 'QKV'} projections for token ${index}: ${token}`}
+							on:click|stopPropagation={() => inspectProjection(index)}
 						></button>{/if}
 				</div>
 			{/each}
@@ -204,7 +210,7 @@
 </div>
 
 <style lang="scss">
-	.mla-bank-target {
+	.projection-bank-target {
 		position: absolute;
 		inset: 0;
 		width: 100%;
@@ -215,18 +221,24 @@
 		z-index: 40;
 		cursor: pointer;
 	}
-	.mla-bank-target:focus-visible {
+	.projection-bank-target:focus-visible {
 		outline: 2px solid #b28bcb;
 		outline-offset: 3px;
 	}
-	.qkv.latent :global(.guide),
-	.qkv.latent :global(.guide *),
-	.qkv.latent .qkv-weighted :global(.sub-vector),
-	.qkv.latent .qkv-weighted :global(.sub-vector *) {
+	.qkv.expert-projections :global(.guide),
+	.qkv.expert-projections :global(.guide *),
+	.qkv.expert-projections .qkv-weighted :global(.sub-vector),
+	.qkv.expert-projections .qkv-weighted :global(.sub-vector *) {
 		pointer-events: none;
 	}
-	.qkv.latent .qkv-weighted {
+	.qkv.expert-projections .qkv-weighted {
 		cursor: pointer;
+	}
+
+	/* Recorded blocks share one layout: the Dense later-block animation offset
+	   would move normalization controls on top of the QKV bank. */
+	.qkv.expert-projections .content .vector-column {
+		left: -12px;
 	}
 
 	.qkv.plain .content .qkv-column .sub-vector.query,
