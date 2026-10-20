@@ -115,6 +115,9 @@
 		class:hybrid-model={$moeModel?.architecture === 'hybrid'}
 		class:mamba-only={$moeModel?.architecture === 'hybrid' &&
 			!$moeExample?.layers[$blockIdx]?.queryPreview.length}
+		class:expert-layout={!$moeModel?.architecture ||
+			['moe', 'mla'].includes($moeModel.architecture)}
+		class:attention-open={$expandedBlock.id === 'attention'}
 		class:latent-model={$moeModel?.architecture === 'mla'}
 		class:seq2seq={$moeModel?.architecture === 'encoder-decoder'}
 		class:decoder={$moeModel?.architecture === 'encoder-decoder' && $moeModel?.stack === 'decoder'}
@@ -207,6 +210,30 @@
 				left: 0;
 			}
 		}
+	}
+
+	/* Allocate attention's intrinsic width, then let the expert network shrink.
+	   The absolute inner grid cannot contribute its minimum to the outer grid. */
+	.expert-layout .steps .blocks .block-steps {
+		grid-template-columns: minmax(40px, 0.35fr) auto minmax(0, 1.8fr);
+	}
+	.expert-layout.attention-open .steps {
+		grid-template-columns: auto minmax(0, 1fr) 72px 155px;
+	}
+	.expert-layout.attention-open :global(.attention .heads) {
+		padding-left: 2rem;
+		padding-right: 2rem;
+	}
+	.expert-layout.attention-open :global(.attention .head-out) {
+		margin-left: 1rem;
+		margin-right: 1rem;
+	}
+	.expert-layout.attention-open :global(.transformer-blocks > .title) {
+		font-size: 0.65rem;
+		white-space: normal;
+	}
+	.expert-layout :global(.mlp.moe) {
+		min-width: 0;
 	}
 
 	.seq2seq .steps {

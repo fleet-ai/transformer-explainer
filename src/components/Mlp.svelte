@@ -36,9 +36,12 @@
 	$: sharedExperts = isMLA && !isDense ? ($moeModel?.sharedExperts ?? 0) : 0;
 	$: rowHeight = $tokens.length * $vectorHeight + Math.max(0, $tokens.length - 1) * rowGap;
 	$: networkHeight = Math.max(rowHeight, bankHeight + (sharedExperts ? 58 : 0));
-	$: bankWidth = isMLA
-		? Math.min(264, Math.max(224, networkWidth * 0.67))
-		: Math.min(184, Math.max(152, networkWidth * 0.56));
+	$: bankWidth = Math.min(
+		isMLA
+			? Math.min(264, Math.max(224, networkWidth * 0.67))
+			: Math.min(184, Math.max(152, networkWidth * 0.56)),
+		Math.max(40, networkWidth - 44)
+	);
 	$: bankLeft = (networkWidth - bankWidth) / 2;
 	$: bankTop = Math.max(0, (rowHeight - bankHeight - (sharedExperts ? 58 : 0)) / 2);
 	$: expertWidth = (bankWidth - (expertColumns - 1) * 5) / expertColumns;
@@ -475,10 +478,11 @@
 	.moe-title {
 		padding: 0;
 		border: 0;
-		width: max-content;
+		max-width: 100%;
 		background: none;
 		color: inherit;
 		text-align: left;
+		white-space: normal;
 		font: inherit;
 		cursor: pointer;
 	}
@@ -487,6 +491,7 @@
 		opacity: 0.65;
 	}
 	.moe-subtitle {
+		white-space: normal;
 		color: #aa99bb;
 		font-size: 0.65rem;
 		font-weight: 400;
@@ -501,7 +506,7 @@
 	}
 	.moe .content {
 		display: grid;
-		grid-template-columns: 50px minmax(300px, 1fr) 43px;
+		grid-template-columns: 50px minmax(0, 1fr) 43px;
 		gap: 12px;
 	}
 	.first-layer,
