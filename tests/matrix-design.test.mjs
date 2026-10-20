@@ -74,6 +74,17 @@ test('Dense-style flow omits the gate and exposes GELU', () => {
 	assert.match(body, /Inspect GELU operation/);
 	assert.match(body, /3072/);
 });
+test('expert flow preserves gate branch but only projections open inspectors', () => {
+	const { body } = render(Flow, { props: { projectionsOnly: true, denseStyle: true } });
+	for (const stage of ['up', 'gate', 'down'])
+		assert.match(body, new RegExp(`Inspect ${stage} operation`));
+	assert.match(body, /SiLU/);
+	assert.match(body, /⊙/);
+	assert.doesNotMatch(
+		body,
+		/Inspect SiLU operation|Inspect product operation|Inspect product band/
+	);
+});
 
 test('MLA flow renders one query and KV projection with separate query and shared-key RoPE controls', () => {
 	const { body } = render(LatentFlow, { props: { selected: 'compression' } });

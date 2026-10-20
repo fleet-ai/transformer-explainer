@@ -6,6 +6,8 @@
 	export let activation = 'SiLU';
 	export let selected = 'up';
 	export let token = 'x';
+	export let projectionsOnly = false;
+	export let denseStyle = false;
 	const dispatch = createEventDispatcher<{ select: string }>();
 	let width = 700;
 	$: height = gated ? 164 : 112;
@@ -47,30 +49,37 @@
 				{ id: 'activation', label: activation, x: act, y: mid },
 				{ id: 'down', label: 'Wdown', x: (product + right) / 2, y: mid }
 			];
-	const select = (id: string) => dispatch('select', id);
+	const interactive = (id: string) => !projectionsOnly || ['up', 'gate', 'down'].includes(id);
+	const select = (id: string) => {
+		if (interactive(id)) dispatch('select', id);
+	};
 </script>
 
-<div class="feed-forward-flow" bind:clientWidth={width}>
-	<div class="hint">Click a band or box to inspect its operation</div>
+<div class="feed-forward-flow" class:dense-style={denseStyle} bind:clientWidth={width}>
+	<div class="hint">
+		{projectionsOnly
+			? 'Click Wup, Wgate, or Wdown to see its multiplication'
+			: 'Click a band or box to inspect its operation'}
+	</div>
 	<svg
 		viewBox={`0 0 ${width} ${height}`}
 		role="group"
 		aria-label={`${hiddenSize} input → ${gated ? 'up and gate projections' : 'up projection'} → ${activation} → ${intermediateSize} intermediate → down projection → ${hiddenSize} output`}
 	>
-		{#each paths as p}<path
-				d={p.d}
-				class:chosen={selected === p.id}
-				role="button"
-				tabindex="0"
-				aria-label={`Inspect ${p.id} band`}
-				on:click={() => select(p.id)}
-				on:keydown={(e) => {
-					if (e.key === 'Enter' || e.key === ' ') {
-						e.preventDefault();
-						select(p.id);
-					}
-				}}
-			/>{/each}
+		{#each paths as p}{#if interactive(p.id)}<path
+					d={p.d}
+					class:chosen={selected === p.id}
+					role="button"
+					tabindex="0"
+					aria-label={`Inspect ${p.id} band`}
+					on:click={() => select(p.id)}
+					on:keydown={(e) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault();
+							select(p.id);
+						}
+					}}
+				/>{:else}<path d={p.d} class="static-band" />{/if}{/each}
 		<rect x={left - 4} y={mid - 18} width="8" height="36" /><rect
 			x={right - 4}
 			y={mid - 18}
@@ -88,12 +97,12 @@
 				y={box.y - 22}
 				width={box.id === 'product' ? 44 : boxWidth}
 				height="46"
-				><button
-					type="button"
-					aria-label={`Inspect ${box.id === 'activation' ? activation : box.id} operation`}
-					aria-pressed={selected === box.id}
-					on:click={() => select(box.id)}>{box.label}</button
-				></foreignObject
+				>{#if interactive(box.id)}<button
+						type="button"
+						aria-label={`Inspect ${box.id === 'activation' ? activation : box.id} operation`}
+						aria-pressed={selected === box.id}
+						on:click={() => select(box.id)}>{box.label}</button
+					>{:else}<div class="static-box">{box.label}</div>{/if}</foreignObject
 			>{/each}
 	</svg>
 </div>
@@ -159,5 +168,55 @@
 	button:focus-visible {
 		outline: 2px solid #9362c1;
 		outline-offset: -2px;
+	}
+	.static-box {
+		height: 44px;
+		display: grid;
+		place-items: center;
+		border: 1px solid #e5e7eb;
+		border-radius: 4px;
+		background: white;
+		color: #4b5563;
+		font:
+			14px system-ui,
+			sans-serif;
+		box-sizing: border-box;
+	}
+	path.static-band {
+		cursor: default;
+		pointer-events: none;
+	}
+	.dense-style {
+		font-family: system-ui, sans-serif;
+	}
+	.dense-style .hint {
+		color: #9ca3af;
+		font:
+			13px system-ui,
+			sans-serif;
+		margin-bottom: 10px;
+	}
+	.dense-style path {
+		stroke: #e9eafd;
+		pointer-events: stroke;
+	}
+	.dense-style path.chosen,
+	.dense-style path:not(.static-band):hover {
+		stroke: #dcd7fe;
+	}
+	.dense-style button {
+		background: white;
+		color: #4b5563;
+		border: 1px solid #e5e7eb;
+		font-family: system-ui, sans-serif;
+		box-shadow: 0 1px 2px #0000000d;
+	}
+	.dense-style button[aria-pressed='true'] {
+		background: #f4f2ff;
+		border-color: #c4b5fd;
+	}
+	.dense-style text {
+		fill: #6b7280;
+		font-family: system-ui, sans-serif;
 	}
 </style>

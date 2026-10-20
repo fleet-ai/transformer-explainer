@@ -81,6 +81,7 @@
 	use:portal
 	bind:this={panel}
 	class="moe-inspector"
+	class:expert-view={expert !== null}
 	role="dialog"
 	aria-modal="false"
 	aria-label={expert === null ? 'Weighted sum operations' : `${expertLabel} operations`}
@@ -243,6 +244,38 @@
 			13px/1.5 Arial,
 			sans-serif;
 		outline: none;
+	}
+	.moe-inspector.expert-view {
+		height: auto;
+		max-height: calc(100dvh - 32px);
+		border-color: #e5e7eb;
+		box-shadow:
+			0 4px 6px -1px #0000001a,
+			0 2px 4px -2px #0000001a;
+		font-family: ui-sans-serif, system-ui, sans-serif;
+	}
+	.expert-view header {
+		background: #f3f4f6;
+		border-color: #e5e7eb;
+	}
+	.expert-view h2 {
+		color: #111827;
+		font-size: 18px;
+	}
+	.expert-view header p,
+	.expert-view header b {
+		color: #9ca3af;
+	}
+	.expert-view .close {
+		border: 0;
+		background: transparent;
+		color: #6b7280;
+	}
+	.expert-view .expert-meta {
+		color: #6b7280;
+	}
+	.expert-view .expert-meta b {
+		color: #4b5563;
 	}
 	header {
 		flex: 0 0 auto;
