@@ -102,14 +102,14 @@
 	}
 	.content {
 		display: flex;
-		gap: 9px;
+		gap: clamp(9px, 1vw, 18px);
 		align-items: flex-start;
 	}
 	.layer {
 		display: flex;
 	}
 	.operation {
-		font-size: 9px;
+		font-size: 11px;
 		border: 1px solid #dbc9eb;
 		border-radius: 3px;
 		background: #fbf8fd;

@@ -31,7 +31,7 @@
 				<div class="cross-flow">
 					<span>Q: decoder state · K/V: final encoder memory</span><button on:click={inspect}
 						>Inspect cross-attention ↗</button
-					><small>All source positions are visible · no causal mask · no RoPE</small>
+					>
 				</div>
 				<div
 					class="cross-head-block"
@@ -128,12 +128,13 @@
 		white-space: nowrap;
 	}
 	.cross-card-wrap {
-		padding: 0 14px 0 16px;
+		padding: 0 16px;
 	}
 	.cross-flow {
 		position: relative;
 		z-index: 30;
-		padding: 13px 14px;
+		height: 60px;
+		padding: 10px 12px;
 		font:
 			10px/1.4 Arial,
 			sans-serif;
@@ -141,6 +142,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		justify-content: space-between;
+		align-items: center;
 		gap: 6px;
 	}
 	.cross-flow small {
@@ -164,8 +166,8 @@
 		justify-content: space-between;
 		position: relative;
 		min-height: 0;
-		height: clamp(280px, calc(100dvh - 410px), 610px) !important;
-		padding: 38px 10px 24px 18px;
+		height: calc(var(--t5-card-height) - 60px) !important;
+		padding: 30px 10px 40px 18px;
 	}
 	.cross-input {
 		position: absolute;
@@ -199,10 +201,12 @@
 	}
 	.cross-qkv {
 		position: relative;
-		top: 12px;
+		top: 0;
+		height: 100%;
+		justify-content: space-between;
 		display: flex;
 		flex-direction: column;
-		gap: 2.2rem;
+		gap: 20px;
 		margin-left: 32px;
 	}
 	.mini-title {
@@ -216,7 +220,8 @@
 		z-index: 35;
 	}
 	.mini-title small {
-		display: block;
+		display: inline;
+		margin-left: 5px;
 		color: #a6a1ad;
 		font:
 			8px Arial,
@@ -235,7 +240,7 @@
 		color: #aa88d5;
 	}
 	.cross-qkv .label {
-		font-size: 9px;
+		font-size: 10px;
 		line-height: 1 !important;
 		height: auto !important;
 		max-width: 70px;
@@ -269,5 +274,18 @@
 	}
 	.cross-head-out .vector {
 		background: #c4b5fd;
+	}
+	.cross-qkv .column {
+		gap: 7px;
+	}
+	.cross-qkv .cell {
+		height: 2px;
+	}
+	.cross-qkv .label {
+		line-height: 10px !important;
+		top: -4px;
+	}
+	.cross-card-wrap :global(.head-title) {
+		font-size: 13px;
 	}
 </style>

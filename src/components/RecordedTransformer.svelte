@@ -50,7 +50,11 @@
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
 		const height = Math.min(
 			Math.max(
-				(vizHeight - titleHeight - gaps) / $tokens.length / maxVectorScale,
+				(($moeModel?.architecture === 'encoder-decoder' ? Math.min(vizHeight, 520) : vizHeight) -
+					titleHeight -
+					gaps) /
+					$tokens.length /
+					maxVectorScale,
 				$moeModel?.architecture === 'encoder-decoder' ? 8 : minVectorHeight
 			),
 			maxVectorHeight
@@ -252,14 +256,17 @@
 		min-width: 0;
 	}
 
+	.seq2seq {
+		--t5-card-height: clamp(400px, calc(100dvh - 320px), 520px);
+	}
 	.seq2seq .steps {
-		grid-template-columns: 145px minmax(0, 1fr) 60px 160px;
+		grid-template-columns: clamp(105px, 7.5vw, 145px) minmax(0, 1fr) 48px clamp(125px, 8.5vw, 165px);
 	}
 	.seq2seq .steps .blocks .block-steps {
 		grid-template-columns: 50px minmax(0, 2.1fr) minmax(170px, 1.2fr);
 	}
 	.seq2seq.decoder .steps .blocks .block-steps {
-		grid-template-columns: 50px minmax(0, 1fr) minmax(0, 1fr) 170px;
+		grid-template-columns: 38px minmax(0, 1fr) minmax(0, 1.05fr) clamp(195px, 14vw, 280px);
 	}
 	.seq2seq :global(.step > .title) {
 		font-size: 14px;
@@ -274,7 +281,8 @@
 		padding-left: 6px;
 	}
 	.seq2seq :global(.embedding:not(.expanded) .token-string) {
-		width: 125px;
+		width: calc(clamp(105px, 7.5vw, 145px) - 18px);
+		padding: 0 10px 0 4px;
 	}
 	.seq2seq :global(.embedding:not(.expanded) .title) {
 		padding-left: 20px;
