@@ -4,6 +4,7 @@
 	import Seq2SeqFeedForward from './Seq2SeqFeedForward.svelte';
 	import Seq2SeqOutput from './Seq2SeqOutput.svelte';
 	import Seq2SeqInspector from './Seq2SeqInspector.svelte';
+	import T5FeedForwardProjection from './T5FeedForwardProjection.svelte';
 	import { loadT5Recording, selectT5Stack } from '$lib/seq2seq/adapter';
 	import { t5Stack, t5Example, t5Inspector } from '$lib/seq2seq/store';
 </script>
@@ -35,7 +36,9 @@
 		customFeedForward={Seq2SeqFeedForward}
 		loadRecording={loadT5Recording}
 	/>
-	{#if $t5Inspector}<Seq2SeqInspector on:close={() => t5Inspector.set(null)} />{/if}
+	{#if $t5Inspector === 'ffn' || $t5Inspector === 'ffn-up' || $t5Inspector === 'ffn-down'}<T5FeedForwardProjection
+			direction={$t5Inspector === 'ffn-down' ? 'down' : 'up'}
+		/>{:else if $t5Inspector}<Seq2SeqInspector on:close={() => t5Inspector.set(null)} />{/if}
 </div>
 
 <style>

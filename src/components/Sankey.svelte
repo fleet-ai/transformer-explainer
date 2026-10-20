@@ -8,7 +8,8 @@
 		attentionHeadIdx,
 		blockIdx,
 		moeModel,
-		moeTokenIndex
+		moeTokenIndex,
+		expandedBlock
 	} from '~/store';
 	import * as d3 from 'd3';
 	import { onMount, tick } from 'svelte';
@@ -334,18 +335,18 @@
 					{
 						...selfAttentionPaths[4],
 						from: '.cross-attention .cross-key .vector',
-						to: `.cross-attention .cross-matrix g.g-row-${$tokens.length - 1} rect`,
+						to: `.cross-attention .cross-initial .main g.g-row-${$tokens.length - 1} rect`,
 						id: 'cross-key-to-attention'
 					},
 					{
 						...selfAttentionPaths[5],
 						from: '.cross-attention .cross-query .vector',
-						to: '.cross-attention .cross-matrix g.g-row',
+						to: '.cross-attention .cross-initial .main g.g-row',
 						id: 'cross-query-to-attention'
 					},
 					{
 						...selfAttentionPaths[6],
-						from: '.cross-attention .cross-matrix svg',
+						from: '.cross-attention .cross-result .main svg',
 						to: '.cross-attention .cross-head-out',
 						id: 'cross-to-attention-out',
 						onMouseClick: (e) => {
@@ -396,7 +397,11 @@
 			onMouseOver: () => {
 				const paths = d3.select(`g.mlpUp`).selectAll('path');
 				paths.transition().duration(100).style('opacity', 0.6);
-				tooltip.set('click to see MLP process');
+				tooltip.set(
+					$moeModel?.architecture === 'encoder-decoder'
+						? 'Up projection · 512 → 2048 · click to multiply'
+						: 'click to see MLP process'
+				);
 			},
 			onMouseOut: () => {
 				const paths = d3.select(`g.mlpUp`).selectAll('path');
@@ -442,7 +447,11 @@
 			onMouseOver: () => {
 				const paths = d3.select(`g.mlpDown`).selectAll('path');
 				paths.transition().duration(100).style('opacity', 0.6);
-				tooltip.set('click to see MLP process');
+				tooltip.set(
+					$moeModel?.architecture === 'encoder-decoder'
+						? 'Down projection · 2048 → 512 · click to multiply'
+						: 'click to see MLP process'
+				);
 			},
 			onMouseOut: () => {
 				const paths = d3.select(`g.mlpDown`).selectAll('path');
@@ -723,8 +732,8 @@
 		};
 	});
 
-	// Redraw after Svelte commits a block change, even when no resize occurs.
-	$: if (mounted && pathMap && $tokens && $attentionHeadIdx >= 0) {
+	// Hidden ports change on expansion even when their surrounding card keeps its size.
+	$: if (mounted && pathMap && $tokens && $attentionHeadIdx >= 0 && $expandedBlock) {
 		drawPath();
 		drawResidualPath();
 	}

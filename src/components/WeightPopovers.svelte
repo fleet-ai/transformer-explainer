@@ -45,9 +45,11 @@
 				? 'qkv'
 				: $weightPopover === 'softmax'
 					? 'output'
-					: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
-						? 'ffn'
-						: 'self'
+					: $weightPopover === 'mlpUp'
+						? 'ffn-up'
+						: $weightPopover === 'mlpDown'
+							? 'ffn-down'
+							: 'self'
 		);
 		$weightPopover = null;
 	}

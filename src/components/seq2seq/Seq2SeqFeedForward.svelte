@@ -20,9 +20,9 @@
 		$t5Stack === 'decoder'
 			? $t5Example?.crossAttention[$blockIdx].attentionOutput
 			: layer?.attentionOutputPreview;
-	function inspect(index: number) {
+	function inspect(index: number, direction: 'up' | 'down') {
 		moeTokenIndex.set(index);
-		t5Inspector.set('ffn');
+		t5Inspector.set(direction === 'up' ? 'ffn-up' : 'ffn-down');
 	}
 </script>
 
@@ -34,8 +34,8 @@
 				{#each $tokens as token, index}<div class="cell">
 						<span class="label float">{token}</span><button
 							class="vector bg-purple-200"
-							aria-label={`Inspect feed-forward input ${token}`}
-							on:click={() => inspect(index)}
+							aria-label={`Up projection multiplication for ${token}`}
+							on:click={() => inspect(index, 'up')}
 							><VectorCanvas colorScale="purple" data={attentionOutput?.[index]} />
 							<div
 								class="sub-vector head1"
@@ -56,8 +56,8 @@
 			<div class="column">
 				<span class="subtitle">2048D · ReLU</span>{#each $tokens as token, index}<button
 						class="vector expanded-vector bg-indigo-200"
-						aria-label={`Inspect MLP process for ${token}`}
-						on:click={() => inspect(index)}
+						aria-label={`Down projection multiplication for ${token}`}
+						on:click={() => inspect(index, 'down')}
 						><VectorCanvas
 							colorScale="indigo"
 							data={feedforward?.tokens[index].activation}
@@ -70,8 +70,8 @@
 			<div class="column out mlp-out-column">
 				{#each $tokens as token, index}<button
 						class="vector bg-blue-200"
-						aria-label={`Block output ${token}`}
-						on:click={() => inspect(index)}
+						aria-label={`Output projection multiplication for ${token}`}
+						on:click={() => inspect(index, 'down')}
 						><VectorCanvas colorScale="blue" data={layer?.blockOutputPreview?.[index]} /></button
 					>{/each}
 			</div>
@@ -95,10 +95,12 @@
 		display: flex;
 	}
 	.expanded-vector {
+		pointer-events: auto;
 		height: calc(var(--vector-height) * 4);
 	}
 
 	.second-layer {
+		pointer-events: none;
 		position: relative;
 		z-index: 20;
 	}

@@ -1,37 +1,26 @@
 <script lang="ts">
 	import HeadStack from '../HeadStack.svelte';
-	import Matrix from '../common/Matrix.svelte';
+	import T5AttentionMatrix from './T5AttentionMatrix.svelte';
 	import VectorCanvas from '../common/VectorCanvas.svelte';
 	import OperationGroup from '../OperationGroup.svelte';
-	import {
-		attentionHeadIdx,
-		blockIdx,
-		moeTokenIndex,
-		tokens,
-		headContentHeight,
-		rootRem
-	} from '~/store';
-	import { t5Example, t5Inspector } from '$lib/seq2seq/store';
+	import { attentionHeadIdx, blockIdx, tokens, headContentHeight, expandedBlock } from '~/store';
+	import { t5Example } from '$lib/seq2seq/store';
 	export let className: string | undefined = undefined;
 	$: layer = $t5Example?.crossAttention[$blockIdx];
 	$: head = $attentionHeadIdx;
 	$: sourceTokens = $t5Example?.encoder.example.tokens ?? [];
-	$: probabilities = layer?.probabilities[head] ?? [];
-	$: cellSize = Math.max(8, Math.min(16, 112 / Math.max(sourceTokens.length, $tokens.length)));
-	function inspect() {
-		t5Inspector.set('cross');
-	}
 </script>
 
-<div class={`cross-attention ${className ?? ''}`}>
-	<div class="title">Encoder → decoder Attention</div>
+<div
+	class={`cross-attention ${className ?? ''}`}
+	class:expanded={$expandedBlock.id === 'cross-attention'}
+>
+	<div class="title">Cross-attention</div>
 	<div class="content relative">
 		<div class="cross-card-wrap">
 			<HeadStack>
 				<div class="cross-flow">
-					<span>Q: decoder state · K/V: final encoder memory</span><button on:click={inspect}
-						>Inspect cross-attention ↗</button
-					>
+					<span>Q: decoder state · K/V: encoder memory</span>
 				</div>
 				<div
 					class="cross-head-block"
@@ -86,26 +75,7 @@
 								</div>{/each}
 						</div>
 					</div>
-					<button
-						class="cross-matrix"
-						on:click={inspect}
-						aria-label="Inspect rectangular encoder-decoder attention matrix"
-						><Matrix
-							data={probabilities}
-							shape="circle"
-							colorScale="purple"
-							cellWidth={cellSize}
-							cellHeight={cellSize}
-							cellGap={2}
-							showSize={false}
-							onMouseOverCell={() => undefined}
-							onMouseOutCell={() => undefined}
-							onMouseOutSvg={() => undefined}
-							showTooltip={() => undefined}
-							highlightRow={undefined}
-							highlightCol={undefined}
-						/><span>Cross-attention ⊕</span></button
-					>
+					<div class="cross-matrix"><T5AttentionMatrix cross /></div>
 					<div class="column cross-head-out">
 						<div class="mini-title out">Out<small>64D / head</small></div>
 						{#each $tokens as token, index}<div class="cell x1-12">
@@ -133,7 +103,7 @@
 	.cross-flow {
 		position: relative;
 		z-index: 30;
-		height: 60px;
+		height: 28px;
 		padding: 10px 12px;
 		font:
 			10px/1.4 Arial,
@@ -145,29 +115,14 @@
 		align-items: center;
 		gap: 6px;
 	}
-	.cross-flow small {
-		display: block;
-		width: 100%;
-		font-size: 9px;
-		color: #a591b3;
-	}
-	.cross-flow button {
-		background: #fcf9fe;
-		border: 1px solid #e5d8ee;
-		border-radius: 3px;
-		color: #87669e;
-		padding: 3px 6px;
-		cursor: pointer;
-		font: inherit;
-	}
 	.cross-head-block {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		position: relative;
 		min-height: 0;
-		height: calc(var(--t5-card-height) - 60px) !important;
-		padding: 30px 10px 40px 18px;
+		height: calc(var(--t5-card-height) - 28px) !important;
+		padding: 34px 12px 48px 18px;
 	}
 	.cross-input {
 		position: absolute;
@@ -207,7 +162,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 20px;
-		margin-left: 32px;
+		margin-left: 54px;
 	}
 	.mini-title {
 		position: absolute;
@@ -240,7 +195,7 @@
 		color: #aa88d5;
 	}
 	.cross-qkv .label {
-		font-size: 10px;
+		font-size: 11px;
 		line-height: 1 !important;
 		height: auto !important;
 		max-width: 70px;
@@ -258,15 +213,9 @@
 		z-index: 35;
 		cursor: pointer;
 		align-self: center;
-	}
-	.cross-matrix > span {
-		position: absolute;
-		top: calc(100% + 8px);
-		left: 50%;
-		transform: translateX(-50%);
-		white-space: nowrap;
-		font-size: 11px;
-		color: #a099aa;
+		flex: 1;
+		min-width: 0;
+		margin-left: 20px;
 	}
 	.cross-head-out {
 		margin-left: 18px;
@@ -287,5 +236,9 @@
 	}
 	.cross-card-wrap :global(.head-title) {
 		font-size: 13px;
+	}
+	.cross-residual :global(.residual-text),
+	.port-label {
+		display: none;
 	}
 </style>

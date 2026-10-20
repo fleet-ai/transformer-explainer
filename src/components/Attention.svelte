@@ -24,6 +24,7 @@
 	} from '~/store';
 	import classNames from 'classnames';
 	import AttentionMatrix from '~/components/AttentionMatrix.svelte';
+	import T5AttentionMatrix from './seq2seq/T5AttentionMatrix.svelte';
 
 	import { setContext, getContext, onDestroy } from 'svelte';
 	onDestroy(() => attentionInspector.set(null));
@@ -118,7 +119,9 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
-				{#if !isMLA && !isMoE}<div class="head-flow-wrap">
+				{#if !isMLA && !isMoE && $moeModel?.architecture !== 'encoder-decoder'}<div
+						class="head-flow-wrap"
+					>
 						{#if isPlain}<div class="rotary-sequence">
 								<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button><span
 									aria-hidden="true">→</span
@@ -284,7 +287,8 @@
 						</div>
 					</div>
 					<div class="resize-watch attention-matrix flex">
-						<AttentionMatrix />
+						{#if $moeModel?.architecture === 'encoder-decoder'}<T5AttentionMatrix
+							/>{:else}<AttentionMatrix />{/if}
 					</div>
 					<div class="head-out mx-[2rem]">
 						<div class="column out">

@@ -124,12 +124,13 @@
 		class:expert-layout={!$moeModel?.architecture ||
 			['moe', 'mla'].includes($moeModel.architecture)}
 		class:attention-open={$expandedBlock.id === 'attention'}
+		class:cross-open={$expandedBlock.id === 'cross-attention'}
 		class:latent-model={$moeModel?.architecture === 'mla'}
 		class:seq2seq={$moeModel?.architecture === 'encoder-decoder'}
 		class:decoder={$moeModel?.architecture === 'encoder-decoder' && $moeModel?.stack === 'decoder'}
 		style={`--vector-height: ${$vectorHeight}px;--title-height: ${titleHeight}px;--content-height:${vizHeight - titleHeight}px;`}
 	>
-		{#if !!$expandedBlock.id}
+		{#if !!$expandedBlock.id && $moeModel?.architecture !== 'encoder-decoder'}
 			<div
 				class={classNames('dim', `${$expandedBlock.id || ''}`)}
 				transition:fade={{ duration: 100 }}
@@ -259,16 +260,65 @@
 	}
 
 	.seq2seq {
-		--t5-card-height: clamp(400px, calc(100dvh - 320px), 520px);
+		--t5-card-height: clamp(320px, calc(100dvh - 310px), 480px);
 	}
 	.seq2seq .steps {
-		grid-template-columns: clamp(105px, 7.5vw, 145px) minmax(0, 1fr) 48px clamp(125px, 8.5vw, 165px);
+		grid-template-columns: clamp(105px, 6vw, 125px) minmax(0, 1fr) 40px 165px;
 	}
 	.seq2seq .steps .blocks .block-steps {
-		grid-template-columns: 50px minmax(0, 2.1fr) minmax(170px, 1.2fr);
+		grid-template-columns: 90px minmax(0, 1.5fr) minmax(230px, 1fr);
 	}
 	.seq2seq.decoder .steps .blocks .block-steps {
-		grid-template-columns: 38px minmax(0, 1fr) minmax(0, 1.05fr) clamp(195px, 14vw, 280px);
+		grid-template-columns: 90px minmax(0, 1fr) minmax(0, 1.05fr) clamp(220px, 19vw, 320px);
+	}
+
+	.seq2seq.attention-open .steps .blocks .block-steps {
+		grid-template-columns: 90px minmax(0, 1fr) clamp(220px, 24vw, 380px);
+	}
+	.seq2seq.decoder.attention-open .steps .blocks .block-steps {
+		grid-template-columns: 90px minmax(0, 2.4fr) minmax(145px, 0.8fr) clamp(200px, 17vw, 290px);
+	}
+	.seq2seq.decoder.cross-open .steps .blocks .block-steps {
+		grid-template-columns: 90px minmax(145px, 0.8fr) minmax(0, 2.4fr) clamp(200px, 17vw, 290px);
+	}
+	.seq2seq :global(.step > .title),
+	.seq2seq .steps.expanded :global(.step > .title) {
+		padding-bottom: 8px;
+	}
+	.seq2seq.attention-open :global(.cross-qkv),
+	.seq2seq.attention-open :global(.cross-input),
+	.seq2seq.attention-open :global(.cross-residual),
+	.seq2seq.attention-open :global(.cross-head-out),
+	.seq2seq.cross-open :global(.cross-input),
+	.seq2seq.cross-open :global(.cross-residual),
+	.seq2seq.cross-open :global(.t5-self-attention .head-block > .qkv),
+	.seq2seq.cross-open :global(.t5-self-attention .head-out) {
+		display: none;
+	}
+	.seq2seq.attention-open :global(.cross-flow > span),
+	.seq2seq.cross-open :global(.t5-self-attention .head-flow-wrap) {
+		visibility: hidden;
+	}
+	.seq2seq.attention-open :global(.cross-head-block) {
+		padding: 24px 10px 48px;
+	}
+	.seq2seq.attention-open :global(.cross-matrix) {
+		margin: 0;
+	}
+	.seq2seq.cross-open :global(.t5-self-attention .head-block) {
+		padding: 24px 10px 48px;
+	}
+	.seq2seq.attention-open :global(.mlp .title small),
+	.seq2seq.cross-open :global(.mlp .title small) {
+		display: none;
+	}
+	.seq2seq.attention-open :global(.mlp .label),
+	.seq2seq.cross-open :global(.mlp .label) {
+		display: none;
+	}
+	.seq2seq.attention-open :global(.mlp .subtitle),
+	.seq2seq.cross-open :global(.mlp .subtitle) {
+		font-size: 10px;
 	}
 	.seq2seq :global(.step > .title) {
 		font-size: 14px;
@@ -283,11 +333,31 @@
 		padding-left: 6px;
 	}
 	.seq2seq :global(.embedding:not(.expanded) .token-string) {
-		width: calc(clamp(105px, 7.5vw, 145px) - 18px);
+		width: calc(clamp(105px, 6vw, 125px) - 18px);
 		padding: 0 10px 0 4px;
+	}
+	.seq2seq :global(.embedding:not(.expanded) .token-string .label) {
+		font-size: 12px;
+		line-height: 1;
+		height: auto;
+		overflow: visible;
 	}
 	.seq2seq :global(.embedding:not(.expanded) .title) {
 		padding-left: 20px;
+	}
+	.seq2seq :global(.softmax:not(.expanded) .content) {
+		padding-right: 16px;
+	}
+	.seq2seq :global(.attention-bounding) {
+		display: none;
+	}
+	.seq2seq :global(.attention > .title > div) {
+		width: auto;
+		white-space: normal;
+	}
+	.seq2seq.attention-open :global(.mlp .residual-text),
+	.seq2seq.cross-open :global(.mlp .residual-text) {
+		visibility: hidden;
 	}
 	.seq2seq :global(.step) {
 		min-width: 0;
