@@ -8,6 +8,7 @@
 		vitInspectorStage
 	} from '$lib/vit/store';
 	import VectorCanvas from '../common/VectorCanvas.svelte';
+	import VitPatchControls from './VitPatchControls.svelte';
 	export let className: string | undefined = undefined;
 	function inspect(index: number) {
 		moeTokenIndex.set(index);
@@ -21,34 +22,41 @@
 		<button on:click={() => vitInspectorStage.set('embedding')}>Image patches ⊕ position</button>
 	</div>
 	<div class="content relative">
-		<div class="token-column resize-watch">
-			<div class="column token-string">
-				{#each $tokens as token, index}<div class="cell">
-						<button class="patch-label" on:click={() => inspect(index)}
-							>{#if $vitVisiblePositions[index] === 0}<span class="cls">CLS</span
-								>{:else if $vitRecording}<span
-									class="patch"
-									style={`background-image:url('${base}/${$vitRecording.document.image.src}');background-position:${((($vitVisiblePositions[index] - 1) % 14) * 100) / 13}% ${(Math.floor(($vitVisiblePositions[index] - 1) / 14) * 100) / 13}%;`}
-								></span>{/if}<span>{token}</span></button
-						>
-					</div>{/each}
+		<div class="patch-inputs">
+			<div class="token-column resize-watch">
+				<div class="column token-string">
+					{#each $tokens as token, index}<div class="cell">
+							<button class="patch-label" on:click={() => inspect(index)}
+								>{#if $vitVisiblePositions[index] === 0}<span class="cls">CLS</span
+									>{:else if $vitRecording}<span
+										class="patch"
+										style={`background-image:url('${base}/${$vitRecording.document.image.src}');background-position:${((($vitVisiblePositions[index] - 1) % 14) * 100) / 13}% ${(Math.floor(($vitVisiblePositions[index] - 1) / 14) * 100) / 13}%;`}
+									></span>{/if}<span>{token}</span></button
+							>
+						</div>{/each}
+				</div>
+			</div>
+			<div class="vector-column block-start-column">
+				<div class="column vectors embedding-column">
+					{#each $tokens as _, index}<button
+							class="vector bg-gray-300"
+							aria-label={`Inspect embedding for ${$tokens[index]}`}
+							on:click={() => inspect(index)}
+							><VectorCanvas data={$moeExample?.embeddingPreview[index]} /></button
+						>{/each}
+				</div>
 			</div>
 		</div>
-		<div class="vector-column block-start-column">
-			<div class="column vectors embedding-column">
-				{#each $tokens as _, index}<button
-						class="vector bg-gray-300"
-						aria-label={`Inspect embedding for ${$tokens[index]}`}
-						on:click={() => inspect(index)}
-						><VectorCanvas data={$moeExample?.embeddingPreview[index]} /></button
-					>{/each}
-			</div>
-		</div>
+		<VitPatchControls />
 	</div>
 </div>
 
 <style>
 	.content {
+		display: flex;
+		flex-direction: column;
+	}
+	.patch-inputs {
 		display: flex;
 		gap: 12px;
 	}
