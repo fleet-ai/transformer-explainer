@@ -231,10 +231,22 @@
 		margin-left: 1rem;
 		margin-right: 1rem;
 	}
-	.expert-layout.attention-open :global(.transformer-blocks > .title) {
-		font-size: 0.65rem;
+	.expert-layout.attention-open :global(.transformer-blocks .content) {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+	.expert-layout.attention-open :global(.transformer-blocks .guide) {
+		width: 64px;
+		left: -12px;
 		white-space: normal;
 		overflow-wrap: anywhere;
+	}
+	.expert-layout.attention-open :global(.transformer-blocks .guide .text) {
+		font-size: 0.65rem;
+		padding-left: 0;
+	}
+
+	.expert-layout.attention-open :global(.step.softmax > .title) {
+		font-size: 0.8rem;
 	}
 	.expert-layout :global(.mlp.moe) {
 		min-width: 0;

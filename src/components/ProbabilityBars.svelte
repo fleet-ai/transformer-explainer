@@ -110,6 +110,17 @@
 	// Initial draw without transition
 	onMount(() => {
 		drawBars();
+		let width = svgEl.clientWidth;
+		const observer = new ResizeObserver(() => {
+			if (svgEl.clientWidth === width) return;
+			width = svgEl.clientWidth;
+			drawBars();
+		});
+		observer.observe(svgEl);
+		return () => {
+			observer.disconnect();
+			d3.select(svgEl).selectAll('*').interrupt();
+		};
 	});
 
 	$: if ($modelData && svgEl) {
