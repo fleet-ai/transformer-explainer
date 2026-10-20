@@ -14,7 +14,7 @@
 	} from '~/store';
 	import { loadAttentionOperations } from '$lib/moe/attention';
 	import { traceAssetUrl } from '$lib/moe/live';
-	import LatentProjectionPopup from './LatentProjectionPopup.svelte';
+	import LatentProjectionPopup from '../common/AnimatedMatrixPopup.svelte';
 	import { mlaProjectionView } from '$lib/mla/projections.js';
 	import { tokenLabel } from '$lib/moe/format';
 	export let stage = 'compression';

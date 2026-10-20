@@ -17,6 +17,7 @@
 	export let label = 'Recorded operation';
 	export let token = 'x';
 	let width = 900;
+	$: bandScale = 40 / Math.max(1, ...graph.edges.map((e) => e.dimension ?? hiddenSize));
 	const dispatch = createEventDispatcher<{ select: string }>();
 	$: graph = operationGraph(kind, {
 		hiddenSize,
@@ -64,7 +65,7 @@
 					d={path(edge, width, boxWidth, graph)}
 					class="band"
 					class:chosen={selected === edge.action}
-					style={`--band:${edge.color ?? '#ded4ee'}`}
+					style={`--band:${edge.color ?? '#eae8fc'};stroke-width:${Math.max(1, (edge.dimension ?? hiddenSize) * bandScale)}px`}
 					role="button"
 					tabindex="0"
 					aria-label={`Inspect ${edge.label ?? edge.action} band`}
@@ -77,7 +78,11 @@
 						}
 					}}
 				/>
-			{:else}<path d={path(edge, width, boxWidth, graph)} class="bypass" />{/if}
+			{:else}<path
+					d={path(edge, width, boxWidth, graph)}
+					class="bypass"
+					style={`stroke-width:${Math.max(1, (edge.dimension ?? hiddenSize) * bandScale)}px`}
+				/>{/if}
 			{#if edge.label && edge.via != null}<text
 					x={(x(
 						graph.nodes.find((n) => n.id === edge.from),
@@ -121,12 +126,12 @@
 					y={node.y - 23}
 					width={boxWidth}
 					height="48"
-					><button
-						type="button"
-						aria-label={`Inspect ${node.label}`}
-						aria-pressed={selected === node.action}
-						on:click={() => choose(node.action)}>{node.label}</button
-					></foreignObject
+					>{#if node.action}<button
+							type="button"
+							aria-label={`Inspect ${node.label}`}
+							aria-pressed={selected === node.action}
+							on:click={() => choose(node.action)}>{node.label}</button
+						>{:else}<div class="static-box">{node.label}</div>{/if}</foreignObject
 				>
 				{#if node.dim}<text
 						class="dimension"
@@ -144,7 +149,7 @@
 		width: 100%;
 		min-width: 0;
 		margin: 4px 0 8px;
-		color: #7e668d;
+		color: #6b7280;
 	}
 	.flow-heading {
 		display: flex;
@@ -173,7 +178,7 @@
 	}
 	.band.chosen,
 	.band:hover {
-		stroke: #bf99da;
+		stroke: #d0c5f7;
 	}
 	.band:focus-visible {
 		stroke: #a779c8;
@@ -191,28 +196,42 @@
 		font:
 			13px Arial,
 			sans-serif;
-		fill: #725687;
+		fill: #6b7280;
 	}
 	.dimension {
 		font-size: 13px;
 		font-weight: 600;
 	}
+	.static-box {
+		display: grid;
+		place-items: center;
+		height: 46px;
+		border: 1px solid #e5e7eb;
+		border-radius: 4px;
+		background: white;
+		color: #4b5563;
+		font:
+			14px/1.15 Arial,
+			sans-serif;
+		text-align: center;
+	}
 	button {
 		width: 100%;
 		height: 46px;
 		padding: 2px 5px;
-		border: 1.5px solid #cbb4df;
+		border: 1.5px solid #e5e7eb;
 		border-radius: 4px;
-		background: #faf7fd;
-		color: #694684;
+		background: #ffffff;
+		color: #4b5563;
 		font:
 			14px/1.15 Arial,
 			sans-serif;
 		cursor: pointer;
+		box-shadow: 0 1px 2px #0000000d;
 	}
 	button[aria-pressed='true'] {
-		background: #e0c8ef;
-		border-color: #b28bce;
+		background: #f9fafb;
+		border-color: #d1d5db;
 	}
 	button:focus-visible {
 		outline: 2px solid #9362c1;

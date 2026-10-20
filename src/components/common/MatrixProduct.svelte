@@ -1,4 +1,9 @@
 <script lang="ts">
+	import { getContext } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import AnimatedMatrixPopup from './AnimatedMatrixPopup.svelte';
+	const popupLabel = getContext<string>('matrix-popup-label') ?? '';
+	const popup = getContext<Writable<boolean> | undefined>('matrix-popup');
 	export let input = 'X';
 	export let weight = 'Wᵀ';
 	export let output = 'Y';
@@ -20,58 +25,95 @@
 			: `${name} · schematic dimensions`;
 </script>
 
-<div
-	class="matrix-product"
-	aria-label={`${input} ${activation ? 'through ' + activation : elementwise ? 'elementwise times ' + weight : 'times ' + weight} ${bias ? 'plus bias ' : ''}equals ${output}`}
-	aria-live="polite"
->
-	<div class="term">
-		<h4>{input}</h4>
-		<div class="tensor vectors" title={preview(input, inputValues)}>
-			<span>{token}</span><i></i>{#if rows !== 1}<span>⋮</span><i></i>{/if}
-		</div>
-		<strong>{rows} × {inputSize}</strong>
-	</div>
-	<span class="symbol">{activation ? '→' : elementwise ? '⊙' : '×'}</span>
-	<div class="term">
-		<h4>{activation || weight}</h4>
-		<div
-			class="tensor"
-			class:matrix={!elementwise && !activation}
-			class:activation={!!activation}
-			class:vectors={elementwise}
-			aria-label="Schematic tensor shape"
+{#if popup && !activation && !elementwise}
+	{#if $popup}
+		<AnimatedMatrixPopup
+			label={popupLabel}
+			projection={{
+				label: output,
+				input,
+				weight,
+				output,
+				inputSize: Number(inputSize),
+				outputSize: Number(outputSize)
+			}}
+			{token}
+			{rows}
+			{bias}
+			on:close={() => popup.set(false)}
 		>
-			{#if activation}{activation}{:else if elementwise}<i></i>{#if rows !== 1}<i></i>{/if}{/if}
-		</div>
-		<strong
-			>{activation
-				? activation === 'Softmax'
-					? 'over key positions'
-					: 'elementwise'
-				: elementwise
-					? `${rows} × ${inputSize}`
-					: `${inputSize} × ${outputSize}`}</strong
-		>
-	</div>
-	<span class="symbol"
-		>{#if bias}<small>+ b</small>{/if}{activation ? '→' : '='}</span
+			{#if inputValues.length || outputValues.length}<details class="popup-recordings">
+					<summary>Recorded vector previews</summary>
+					<p>{preview(input, inputValues)}</p>
+					<p>{preview(output, outputValues)}</p>
+					<p>Full recorded values and products remain in the operation diagram’s details.</p>
+				</details>{/if}
+		</AnimatedMatrixPopup>
+	{/if}
+{:else}
+	<div
+		class="matrix-product"
+		aria-label={`${input} ${activation ? 'through ' + activation : elementwise ? 'elementwise times ' + weight : 'times ' + weight} ${bias ? 'plus bias ' : ''}equals ${output}`}
+		aria-live="polite"
 	>
-	<div class="term">
-		<h4>{output}</h4>
-		<div class="tensor vectors result" title={preview(output, outputValues)}>
-			<span>{token}</span><i></i>{#if rows !== 1}<span>⋮</span><i></i>{/if}
+		<div class="term">
+			<h4>{input}</h4>
+			<div class="tensor vectors" title={preview(input, inputValues)}>
+				<span>{token}</span><i></i>{#if rows !== 1}<span>⋮</span><i></i>{/if}
+			</div>
+			<strong>{rows} × {inputSize}</strong>
 		</div>
-		<strong>{rows} × {outputSize}</strong>
+		<span class="symbol">{activation ? '→' : elementwise ? '⊙' : '×'}</span>
+		<div class="term">
+			<h4>{activation || weight}</h4>
+			<div
+				class="tensor"
+				class:matrix={!elementwise && !activation}
+				class:activation={!!activation}
+				class:vectors={elementwise}
+				aria-label="Schematic tensor shape"
+			>
+				{#if activation}{activation}{:else if elementwise}<i></i>{#if rows !== 1}<i></i>{/if}{/if}
+			</div>
+			<strong
+				>{activation
+					? activation === 'Softmax'
+						? 'over key positions'
+						: 'elementwise'
+					: elementwise
+						? `${rows} × ${inputSize}`
+						: `${inputSize} × ${outputSize}`}</strong
+			>
+		</div>
+		<span class="symbol"
+			>{#if bias}<small>+ b</small>{/if}{activation ? '→' : '='}</span
+		>
+		<div class="term">
+			<h4>{output}</h4>
+			<div class="tensor vectors result" title={preview(output, outputValues)}>
+				<span>{token}</span><i></i>{#if rows !== 1}<span>⋮</span><i></i>{/if}
+			</div>
+			<strong>{rows} × {outputSize}</strong>
+		</div>
 	</div>
-</div>
-<div class="shape-note">
-	{#if bias}+ bias ({outputSize}), broadcast over token rows ·
-	{/if}Schematic cells · full tensor dimensions{#if inputValues.length || outputValues.length}
-		· hover vectors for recorded values{/if}
-</div>
+	<div class="shape-note">
+		{#if bias}+ bias ({outputSize}), broadcast over token rows ·
+		{/if}Schematic cells · full tensor dimensions{#if inputValues.length || outputValues.length}
+			· hover vectors for recorded values{/if}
+	</div>
+{/if}
 
 <style>
+	.popup-recordings {
+		color: #6b7280;
+		border-top: 1px solid #e5e7eb;
+		padding-top: 12px;
+		font-size: 12px;
+		overflow-wrap: anywhere;
+	}
+	.popup-recordings summary {
+		cursor: pointer;
+	}
 	.matrix-product {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr) 22px minmax(0, 1fr);

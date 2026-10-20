@@ -10,7 +10,10 @@
 		inputSize: number;
 		outputSize: number;
 	};
-	export let token: string;
+	export let token = '';
+	export let label = 'MLA';
+	export let rows: number | string = 1;
+	export let bias = false;
 	const dispatch = createEventDispatcher<{ close: void }>();
 	let panel: HTMLDivElement;
 	let frame = 0;
@@ -84,11 +87,11 @@
 		bind:this={panel}
 		role="dialog"
 		aria-modal="true"
-		aria-label={`MLA · ${projection.label}`}
+		aria-label={`${label ? label + ' · ' : ''}${projection.label}`}
 		tabindex="-1"
 	>
 		<header>
-			<h3>MLA · {projection.label}</h3>
+			<h3>{label ? label + ' · ' : ''}{projection.label}</h3>
 			<div class="controls">
 				<button aria-label="Replay multiplication" on:click={replay}><RefreshOutline /></button>
 				<button aria-label="Close multiplication" on:click={() => dispatch('close')}
@@ -97,10 +100,10 @@
 			</div>
 		</header>
 		<div class="body">
-			<p class="notice">Schematic animation · full tensor dimensions · bias-free</p>
+			<p class="notice">Schematic animation · full tensor dimensions{bias ? ' · + bias' : ''}</p>
 			<div
 				class="equation"
-				aria-label={`Input (1, ${inputSize}) times weights (${inputSize}, ${outputSize}) equals output (1, ${outputSize})`}
+				aria-label={`Input (${rows}, ${inputSize}) times weights (${inputSize}, ${outputSize}) equals output (${rows}, ${outputSize})`}
 			>
 				<div class="tensor">
 					<div>
@@ -113,7 +116,7 @@
 					>
 						{#each Array(32) as _}<i></i>{/each}
 					</div>
-					<strong>(1, {inputSize})</strong>
+					<strong>({rows}, {inputSize})</strong>
 				</div>
 				<span class="operator">×</span>
 				<div class="tensor">
@@ -132,17 +135,19 @@
 								class:active={i === progress.active}
 							></i>{/each}
 					</div>
-					<strong>(1, {outputSize})</strong>
+					<strong>({rows}, {outputSize})</strong>
 				</div>
 			</div>
 			<div class="formula" aria-hidden="true">
 				y<sub>{progress.coordinate}</sub> = ∑<sub>d=1…{inputSize}</sub> x<sub>d</sub> · W<sub
 					>{progress.coordinate},d</sub
 				>
+				{#if bias}
+					+ b<sub>{progress.coordinate}</sub>{/if}
 			</div>
 			<p class="status" role="status">
 				{progress.complete
-					? `Complete · output (1, ${outputSize})`
+					? `Complete · output (${rows}, ${outputSize})`
 					: 'Multiplying across the output'} · schematic sweep
 			</p>
 			<slot />
@@ -154,7 +159,7 @@
 	.projection-layer {
 		position: fixed;
 		inset: 0;
-		z-index: 1400;
+		z-index: 3000;
 		display: grid;
 		place-items: center;
 		padding: 16px;

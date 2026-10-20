@@ -67,3 +67,25 @@ test('vision connector preserves pixel shuffle dimensions and all graph endpoint
 		for (const edge of graph.edges) assert.ok(ids.has(edge.from) && ids.has(edge.to), kind);
 	}
 });
+
+test('band widths carry operation dimensions through compression and expansion', () => {
+	const qkv = operationGraph('qkv', { hiddenSize: 576, heads: 9, kvHeads: 3, headSize: 64 });
+	assert.deepEqual(
+		qkv.edges.map((e) => e.dimension),
+		[576, 576, 576, 192, 576, 192]
+	);
+	const patches = operationGraph('embedding', { hiddenSize: 768, outputSize: 192 });
+	assert.deepEqual(
+		patches.edges.map((e) => e.dimension),
+		[768, 192, 192]
+	);
+	const connector = operationGraph('connector');
+	assert.deepEqual(
+		connector.edges.map((e) => e.dimension),
+		[768, 12288, 576]
+	);
+	const mamba = operationGraph('mamba');
+	assert.equal(mamba.edges.find((e) => e.to === 'dt').dimension, 64);
+	assert.equal(mamba.edges.find((e) => e.to === 'z').dimension, 4096);
+	assert.equal(mamba.edges.find((e) => e.to === 'convolution').dimension, 4352);
+});

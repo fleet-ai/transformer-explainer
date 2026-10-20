@@ -8,8 +8,10 @@
 	export let token = 'x';
 	export let projectionsOnly = false;
 	export let denseStyle = false;
+	export let dimensional = false;
 	const dispatch = createEventDispatcher<{ select: string }>();
 	let width = 700;
+	let paths: { id: string; d: string; size?: number }[] = [];
 	$: height = gated ? 164 : 112;
 	$: left = 60;
 	$: boxWidth = Math.max(60, Math.min(100, width * 0.18));
@@ -36,6 +38,44 @@
 				{ id: 'activation', d: `M${act} ${mid} H${product}` },
 				{ id: 'down', d: `M${product} ${mid} H${right}` }
 			];
+	$: bandScale = 42 / Math.max(hiddenSize, intermediateSize);
+	$: if (dimensional) {
+		const down = (product + right) / 2;
+		paths = gated
+			? [
+					{
+						id: 'up',
+						d: `M${left} ${mid} C${up - 50} ${mid},${up - 50} 53,${up} 53`,
+						size: hiddenSize
+					},
+					{
+						id: 'up',
+						d: `M${up} 53 H${act} C${product - 35} 53,${product - 35} ${mid},${product} ${mid}`,
+						size: intermediateSize
+					},
+					{
+						id: 'gate',
+						d: `M${left} ${mid} C${up - 50} ${mid},${up - 50} 116,${up} 116`,
+						size: hiddenSize
+					},
+					{ id: 'gate', d: `M${up} 116 H${act}`, size: intermediateSize },
+					{
+						id: 'product',
+						d: `M${act} 116 C${product - 35} 116,${product - 35} ${mid},${product} ${mid}`,
+						size: intermediateSize
+					},
+					{ id: 'down', d: `M${product} ${mid} H${down}`, size: intermediateSize },
+					{ id: 'down', d: `M${down} ${mid} H${right}`, size: hiddenSize }
+				]
+			: [
+					{ id: 'up', d: `M${left} ${mid} H${up}`, size: hiddenSize },
+					{ id: 'up', d: `M${up} ${mid} H${act}`, size: intermediateSize },
+					{ id: 'activation', d: `M${act} ${mid} H${product}`, size: intermediateSize },
+					{ id: 'down', d: `M${product} ${mid} H${down}`, size: intermediateSize },
+					{ id: 'down', d: `M${down} ${mid} H${right}`, size: hiddenSize }
+				];
+	}
+
 	$: boxes = gated
 		? [
 				{ id: 'up', label: 'Wup', x: up, y: 53 },
@@ -58,7 +98,9 @@
 <div class="feed-forward-flow" class:dense-style={denseStyle} bind:clientWidth={width}>
 	<div class="hint">
 		{projectionsOnly
-			? 'Click Wup, Wgate, or Wdown to see its multiplication'
+			? gated
+				? 'Click Wup, Wgate, or Wdown to see its multiplication'
+				: 'Click Wup or Wdown to see its multiplication'
 			: 'Click a band or box to inspect its operation'}
 	</div>
 	<svg
@@ -68,6 +110,7 @@
 	>
 		{#each paths as p}{#if interactive(p.id)}<path
 					d={p.d}
+					style={`stroke-width:${dimensional ? (p.size ?? hiddenSize) * bandScale : 28}px`}
 					class:chosen={selected === p.id}
 					role="button"
 					tabindex="0"
@@ -79,7 +122,11 @@
 							select(p.id);
 						}
 					}}
-				/>{:else}<path d={p.d} class="static-band" />{/if}{/each}
+				/>{:else}<path
+					d={p.d}
+					style={`stroke-width:${dimensional ? (p.size ?? hiddenSize) * bandScale : 28}px`}
+					class="static-band"
+				/>{/if}{/each}
 		<rect x={left - 4} y={mid - 18} width="8" height="36" /><rect
 			x={right - 4}
 			y={mid - 18}

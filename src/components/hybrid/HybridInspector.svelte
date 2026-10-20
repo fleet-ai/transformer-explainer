@@ -1,4 +1,15 @@
 <script lang="ts">
+	import { setContext, tick } from 'svelte';
+	import { writable } from 'svelte/store';
+	const matrixPopup = writable(false);
+	setContext('matrix-popup', matrixPopup);
+	setContext('matrix-popup-label', 'Zamba2');
+	async function openMatrix() {
+		matrixPopup.set(false);
+		await tick();
+		matrixPopup.set(true);
+	}
+
 	import BlockChooser from '../common/BlockChooser.svelte';
 	import TensorBandFlow from '../common/TensorBandFlow.svelte';
 	import MatrixProduct from '../common/MatrixProduct.svelte';
@@ -150,6 +161,7 @@
 		<div class="body">
 			<TokenInspectorLayout gap="14px"
 				><TokenPicker
+					pageSize={6}
 					slot="tokens"
 					label="Hybrid token"
 					options={tokenOptions}
@@ -162,7 +174,10 @@
 						disabled: ['attention', 'rope', 'ffn'].includes(id) && !isHybrid
 					}))}
 					selected={current}
-					on:select={(e) => choose(e.detail)}
+					on:select={(e) => {
+						((e) => choose(e.detail))(e);
+						matrixPopup.set(false);
+					}}
 				/>
 				<div class="controls">
 					{#if mambaStage}<label
@@ -226,7 +241,10 @@
 								label="Mamba2 mixer"
 								selected={current}
 								token={document.tokens[token]}
-								on:select={(e) => choose(e.detail)}
+								on:select={(e) => {
+									((e) => choose(e.detail))(e);
+									openMatrix();
+								}}
 							/>
 						{:else if current === 'attention'}<TensorBandFlow
 								kind="attention"
@@ -237,7 +255,10 @@
 								causal
 								rotary
 								selected={attentionPart}
-								on:select={(e) => (attentionPart = e.detail)}
+								on:select={(e) => {
+									((e) => (attentionPart = e.detail))(e);
+									openMatrix();
+								}}
 							/>
 						{:else if current === 'rope'}<TensorBandFlow
 								kind="rope"
@@ -245,7 +266,10 @@
 								headSize={128}
 								selected={ropeKind}
 								on:select={(e) => {
-									if (e.detail !== 'value') ropeKind = e.detail as typeof ropeKind;
+									((e) => {
+										if (e.detail !== 'value') ropeKind = e.detail as typeof ropeKind;
+									})(e);
+									openMatrix();
 								}}
 							/>
 						{:else if current === 'classifier'}<TensorBandFlow
@@ -254,14 +278,21 @@
 								hiddenSize={2048}
 								outputSize={logits.length}
 								selected="classifier"
+								on:select={() => openMatrix()}
 							/>{/if}
 						{#if current === 'ffn' && isHybrid}<FeedForwardFlow
+								denseStyle
+								projectionsOnly
+								dimensional
 								hiddenSize={2048}
 								intermediateSize={8192}
 								activation="GELU"
 								selected={ffnStage === 'gelu' ? 'product' : ffnStage}
 								token={document.tokens[token]}
-								on:select={(e) => (ffnStage = e.detail === 'product' ? 'gelu' : e.detail)}
+								on:select={(e) => {
+									((e) => (ffnStage = e.detail === 'product' ? 'gelu' : e.detail))(e);
+									openMatrix();
+								}}
 							/>{/if}
 
 						{#if current === 'convolution' && conv}<h3>Convolution + SiLU · 4,352 channels</h3>
@@ -818,7 +849,8 @@
 	}
 	.hybrid-inspector {
 		width: min(1240px, calc(100vw - 40px));
-		height: min(720px, calc(100dvh - 40px));
+		height: auto;
+		max-height: calc(100dvh - 32px);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -1161,7 +1193,8 @@
 	}
 	@media (max-height: 850px) {
 		.hybrid-inspector {
-			height: calc(100dvh - 24px);
+			height: auto;
+			max-height: calc(100dvh - 32px);
 		}
 		.hybrid-inspector-overlay {
 			padding: 12px;
@@ -1264,5 +1297,26 @@
 		h2 {
 			font-size: 20px;
 		}
+	}
+
+	.hybrid-inspector {
+		border-color: #e5e7eb;
+		border-radius: 8px;
+		color: #6b7280;
+	}
+	header {
+		background: #f3f4f6;
+		border-color: #e5e7eb;
+	}
+	h2 {
+		color: #111827;
+		font-weight: 600;
+	}
+	header p {
+		color: #9ca3af;
+	}
+	.close {
+		color: #6b7280;
+		border-color: #e5e7eb;
 	}
 </style>

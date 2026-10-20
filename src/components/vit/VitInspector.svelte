@@ -1,4 +1,15 @@
 <script lang="ts">
+	import { setContext, tick } from 'svelte';
+	import { writable } from 'svelte/store';
+	const matrixPopup = writable(false);
+	setContext('matrix-popup', matrixPopup);
+	setContext('matrix-popup-label', 'DeiT');
+	async function openMatrix() {
+		matrixPopup.set(false);
+		await tick();
+		matrixPopup.set(true);
+	}
+
 	import BlockChooser from '../common/BlockChooser.svelte';
 	import TensorBandFlow from '../common/TensorBandFlow.svelte';
 	import MatrixProduct from '../common/MatrixProduct.svelte';
@@ -152,6 +163,7 @@
 		<div class="body">
 			<TokenInspectorLayout gap="0px"
 				><TokenPicker
+					pageSize={6}
 					slot="tokens"
 					label="ViT token"
 					options={tokenOptions}
@@ -161,8 +173,11 @@
 					items={stages.map(([id, label]) => ({ id, label }))}
 					selected={stage}
 					on:select={(e) => {
-						stage = e.detail;
-						coordinate = 0;
+						((e) => {
+							stage = e.detail;
+							coordinate = 0;
+						})(e);
+						matrixPopup.set(false);
 					}}
 				/>
 				<div class="controls">
@@ -188,7 +203,10 @@
 							headSize={64}
 							sequenceLength={197}
 							scale="÷ √64"
-							on:select={(e) => (attentionPart = e.detail)}
+							on:select={(e) => {
+								((e) => (attentionPart = e.detail))(e);
+								openMatrix();
+							}}
 						/>
 					{:else if stage === 'embedding'}<TensorBandFlow
 							kind="embedding"
@@ -196,6 +214,7 @@
 							hiddenSize={768}
 							outputSize={192}
 							selected="embedding"
+							on:select={() => openMatrix()}
 						/>
 					{:else if ['norm1', 'norm2'].includes(stage)}<TensorBandFlow
 							kind="norm"
@@ -204,13 +223,17 @@
 							hiddenSize={192}
 							outputSize={192}
 							selected="norm"
+							on:select={() => openMatrix()}
 						/>
 					{:else if stage === 'residual'}<TensorBandFlow
 							kind="residual"
 							label="Residual additions"
 							hiddenSize={192}
 							selected="residual"
-							on:select={(e) => (stage = e.detail)}
+							on:select={(e) => {
+								((e) => (stage = e.detail))(e);
+								openMatrix();
+							}}
 						/>
 					{:else if stage === 'classifier'}<TensorBandFlow
 							kind="classifier"
@@ -218,8 +241,12 @@
 							hiddenSize={192}
 							outputSize={1000}
 							selected="classifier"
+							on:select={() => openMatrix()}
 						/>{/if}
 					{#if ['up', 'gelu', 'down'].includes(stage)}<FeedForwardFlow
+							denseStyle
+							projectionsOnly
+							dimensional
 							hiddenSize={192}
 							intermediateSize={768}
 							gated={false}
@@ -227,8 +254,11 @@
 							token={document.tokens[position]}
 							selected={stage === 'gelu' ? 'activation' : stage}
 							on:select={(e) => {
-								stage = e.detail === 'activation' ? 'gelu' : e.detail;
-								coordinate = 0;
+								((e) => {
+									stage = e.detail === 'activation' ? 'gelu' : e.detail;
+									coordinate = 0;
+								})(e);
+								openMatrix();
 							}}
 						/>{/if}{#key `${$blockIdx}:${position}:${head}:${coordinate}:${projection}:${stage}`}
 						{#if stage === 'embedding'}<MatrixProduct
@@ -293,7 +323,10 @@
 									kvHeads={3}
 									headSize={64}
 									selected={projection}
-									on:select={(e) => (projection = e.detail)}
+									on:select={(e) => {
+										((e) => (projection = e.detail))(e);
+										openMatrix();
+									}}
 								/>{/if}
 							{@const which = stage === 'qkv' ? projection : stage}<MatrixProduct
 								input={stage === 'down' ? 'GELU(U)' : 'LayerNorm(X)'}
@@ -733,5 +766,26 @@
 			width: calc(100vw - 16px);
 			max-height: calc(100vh - 16px);
 		}
+	}
+
+	.vit-inspector {
+		border-color: #e5e7eb;
+		border-radius: 8px;
+		color: #6b7280;
+	}
+	header {
+		background: #f3f4f6;
+		border-color: #e5e7eb;
+	}
+	h2 {
+		color: #111827;
+		font-weight: 600;
+	}
+	header p {
+		color: #9ca3af;
+	}
+	.close {
+		color: #6b7280;
+		border-color: #e5e7eb;
 	}
 </style>

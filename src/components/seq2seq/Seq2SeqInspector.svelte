@@ -1,4 +1,15 @@
 <script lang="ts">
+	import { setContext, tick } from 'svelte';
+	import { writable } from 'svelte/store';
+	const matrixPopup = writable(false);
+	setContext('matrix-popup', matrixPopup);
+	setContext('matrix-popup-label', 'T5');
+	async function openMatrix() {
+		matrixPopup.set(false);
+		await tick();
+		matrixPopup.set(true);
+	}
+
 	import BlockChooser from '../common/BlockChooser.svelte';
 	import TensorBandFlow from '../common/TensorBandFlow.svelte';
 	import MatrixProduct from '../common/MatrixProduct.svelte';
@@ -81,17 +92,22 @@
 			{ id: 'output', label: 'Output projection' }
 		]}
 		selected={stage}
-		on:select={(e) => selectStage(e.detail as typeof stage)}
+		on:select={(e) => {
+			((e) => selectStage(e.detail as typeof stage))(e);
+			matrixPopup.set(false);
+		}}
 	/>
 	<div class="body">
 		<TokenInspectorLayout gap="4px" showTokens={stage !== 'output'}
 			><svelte:fragment slot="tokens"
 				><TokenPicker
+					pageSize={6}
 					heading={stage === 'ffn' ? 'Token' : 'Query token'}
 					label="Query token"
 					options={tokenOptions}
 					bind:value={$moeTokenIndex}
 				/>{#if stage === 'self' || stage === 'cross'}<TokenPicker
+						pageSize={6}
 						heading="Key token"
 						label="Key token"
 						options={keyOptions}
@@ -108,7 +124,10 @@
 					relativeBias={stage !== 'cross'}
 					causal={stage === 'self' && $t5Stack === 'decoder'}
 					scale="unscaled"
-					on:select={(e) => (attentionPart = e.detail)}
+					on:select={(e) => {
+						((e) => (attentionPart = e.detail))(e);
+						openMatrix();
+					}}
 				/>
 				{#if attentionPart === 'scores'}<MatrixProduct
 						input="Query Q"
@@ -213,14 +232,22 @@
 					</p>
 				</details>{:else if stage === 'ffn' && ff}
 				<FeedForwardFlow
+					denseStyle
+					projectionsOnly
+					dimensional
 					hiddenSize={512}
 					intermediateSize={2048}
 					gated={false}
 					activation="ReLU"
 					token={$tokens[token]}
 					selected={projection === 'relu' ? 'activation' : projection}
-					on:select={(e) =>
-						(projection = (e.detail === 'activation' ? 'relu' : e.detail) as typeof projection)}
+					on:select={(e) => {
+						((e) =>
+							(projection = (e.detail === 'activation' ? 'relu' : e.detail) as typeof projection))(
+							e
+						);
+						openMatrix();
+					}}
 				/>
 				<MatrixProduct
 					input={projection === 'down'
@@ -311,6 +338,7 @@
 					hiddenSize={512}
 					outputSize={32128}
 					selected="classifier"
+					on:select={() => openMatrix()}
 				/><MatrixProduct
 					input="Scaled final hidden state"
 					weight="Wvocabularyᵀ"
@@ -370,7 +398,8 @@
 		right: 22px;
 		bottom: 12px;
 		width: min(1120px, calc(100vw - 44px));
-		height: min(720px, calc(100dvh - 24px));
+		height: auto;
+		max-height: calc(100dvh - 32px);
 		display: flex;
 		flex-direction: column;
 		background: #fff;
@@ -463,7 +492,7 @@
 		margin: 12px 0;
 	}
 	.stat-grid > div {
-		background: #faf8fc;
+		background: #f3f4f6;
 		padding: 10px;
 		border-radius: 5px;
 	}
@@ -549,5 +578,26 @@
 	}
 	footer a {
 		color: #9369ae;
+	}
+
+	.t5-inspector {
+		border-color: #e5e7eb;
+		border-radius: 8px;
+		color: #6b7280;
+	}
+	header {
+		background: #f3f4f6;
+		border-color: #e5e7eb;
+	}
+	h2 {
+		color: #111827;
+		font-weight: 600;
+	}
+	header p {
+		color: #9ca3af;
+	}
+	.close {
+		color: #6b7280;
+		border-color: #e5e7eb;
 	}
 </style>

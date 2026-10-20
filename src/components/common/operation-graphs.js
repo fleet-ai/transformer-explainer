@@ -1,7 +1,7 @@
 // UI topology only. Tensor values remain owned by each recorded-model inspector.
 /**
  * @typedef {{id:string,x:number,y:number,label:string,dim:string,action:string,terminal?:boolean}} BandNode
- * @typedef {{from:string,to:string,action:string,label?:string,via?:number,color?:string}} BandEdge
+ * @typedef {{from:string,to:string,action:string,label?:string,via?:number,color?:string,dimension?:number}} BandEdge
  * @typedef {{hiddenSize?:number,outputSize?:number,headSize?:number,heads?:number,kvHeads?:number,sequenceLength?:number,normalization?:string,causal?:boolean,relativeBias?:boolean,scale?:string,rotary?:boolean,label?:string}} GraphOptions
  * @param {string} kind
  * @param {GraphOptions} p
@@ -30,7 +30,21 @@ export function operationGraph(kind, p = {}) {
 	/** @param {BandNode[]} nodes @param {BandEdge[]} edges */
 	const graph = (nodes, edges, height = 164, caption = '', boxWidth = 0.16) => ({
 		nodes,
-		edges,
+		edges: edges.map((e, i) => {
+			let dimension = hiddenSize;
+			if (kind === 'qkv')
+				dimension =
+					e.from === 'input' ? hiddenSize : (e.from === 'query' ? heads : kvHeads) * headSize;
+			else if (kind === 'attention')
+				dimension = [headSize, headSize, sequenceLength, sequenceLength, headSize, headSize][i];
+			else if (kind === 'mamba') dimension = [2048, 4352, 4352, 4096, 4096, 4096, 4096, 64, 64][i];
+			else if (kind === 'connector') dimension = [768, 12288, 576][i];
+			else if (kind === 'rope') dimension = headSize;
+			else if (kind === 'embedding') dimension = i === 0 ? hiddenSize : outputSize;
+			else if (['classifier', 'projection'].includes(kind))
+				dimension = i === 0 ? hiddenSize : outputSize;
+			return { ...e, dimension };
+		}),
 		height,
 		caption,
 		boxWidth
@@ -175,12 +189,12 @@ export function operationGraph(kind, p = {}) {
 		return graph(
 			[
 				terminal('patches', 0, 89, 'Vision output', '256 × 768'),
-				node('pack', 0.3, 89, 'Pixel shuffle', '16 × 12288', 'connector'),
+				node('pack', 0.3, 89, 'Pixel shuffle', '16 × 12288', ''),
 				node('project', 0.64, 89, 'Wconnector', '12288 → 576', 'connector'),
 				terminal('out', 1, 89, 'Visual tokens', '16 × 576')
 			],
 			[
-				edge('patches', 'pack', 'connector'),
+				edge('patches', 'pack', ''),
 				edge('pack', 'project', 'connector'),
 				edge('project', 'out', 'connector')
 			],
@@ -192,13 +206,13 @@ export function operationGraph(kind, p = {}) {
 			[
 				terminal('x', 0, 85, 'Patches', `${hiddenSize}D`),
 				node('projection', 0.32, 85, 'Wpatch', `${hiddenSize} → ${outputSize}`, 'embedding'),
-				node('position', 0.69, 85, '+ position', `${outputSize}D`, 'embedding'),
+				node('position', 0.69, 85, '+ position', `${outputSize}D`, ''),
 				terminal('out', 1, 85, 'Tokens', `${outputSize}D`)
 			],
 			[
 				edge('x', 'projection', 'embedding'),
 				edge('projection', 'position', 'embedding'),
-				edge('position', 'out', 'embedding')
+				edge('position', 'out', '')
 			],
 			142,
 			'Patch projection + learned positional embeddings'
@@ -235,7 +249,7 @@ export function operationGraph(kind, p = {}) {
 				isNorm ? `${hiddenSize}D` : `${hiddenSize} → ${outputSize}`,
 				action
 			),
-			...(isOutput ? [node('softmax', 0.74, 82, 'Softmax', `${outputSize} classes`, action)] : []),
+			...(isOutput ? [node('softmax', 0.74, 82, 'Softmax', `${outputSize} classes`, '')] : []),
 			terminal(
 				'out',
 				1,
@@ -247,7 +261,7 @@ export function operationGraph(kind, p = {}) {
 		[
 			edge('x', 'op', action),
 			...(isOutput
-				? [edge('op', 'softmax', action), edge('softmax', 'out', action)]
+				? [edge('op', 'softmax', action), edge('softmax', 'out', '')]
 				: [edge('op', 'out', action)])
 		],
 		143,

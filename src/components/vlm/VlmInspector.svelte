@@ -1,4 +1,15 @@
 <script lang="ts">
+	import { setContext, tick } from 'svelte';
+	import { writable } from 'svelte/store';
+	const matrixPopup = writable(false);
+	setContext('matrix-popup', matrixPopup);
+	setContext('matrix-popup-label', 'SmolVLM');
+	async function openMatrix() {
+		matrixPopup.set(false);
+		await tick();
+		matrixPopup.set(true);
+	}
+
 	import BlockChooser from '../common/BlockChooser.svelte';
 	import TensorBandFlow from '../common/TensorBandFlow.svelte';
 	import MatrixProduct from '../common/MatrixProduct.svelte';
@@ -183,11 +194,13 @@
 			<TokenInspectorLayout showTokens={stage !== 'output'} gap="0px"
 				><svelte:fragment slot="tokens"
 					>{#if stage === 'connector'}<TokenPicker
+							pageSize={6}
 							heading="Visual token"
 							label="Visual token"
 							options={visualOptions}
 							bind:value={visualToken}
 						/>{:else}<TokenPicker
+							pageSize={6}
 							label="Vision-language token"
 							options={tokenOptions}
 							bind:value={$vlmSelectedPosition}
@@ -197,8 +210,11 @@
 					items={stages.map(([id, label]) => ({ id, label }))}
 					selected={stage}
 					on:select={(e) => {
-						stage = e.detail;
-						coordinate = 0;
+						((e) => {
+							stage = e.detail;
+							coordinate = 0;
+						})(e);
+						matrixPopup.set(false);
 					}}
 				/>
 				{#if !['connector', 'output'].includes(stage)}<div class="controls">
@@ -230,12 +246,16 @@
 							scale="÷ √64"
 							causal={$vlmPhase === 'language'}
 							rotary={$vlmPhase === 'language'}
-							on:select={(e) => (attentionPart = e.detail)}
+							on:select={(e) => {
+								((e) => (attentionPart = e.detail))(e);
+								openMatrix();
+							}}
 						/>
 					{:else if stage === 'connector'}<TensorBandFlow
 							kind="connector"
 							label="Image connector"
 							selected="connector"
+							on:select={() => openMatrix()}
 						/>
 					{:else if stage === 'embedding'}<TensorBandFlow
 							kind={$vlmPhase === 'vision' ? 'embedding' : 'language-embedding'}
@@ -243,7 +263,10 @@
 							hiddenSize={$vlmPhase === 'vision' ? 768 : model.hiddenSize}
 							outputSize={model.hiddenSize}
 							selected="embedding"
-							on:select={(e) => (stage = e.detail)}
+							on:select={(e) => {
+								((e) => (stage = e.detail))(e);
+								openMatrix();
+							}}
 						/>
 					{:else if ['norm1', 'norm2'].includes(stage)}<TensorBandFlow
 							kind="norm"
@@ -252,13 +275,17 @@
 							hiddenSize={model.hiddenSize}
 							outputSize={model.hiddenSize}
 							selected="norm"
+							on:select={() => openMatrix()}
 						/>
 					{:else if stage === 'residual'}<TensorBandFlow
 							kind="residual"
 							label="Residual additions"
 							hiddenSize={model.hiddenSize}
 							selected="residual"
-							on:select={(e) => (stage = e.detail)}
+							on:select={(e) => {
+								((e) => (stage = e.detail))(e);
+								openMatrix();
+							}}
 						/>
 					{:else if stage === 'rope'}<TensorBandFlow
 							kind="rope"
@@ -266,7 +293,10 @@
 							headSize={64}
 							selected={ropeKind}
 							on:select={(e) => {
-								if (e.detail !== 'value') ropeKind = e.detail;
+								((e) => {
+									if (e.detail !== 'value') ropeKind = e.detail;
+								})(e);
+								openMatrix();
 							}}
 						/>
 					{:else if stage === 'output'}<TensorBandFlow
@@ -275,8 +305,12 @@
 							hiddenSize={576}
 							outputSize={49280}
 							selected="classifier"
+							on:select={() => openMatrix()}
 						/>{/if}
 					{#if ['up', 'down', 'gate', 'gate-projection', 'silu', 'gelu'].includes(stage)}<FeedForwardFlow
+							denseStyle
+							projectionsOnly
+							dimensional
 							hiddenSize={model.hiddenSize}
 							intermediateSize={model.intermediateSize}
 							gated={$vlmPhase === 'language'}
@@ -290,17 +324,20 @@
 										? 'activation'
 										: stage}
 							on:select={(e) => {
-								stage =
-									e.detail === 'product'
-										? 'gate'
-										: e.detail === 'gate'
-											? 'gate-projection'
-											: e.detail === 'activation'
-												? $vlmPhase === 'language'
-													? 'silu'
-													: 'gelu'
-												: e.detail;
-								coordinate = 0;
+								((e) => {
+									stage =
+										e.detail === 'product'
+											? 'gate'
+											: e.detail === 'gate'
+												? 'gate-projection'
+												: e.detail === 'activation'
+													? $vlmPhase === 'language'
+														? 'silu'
+														: 'gelu'
+													: e.detail;
+									coordinate = 0;
+								})(e);
+								openMatrix();
 							}}
 						/>{/if}
 					{#key `${$vlmPhase}:${$blockIdx}:${position}:${head}:${coordinate}:${visualToken}:${ropeKind}:${stage}`}
@@ -428,7 +465,10 @@
 								kvHeads={model.keyValueHeads}
 								headSize={64}
 								selected={qkvProjection}
-								on:select={(e) => (qkvProjection = e.detail)}
+								on:select={(e) => {
+									((e) => (qkvProjection = e.detail))(e);
+									openMatrix();
+								}}
 							/><MatrixProduct
 								input="Normalized X"
 								weight={qkvProjection + 'ᵀ'}
@@ -1023,5 +1063,26 @@
 		max-width: 380px;
 		min-width: 0;
 		text-align: center;
+	}
+
+	.vlm-inspector {
+		border-color: #e5e7eb;
+		border-radius: 8px;
+		color: #6b7280;
+	}
+	header {
+		background: #f3f4f6;
+		border-color: #e5e7eb;
+	}
+	h2 {
+		color: #111827;
+		font-weight: 600;
+	}
+	header p {
+		color: #9ca3af;
+	}
+	.close {
+		color: #6b7280;
+		border-color: #e5e7eb;
 	}
 </style>
