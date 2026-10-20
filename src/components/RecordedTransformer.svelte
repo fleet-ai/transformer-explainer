@@ -222,7 +222,10 @@
 	}
 	.expert-layout.attention-open :global(.attention .heads) {
 		padding-left: 2rem;
-		padding-right: 2rem;
+		padding-right: 4rem;
+	}
+	.expert-layout.attention-open .dim-partial.attention {
+		display: none;
 	}
 	.expert-layout.attention-open :global(.attention .head-out) {
 		margin-left: 1rem;
@@ -231,6 +234,7 @@
 	.expert-layout.attention-open :global(.transformer-blocks > .title) {
 		font-size: 0.65rem;
 		white-space: normal;
+		overflow-wrap: anywhere;
 	}
 	.expert-layout :global(.mlp.moe) {
 		min-width: 0;
