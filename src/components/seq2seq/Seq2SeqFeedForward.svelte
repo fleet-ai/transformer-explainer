@@ -27,7 +27,7 @@
 </script>
 
 <div class={`mlp ${className ?? ''}`} data-click="mlp-step">
-	<div class="title">Dense Feed-forward <small>RMSNorm · 512 → 2048 → 512 · ReLU</small></div>
+	<div class="title">MLP <small>512 → 2048 → 512 · ReLU</small></div>
 	<div class="content resize-watch relative">
 		<div class="first-layer layer">
 			<div class="column initial">
@@ -52,32 +52,18 @@
 				id="mlp-ln"
 			/>
 		</div>
-		<div class="column projection-up">
-			{#each $tokens as token, index}<button
-					class="cell operation"
-					aria-label={`Up projection ${token}`}
-					on:click={() => inspect(index)}>Wᵢ x</button
-				>{/each}
-		</div>
 		<div class="second-layer">
 			<div class="column">
 				<span class="subtitle">2048D · ReLU</span>{#each $tokens as token, index}<button
-						class="vector bg-purple-200"
-						aria-label={`ReLU ${token}`}
+						class="vector expanded-vector bg-indigo-200"
+						aria-label={`Inspect MLP process for ${token}`}
 						on:click={() => inspect(index)}
 						><VectorCanvas
-							colorScale="purple"
+							colorScale="indigo"
 							data={feedforward?.tokens[index].activation}
 						/></button
 					>{/each}
 			</div>
-		</div>
-		<div class="column projection-down">
-			{#each $tokens as token, index}<button
-					class="cell operation"
-					aria-label={`Down projection ${token}`}
-					on:click={() => inspect(index)}>Wₒ h</button
-				>{/each}
 		</div>
 		<div class="out-layer layer">
 			<OperationGroup type="residual-end" id="mlp-residual" />
@@ -101,25 +87,17 @@
 		margin-top: 8px;
 	}
 	.content {
-		display: flex;
-		gap: clamp(9px, 1vw, 18px);
-		align-items: flex-start;
+		display: grid;
+		grid-template-columns: minmax(0, 1.6fr) minmax(12px, 1fr) auto;
+		align-items: start;
 	}
 	.layer {
 		display: flex;
 	}
-	.operation {
-		font-size: 11px;
-		border: 1px solid #dbc9eb;
-		border-radius: 3px;
-		background: #fbf8fd;
-		color: #9465b0;
-		white-space: nowrap;
-		padding: 0 5px;
+	.expanded-vector {
+		height: calc(var(--vector-height) * 4);
 	}
-	.operation:hover {
-		background: #eee0f8;
-	}
+
 	.second-layer {
 		position: relative;
 		z-index: 20;
@@ -136,11 +114,6 @@
 	.vector {
 		border: 0;
 		padding: 0;
-	}
-	.projection-down,
-	.projection-up {
-		position: relative;
-		z-index: 20;
 	}
 	.first-layer .label {
 		font-size: 11px;

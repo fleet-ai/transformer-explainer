@@ -50,11 +50,13 @@
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
 		const height = Math.min(
 			Math.max(
-				(($moeModel?.architecture === 'encoder-decoder' ? Math.min(vizHeight, 520) : vizHeight) -
+				(($moeModel?.architecture === 'encoder-decoder'
+					? Math.min(vizHeight - 24, 480)
+					: vizHeight) -
 					titleHeight -
 					gaps) /
 					$tokens.length /
-					maxVectorScale,
+					($moeModel?.architecture === 'encoder-decoder' ? 4 : maxVectorScale),
 				$moeModel?.architecture === 'encoder-decoder' ? 8 : minVectorHeight
 			),
 			maxVectorHeight
