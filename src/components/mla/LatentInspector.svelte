@@ -14,7 +14,7 @@
 	} from '~/store';
 	import { loadAttentionOperations } from '$lib/moe/attention';
 	import { traceAssetUrl } from '$lib/moe/live';
-	import MatrixProduct from '../common/MatrixProduct.svelte';
+	import LatentProjectionPopup from './LatentProjectionPopup.svelte';
 	import { mlaProjectionView } from '$lib/mla/projections.js';
 	import { tokenLabel } from '$lib/moe/format';
 	export let stage = 'compression';
@@ -23,6 +23,7 @@
 	let loading = false;
 	let request = 0;
 	let coordinate = 0;
+	let multiplicationOpen = false;
 	let panel: HTMLDivElement;
 	$: layer =
 		$moeAttentionOperations?.example.id === $moeExample?.id
@@ -79,7 +80,7 @@
 
 <svelte:window
 	on:keydown={(e) => {
-		if (e.key === 'Escape') dispatch('close');
+		if (e.key === 'Escape' && !multiplicationOpen) dispatch('close');
 	}}
 />
 <div
@@ -122,6 +123,7 @@
 				on:select={(e) => {
 					stage = e.detail;
 					coordinate = 0;
+					multiplicationOpen = true;
 				}}
 			/>
 			{#if loading}<p role="status">Loading recorded MLA tensors…</p>{:else if error}<p
@@ -132,90 +134,87 @@
 						>Retry</button
 					>
 				</p>{:else if layer}
-				<div class="explanation">
-					<h3 class="operation-title">{projection.label}</h3>
-					<MatrixProduct
-						input={projection.input}
-						weight={projection.weight}
-						output={projection.output}
-						inputSize={projection.inputSize}
-						outputSize={projection.outputSize}
-						activation={projection.activation ?? ''}
-						inputValues={projection.inputValues ?? []}
-						outputValues={projection.outputValues ?? []}
-						token={tokenLabel($moeExample?.tokens[token]?.text ?? '')}
-					/>
-				</div>
-				<details class="recorded-details">
-					<summary>Recorded MLA values and details</summary>
-					{#if stage === 'query'}
-						<p>
-							Each head splits into {model?.contentKeySize} content coordinates and {model?.rotarySize}
-							positional coordinates. Only the positional branch receives RoPE. Concatenating both branches
-							gives a {model?.attentionHeadSize}D query.
-						</p>
-					{:else if stage === 'compression'}
-						<p>
-							A {model?.hiddenSize}D hidden vector produces a {model?.kvLatentSize}D latent and a
-							separate {model?.rotarySize}D rotary key. RMSNorm normalizes the latent. The cache
-							stores the normalized latent and rotated key:
-							<b>{(model?.kvLatentSize ?? 512) + (model?.rotarySize ?? 64)} coordinates per token</b
-							> shared by every head.
-						</p>
-					{:else if stage === 'norm'}
-						<p>
-							RMSNorm preserves the {model?.kvLatentSize}D latent; the shared positional key
-							bypasses this normalization.
-						</p>
-					{:else if ['expansion', 'key', 'value'].includes(stage)}
-						<p>
-							Each head has its own learned expansion from the same {model?.kvLatentSize}D latent
-							into {model?.contentKeySize}
-							content-key and {model?.valueHeadSize} value coordinates. The {model?.rotarySize}D
-							rotated key is shared across all heads. Content keys and values bypass RoPE.
-						</p>
-					{:else}
-						<p>
-							Content and positional dot products combine before softmax. Each head returns {model?.valueHeadSize}
-							coordinates. The {model?.attentionHeads} heads concatenate and pass through W<sup
-								>O</sup
-							>
-							to {model?.hiddenSize}D, followed by residual addition.
-						</p>
-					{/if}
-					<div class="recording-heading">
-						<h3>Recorded values · {projection.label}</h3>
-						<div class="coordinates">
-							<span>Coordinates {coordinate}–{Math.min(coordinate + 3, maximum)}</span><button
-								aria-label="Previous MLA coordinates"
-								disabled={coordinate === 0}
-								on:click={() => (coordinate = Math.max(0, coordinate - 4))}>‹</button
-							><button
-								aria-label="Next MLA coordinates"
-								disabled={coordinate + 4 > maximum}
-								on:click={() => (coordinate = Math.min(maximum, coordinate + 4))}>›</button
-							>
-						</div>
-					</div>
-					<div class="tensor-grid" style={`--columns:${vectors.length}`}>
-						{#each vectors as vector}<section class={vector.color}>
-								<h4>{vector.label}</h4>
-								<small>{vector.values?.length ?? 0} recorded coordinates</small
-								>{#each coords as index}<div class="value-row">
-										<span>[{index}]</span><b>{number(vector.values?.[index])}</b>
-									</div>{/each}
-							</section>{/each}
-					</div>
-					<p class="footnote">
-						Full-model recording · {model?.numLayers} blocks ·
-
-						<a
-							href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
-							target="_blank"
-							rel="noreferrer">Trace JSON ↗</a
+				{#if multiplicationOpen}
+					{#key stage}
+						<LatentProjectionPopup
+							{projection}
+							token={tokenLabel($moeExample?.tokens[token]?.text ?? '')}
+							on:close={() => (multiplicationOpen = false)}
 						>
-					</p>
-				</details>
+							<details class="recorded-details">
+								<summary>Recorded MLA values and details</summary>
+								{#if stage === 'query'}
+									<p>
+										Each head splits into {model?.contentKeySize} content coordinates and {model?.rotarySize}
+										positional coordinates. Only the positional branch receives RoPE. Concatenating both
+										branches gives a {model?.attentionHeadSize}D query.
+									</p>
+								{:else if stage === 'compression'}
+									<p>
+										A {model?.hiddenSize}D hidden vector produces a {model?.kvLatentSize}D latent
+										and a separate {model?.rotarySize}D rotary key. RMSNorm normalizes the latent.
+										The cache stores the normalized latent and rotated key:
+										<b
+											>{(model?.kvLatentSize ?? 512) + (model?.rotarySize ?? 64)} coordinates per token</b
+										> shared by every head.
+									</p>
+								{:else if stage === 'norm'}
+									<p>
+										RMSNorm preserves the {model?.kvLatentSize}D latent; the shared positional key
+										bypasses this normalization.
+									</p>
+								{:else if ['expansion', 'key', 'value'].includes(stage)}
+									<p>
+										Each head has its own learned expansion from the same {model?.kvLatentSize}D
+										latent into {model?.contentKeySize}
+										content-key and {model?.valueHeadSize} value coordinates. The {model?.rotarySize}D
+										rotated key is shared across all heads. Content keys and values bypass RoPE.
+									</p>
+								{:else}
+									<p>
+										Content and positional dot products combine before softmax. Each head returns {model?.valueHeadSize}
+										coordinates. The {model?.attentionHeads} heads concatenate and pass through W<sup
+											>O</sup
+										>
+										to {model?.hiddenSize}D, followed by residual addition.
+									</p>
+								{/if}
+								<div class="recording-heading">
+									<h3>Recorded values · {projection.label}</h3>
+									<div class="coordinates">
+										<span>Coordinates {coordinate}–{Math.min(coordinate + 3, maximum)}</span><button
+											aria-label="Previous MLA coordinates"
+											disabled={coordinate === 0}
+											on:click={() => (coordinate = Math.max(0, coordinate - 4))}>‹</button
+										><button
+											aria-label="Next MLA coordinates"
+											disabled={coordinate + 4 > maximum}
+											on:click={() => (coordinate = Math.min(maximum, coordinate + 4))}>›</button
+										>
+									</div>
+								</div>
+								<div class="tensor-grid" style={`--columns:${vectors.length}`}>
+									{#each vectors as vector}<section class={vector.color}>
+											<h4>{vector.label}</h4>
+											<small>{vector.values?.length ?? 0} recorded coordinates</small
+											>{#each coords as index}<div class="value-row">
+													<span>[{index}]</span><b>{number(vector.values?.[index])}</b>
+												</div>{/each}
+										</section>{/each}
+								</div>
+								<p class="footnote">
+									Full-model recording · {model?.numLayers} blocks ·
+
+									<a
+										href={traceAssetUrl($moeExample?.id ?? '', 'attention', base)}
+										target="_blank"
+										rel="noreferrer">Trace JSON ↗</a
+									>
+								</p>
+							</details>
+						</LatentProjectionPopup>
+					{/key}
+				{/if}
 			{/if}
 		</TokenInspectorLayout>
 	</div>
@@ -232,11 +231,11 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
-		border: 1px solid #ded5eb;
+		border: 1px solid #e5e7eb;
 		border-radius: 8px;
 		background: white;
-		box-shadow: 0 8px 34px #33224b30;
-		color: #665775;
+		box-shadow: 0 8px 34px #00000026;
+		color: #4b5563;
 		font:
 			13px/1.5 Arial,
 			Helvetica,
@@ -249,27 +248,27 @@
 		justify-content: space-between;
 		gap: 12px;
 		flex: 0 0 auto;
-		background: #faf8fc;
-		border-bottom: 1px solid #e9e2ef;
+		background: #f3f4f6;
+		border-bottom: 1px solid #e5e7eb;
 		padding: 12px 18px;
 	}
 	h2 {
 		font-size: 20px;
 		font-weight: 600;
-		color: #624685;
+		color: #111827;
 		margin: 0;
 	}
 	header p {
 		margin: 3px 0 0;
-		color: #91849e;
+		color: #9ca3af;
 		font-size: 12px;
 	}
 	.close {
 		width: 30px;
 		height: 30px;
 		background: white;
-		color: #7b6c8e;
-		border: 1px solid #ded5eb;
+		color: #6b7280;
+		border: 1px solid #e5e7eb;
 		border-radius: 6px;
 		font-size: 24px;
 		line-height: 1;
@@ -284,29 +283,6 @@
 		flex-direction: column;
 		gap: 16px;
 	}
-	.explanation {
-		min-height: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0;
-	}
-	.explanation :global(.matrix-product) {
-		margin: 4px 0;
-	}
-	.explanation :global(.shape-note) {
-		margin: 2px 0;
-	}
-	.operation-title {
-		margin: 0;
-		color: #75538e;
-		font:
-			20px Georgia,
-			serif;
-	}
-	.explanation p {
-		margin: 0 0 6px;
-		color: #8a7897;
-	}
 	.text-button,
 	a {
 		color: #8b59b6;
@@ -315,6 +291,14 @@
 		background: none;
 		padding: 0;
 		font: inherit;
+		cursor: pointer;
+	}
+	.recorded-details {
+		border-top: 1px solid #e5e7eb;
+		padding-top: 12px;
+	}
+	.recorded-details summary {
+		color: #6b7280;
 		cursor: pointer;
 	}
 	.recording-heading {
@@ -412,9 +396,6 @@
 		.inspector-body {
 			gap: 10px;
 			padding: 12px 16px;
-		}
-		.explanation {
-			min-height: 100px;
 		}
 		.value-row {
 			padding: 6px 8px;

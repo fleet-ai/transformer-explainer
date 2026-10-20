@@ -12,8 +12,8 @@
 		attention: void;
 	}>();
 	let map: HTMLDivElement;
-	let paths: { id: string; label: string; d: string; bridge: boolean }[] = [];
-	const edges = [
+	let paths: { id: string; label: string; d: string; bridge: boolean; width: number }[] = [];
+	$: edges = [
 		['hidden', 'query', 'query', 'Query projection'],
 		['query', 'query-output', 'query', 'Unrotated query projection'],
 		['hidden', 'compression', 'compression', 'KV compression'],
@@ -24,6 +24,18 @@
 		['position', 'key-output', 'compression', 'Shared key position'],
 		['norm', 'value', 'value', 'Value expansion'],
 		['value', 'value-output', 'value', 'Expanded value']
+	];
+	$: dimensions = [
+		hiddenSize,
+		heads * (contentSize + rotarySize),
+		hiddenSize,
+		latentSize,
+		latentSize,
+		heads * contentSize,
+		rotarySize,
+		rotarySize,
+		latentSize,
+		heads * valueSize
 	];
 	function activate(id: string) {
 		dispatch('select', id);
@@ -38,7 +50,7 @@
 		if (!map) return;
 		const parent = map.getBoundingClientRect();
 		if (!parent.width) return;
-		const next = edges.map(([from, to, id, label]) => {
+		const next = edges.map(([from, to, id, label], index) => {
 			const a = map.querySelector<HTMLElement>(`[data-node="${from}"]`)!.getBoundingClientRect();
 			const b = map.querySelector<HTMLElement>(`[data-node="${to}"]`)!.getBoundingClientRect();
 			const x = a.right - parent.left,
@@ -48,7 +60,8 @@
 			const mid = x + (xx - x) / 2;
 			return {
 				id,
-				label,
+				label: `${label} · ${dimensions[index]}D`,
+				width: (dimensions[index] * 48) / (heads * (contentSize + rotarySize)),
 				d: `M${x} ${y} C${mid} ${y} ${mid} ${yy} ${xx} ${yy}`,
 				bridge: from === 'norm' && to === 'value'
 			};
@@ -64,13 +77,18 @@
 	afterUpdate(measure);
 </script>
 
-<div class="hint">Click a band or box to inspect its operation</div>
+<div class="hint">Click Wq, W↓KV, W↑K, or W↑V to see its multiplication</div>
 <div class="latent-flow" bind:this={map} role="group" aria-label="MLA parallel projection branches">
 	<svg aria-label="Projection bands">
 		{#each paths as path}
-			{#if path.bridge}<path class="bridge" d={path.d} />{/if}
+			{#if path.bridge}<path
+					class="bridge"
+					d={path.d}
+					style={`stroke-width:${path.width + 10}px`}
+				/>{/if}
 			<path
 				d={path.d}
+				style={`stroke-width:${path.width}px`}
 				class:chosen={selected === path.id}
 				role="button"
 				tabindex="0"
@@ -89,7 +107,7 @@
 		aria-pressed={selected === 'query'}
 		on:click={() => activate('query')}
 	>
-		Wq<small>Query projection</small>
+		Wq<small>{hiddenSize} → {heads * (contentSize + rotarySize)}</small>
 	</button>
 	<div class="node result query-result" data-node="query-output">
 		<b>Q</b><small>{heads * (contentSize + rotarySize)}D</small><small>All heads</small>
@@ -100,19 +118,17 @@
 		aria-pressed={selected === 'compression'}
 		on:click={() => activate('compression')}
 	>
-		W↓KV<small>Latent {latentSize}</small><small>+ rotary K {rotarySize}</small>
+		W↓KV<small>{hiddenSize} → {latentSize + rotarySize}</small><small
+			>{latentSize} latent + {rotarySize} position</small
+		>
 	</button>
-	<button
-		class="node norm"
-		data-node="norm"
-		aria-pressed={selected === 'norm'}
-		on:click={() => activate('norm')}>RMSNorm<small>Latent · {latentSize}D</small></button
-	>
+	<div class="node norm" data-node="norm">RMSNorm<small>Latent · {latentSize}D</small></div>
+
 	<button
 		class="node key"
 		data-node="key"
 		aria-pressed={selected === 'key' || selected === 'expansion'}
-		on:click={() => activate('key')}>W↑K<small>K content · {heads * contentSize}D</small></button
+		on:click={() => activate('key')}>W↑K<small>{latentSize} → {heads * contentSize}</small></button
 	>
 	<div class="node position" data-node="position">
 		Shared position<small>{rotarySize}D · before RoPE</small>
@@ -124,19 +140,20 @@
 		class="node value"
 		data-node="value"
 		aria-pressed={selected === 'value'}
-		on:click={() => activate('value')}>W↑V<small>V · {heads * valueSize}D</small></button
+		on:click={() => activate('value')}>W↑V<small>{latentSize} → {heads * valueSize}</small></button
 	>
 	<div class="node result value-result" data-node="value-output">
 		<b>V</b><small>{heads * valueSize}D</small><small>All heads</small>
 	</div>
 </div>
 <div class="next-operations">
+	<span>Band width ∝ coordinates · before head split and RoPE</span>
 	<button on:click={() => dispatch('attention')}>Head split → Attention ↗</button>
 </div>
 
 <style>
 	.hint {
-		color: #8b709d;
+		color: #9ca3af;
 		font:
 			12px/1.4 Arial,
 			sans-serif;
@@ -156,15 +173,13 @@
 	}
 	path {
 		fill: none;
-		stroke: #ded4ee;
-		stroke-width: 19;
+		stroke: #eae8fc;
 		cursor: pointer;
 		pointer-events: stroke;
 	}
 	path.chosen,
 	path:hover {
-		stroke: #bb91d2;
-		stroke-width: 23;
+		stroke: #d0c5f7;
 	}
 	path.bridge {
 		stroke: white;
@@ -180,11 +195,12 @@
 		width: clamp(90px, 14cqw, 138px);
 		min-height: 46px;
 		padding: 7px 4px;
-		background: #faf7fd;
-		color: #75508f;
-		border: 1.5px solid #cbb4df;
+		background: #ffffff;
+		color: #4b5563;
+		border: 1.5px solid #e5e7eb;
 		border-radius: 5px;
 		text-align: center;
+		box-shadow: 0 1px 2px #0000000d;
 		font:
 			15px/1.2 Arial,
 			sans-serif;
@@ -193,7 +209,7 @@
 		display: block;
 		margin-top: 4px;
 		font-size: 11px;
-		color: #8e779e;
+		color: #9ca3af;
 	}
 	.node b {
 		font-weight: 600;
@@ -203,8 +219,8 @@
 	}
 	button:hover,
 	button[aria-pressed='true'] {
-		background: #e1c9ee;
-		border-color: #b28bce;
+		background: #f9fafb;
+		border-color: #d1d5db;
 	}
 	button:focus-visible {
 		outline: 2px solid #9362c1;
@@ -276,6 +292,11 @@
 		flex-wrap: wrap;
 		justify-content: space-between;
 		gap: 8px;
+	}
+	.next-operations span {
+		color: #9ca3af;
+		font-size: 11px;
+		align-self: center;
 	}
 	.next-operations button {
 		color: #9066ad;

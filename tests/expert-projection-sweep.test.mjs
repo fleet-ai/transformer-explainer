@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { projectionSweep } from '../src/lib/moe/projection-sweep.js';
 
-test('sweep fills all displayed cells through the last coordinate for every expert width', () => {
-	for (const size of [512, 1024, 1408, 2048, 2816, 10944]) {
+test('sweep fills all displayed cells through the last coordinate for expert and MLA projection widths', () => {
+	for (const size of [512, 576, 1024, 1408, 2048, 2816, 3072, 10944]) {
 		const start = projectionSweep(0, size);
 		assert.equal(start.completed, 0);
 		assert.equal(start.active, 0);
