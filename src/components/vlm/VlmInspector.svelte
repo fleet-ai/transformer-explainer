@@ -471,14 +471,30 @@
 								}}
 							/><MatrixProduct
 								input="Normalized X"
-								weight={qkvProjection + 'ᵀ'}
-								output={qkvProjection.toUpperCase()}
+								weight={qkvProjection === 'query' ? 'Wqᵀ' : qkvProjection === 'key' ? 'Wkᵀ' : 'Wvᵀ'}
+								output={qkvProjection === 'query' ? 'Q' : qkvProjection === 'key' ? 'K' : 'V'}
 								inputSize={model.hiddenSize}
 								outputSize={(qkvProjection === 'query'
 									? model.attentionHeads
 									: model.keyValueHeads) * 64}
 								bias={$vlmPhase === 'vision'}
 								token={stream.tokens[position]}
+								inputValues={row(data, 'norm1', position)}
+								outputValues={Array.from(
+									{
+										length: qkvProjection === 'query' ? model.attentionHeads : model.keyValueHeads
+									},
+									(_, h) =>
+										row(
+											data,
+											qkvProjection === 'value'
+												? 'value'
+												: $vlmPhase === 'language'
+													? qkvProjection + 'Before'
+													: qkvProjection,
+											h * stream.sequenceLength + position
+										)
+								).flat()}
 							/>
 							<details class="recorded-details">
 								<summary>Recorded Q / K / V</summary>

@@ -40,12 +40,14 @@
 		['scan', 'State + readout'],
 		['gate', 'Gate + RMSNorm'],
 		['output', 'Output + residual'],
+		['qkv', 'Q · K · V'],
 		['attention', 'Attention'],
 		['rope', 'RoPE'],
 		['ffn', 'Gated GELU'],
 		['classifier', 'Next token']
 	];
 	let attentionPart = 'context';
+	let qkvProjection = 'query';
 	let mambaHead = 0,
 		channel = 0,
 		stateCoordinate = 0,
@@ -243,6 +245,19 @@
 								token={document.tokens[token]}
 								on:select={(e) => {
 									((e) => choose(e.detail))(e);
+									openMatrix();
+								}}
+							/>
+						{:else if current === 'qkv' && isHybrid}<TensorBandFlow
+								kind="qkv"
+								label="Query Key Value · base + adapter"
+								hiddenSize={4096}
+								heads={32}
+								kvHeads={32}
+								headSize={128}
+								selected={qkvProjection}
+								on:select={(e) => {
+									qkvProjection = e.detail;
 									openMatrix();
 								}}
 							/>
@@ -549,6 +564,57 @@
 							<p class="note">
 								All 128 Q and K coordinates are rotated in 64 fixed pairs. V bypasses RoPE. These
 								are the saved pretrained-model tensors and its actual cosine/sine values.
+							</p>
+						{:else if current === 'qkv' && isHybrid}
+							{@const outputName =
+								qkvProjection === 'query'
+									? 'queryBefore'
+									: qkvProjection === 'key'
+										? 'keyBefore'
+										: 'value'}
+							<MatrixProduct
+								input="RMSNorm([hidden; embedding])"
+								weight={qkvProjection === 'query'
+									? '(Wq + adapter)ᵀ'
+									: qkvProjection === 'key'
+										? '(Wk + adapter)ᵀ'
+										: '(Wv + adapter)ᵀ'}
+								output={qkvProjection === 'query' ? 'Q' : qkvProjection === 'key' ? 'K' : 'V'}
+								inputSize={4096}
+								outputSize={4096}
+								token={document.tokens[token]}
+								inputValues={row(data, 'attentionInput', token)}
+								outputValues={Array.from({ length: 32 }, (_, h) =>
+									row(data, outputName, h * count + token)
+								).flat()}
+							/>
+							<details class="recorded-details">
+								<summary>Recorded Q / K / V · before RoPE</summary>
+								<p class="note">
+									The current hidden state and original embedding are concatenated and normalized to
+									4,096 coordinates. Each projection includes this Transformer block's learned
+									adapter and produces 32 × 128 coordinates. Q and K receive RoPE inside attention;
+									V stays unchanged. Matrix cells are schematic; the values below are recorded
+									outputs including the adapter.
+								</p>
+								<table>
+									<thead
+										><tr
+											><th>Coordinate</th><th>Q · head {head + 1}</th><th>K · head {head + 1}</th
+											><th>V · head {head + 1}</th></tr
+										></thead
+									><tbody
+										>{#each [0, 1, 2, 3] as c}<tr
+												><td>{c}</td><td>{f(scalar(data, 'queryBefore', head, token, c))}</td><td
+													>{f(scalar(data, 'keyBefore', head, token, c))}</td
+												><td>{f(scalar(data, 'value', head, token, c))}</td></tr
+											>{/each}</tbody
+									>
+								</table>
+							</details>
+						{:else if current === 'qkv'}<p>
+								This block is a Mamba mixer. QKV projections are available in its Transformer
+								blocks.
 							</p>
 						{:else if current === 'attention' && isHybrid}
 							{#if attentionPart === 'scores'}<MatrixProduct

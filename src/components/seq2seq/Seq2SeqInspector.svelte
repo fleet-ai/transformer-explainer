@@ -22,6 +22,14 @@
 	import type { T5Attention } from '$lib/seq2seq/types';
 	const dispatch = createEventDispatcher();
 	let attentionPart = 'scores';
+	let qkvProjection = 'query';
+	$: projectedVectors =
+		qkvProjection === 'query'
+			? ops?.queryBefore
+			: qkvProjection === 'key'
+				? ops?.keyBefore
+				: ops?.value;
+	$: projectedVector = projectedVectors?.flatMap((head) => head[token] ?? []) ?? [];
 	let selectedKey = 0,
 		coordinate = 0,
 		projection: 'up' | 'relu' | 'down' = 'up',
@@ -67,13 +75,15 @@
 	<header>
 		<div>
 			<h2>
-				T5 · {stage === 'cross'
-					? 'Encoder → decoder attention'
-					: stage === 'ffn'
-						? 'Dense ReLU feed-forward'
-						: stage === 'output'
-							? 'Language model output'
-							: 'Self-attention'}
+				T5 · {stage === 'qkv'
+					? 'Query · Key · Value'
+					: stage === 'cross'
+						? 'Encoder → decoder attention'
+						: stage === 'ffn'
+							? 'Dense ReLU feed-forward'
+							: stage === 'output'
+								? 'Language model output'
+								: 'Self-attention'}
 			</h2>
 			<p>
 				{$t5Stack === 'encoder' ? 'Encoder' : 'Decoder'} block {$blockIdx + 1} of 6 · head {$attentionHeadIdx +
@@ -86,6 +96,7 @@
 	</header>
 	<BlockChooser
 		items={[
+			{ id: 'qkv', label: 'Q · K · V' },
 			{ id: 'self', label: 'Self-attention' },
 			...($t5Stack === 'decoder' ? [{ id: 'cross', label: 'Cross-attention' }] : []),
 			{ id: 'ffn', label: 'Feed-forward' },
@@ -114,7 +125,54 @@
 						bind:value={selectedKey}
 					/>{/if}</svelte:fragment
 			>
-			{#if stage === 'self' || stage === 'cross'}
+			{#if stage === 'qkv'}
+				<TensorBandFlow
+					kind="qkv"
+					label="Query Key Value"
+					hiddenSize={512}
+					heads={8}
+					kvHeads={8}
+					headSize={64}
+					selected={qkvProjection}
+					on:select={(e) => {
+						qkvProjection = e.detail;
+						openMatrix();
+					}}
+				/>
+				<MatrixProduct
+					input="RMSNorm(X)"
+					weight={qkvProjection === 'query' ? 'Wqᵀ' : qkvProjection === 'key' ? 'Wkᵀ' : 'Wvᵀ'}
+					output={qkvProjection === 'query' ? 'Q' : qkvProjection === 'key' ? 'K' : 'V'}
+					inputSize={512}
+					outputSize={512}
+					token={$tokens[token]}
+					inputValues={layer?.attentionInputPreview?.[token] ?? []}
+					outputValues={projectedVector}
+				/>
+				<details class="recorded-details">
+					<summary>Recorded Q / K / V</summary>
+					<p class="explanation">
+						The same 512D RMSNorm output enters three separate, bias-free projections. Each 512D
+						output splits into eight 64D heads. T5 adds relative-position bias to attention scores;
+						it does not use RoPE.
+					</p>
+					<table>
+						<thead
+							><tr
+								><th>Coordinate</th><th>Q · head {$attentionHeadIdx + 1}</th><th
+									>K · head {$attentionHeadIdx + 1}</th
+								><th>V · head {$attentionHeadIdx + 1}</th></tr
+							></thead
+						><tbody
+							>{#each [0, 1, 2, 3] as c}<tr
+									><td>{c}</td><td>{fmt(ops?.queryBefore[$attentionHeadIdx]?.[token]?.[c])}</td><td
+										>{fmt(ops?.keyBefore[$attentionHeadIdx]?.[token]?.[c])}</td
+									><td>{fmt(ops?.value[$attentionHeadIdx]?.[token]?.[c])}</td></tr
+								>{/each}</tbody
+						>
+					</table>
+				</details>
+			{:else if stage === 'self' || stage === 'cross'}
 				<TensorBandFlow
 					kind="attention"
 					label={stage === 'cross' ? 'Cross-attention' : 'Self-attention'}

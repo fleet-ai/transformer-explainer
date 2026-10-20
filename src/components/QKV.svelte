@@ -14,6 +14,9 @@
 	import { mlaBankVectors } from '$lib/mla/projections.js';
 	import { moeTokenIndex, weightPopover } from '~/store';
 	import type { AttentionOperationsLayer } from '$lib/moe/attention';
+	import { t5Example, t5Stack } from '$lib/seq2seq/store';
+	import { vlmVisiblePositions, vlmSelectedPosition } from '$lib/vlm/store';
+	import { vitVisiblePositions, vitSelectedPosition } from '$lib/vit/store';
 	import { vlmHeadOperations } from '$lib/vlm/store';
 	import { hybridHeadOperations } from '$lib/hybrid/store';
 	import { vitHeadOperations } from '$lib/vit/store';
@@ -41,20 +44,22 @@
 	$: keyValueHeads = isMLA ? queryHeads : ($moeModel?.keyValueHeads ?? 8);
 	$: headSize = $moeModel?.attentionHeadSize ?? 64;
 	$: isMLA = $moeModel?.architecture === 'mla';
-	$: isExpertModel = !!$moeModel && ['moe', 'mla'].includes($moeModel.architecture ?? 'moe');
+	$: hasProjectionInspector = !!$moeModel;
 	$: isPlain = ['vit', 'encoder-decoder'].includes($moeModel?.architecture ?? '');
 	$: valueSize = $moeModel?.valueHeadSize ?? headSize;
 	$: kvHead = Math.floor($attentionHeadIdx / (queryHeads / keyValueHeads));
 	$: layer = (
-		$moeModel?.architecture === 'vit'
-			? $vitHeadOperations
-			: $moeModel?.architecture === 'vision-language'
-				? $vlmHeadOperations
-				: $moeModel?.architecture === 'hybrid'
-					? $hybridHeadOperations
-					: recording?.example.id === $moeExample?.id
-						? recording?.layers[$blockIdx]
-						: undefined
+		$moeModel?.architecture === 'encoder-decoder'
+			? $t5Example?.[$t5Stack].attentionOperations.layers[$blockIdx]
+			: $moeModel?.architecture === 'vit'
+				? $vitHeadOperations
+				: $moeModel?.architecture === 'vision-language'
+					? $vlmHeadOperations
+					: $moeModel?.architecture === 'hybrid'
+						? $hybridHeadOperations
+						: recording?.example.id === $moeExample?.id
+							? recording?.layers[$blockIdx]
+							: undefined
 	) as AttentionOperationsLayer | undefined;
 	$: if (
 		$moeExample &&
@@ -74,7 +79,11 @@
 	}
 	$: bankVectors = $tokens.map((_, index) => mlaBankVectors(layer, index));
 	function inspectProjection(index: number) {
-		if (!isExpertModel) return;
+		if (!hasProjectionInspector) return;
+		if ($moeModel?.architecture === 'vit')
+			$vitSelectedPosition = $vitVisiblePositions[index] ?? index;
+		if ($moeModel?.architecture === 'vision-language')
+			$vlmSelectedPosition = $vlmVisiblePositions[index] ?? index;
 		$moeTokenIndex = index;
 		if (isMLA) {
 			$weightPopover = null;
@@ -89,7 +98,7 @@
 <div
 	class={classNames('qkv', className)}
 	class:latent={isMLA}
-	class:expert-projections={isExpertModel}
+	class:expert-projections={hasProjectionInspector}
 	class:plain={isPlain}
 	role="none"
 	data-click="qkv-step"
@@ -191,7 +200,7 @@
 							{#if vectorHoverIdx !== index}<span>V</span>{/if}
 						</div>
 					</div>
-					{#if isExpertModel}<button
+					{#if hasProjectionInspector}<button
 							type="button"
 							class="projection-bank-target"
 							aria-label={`Inspect ${isMLA ? 'MLA' : 'QKV'} projections for token ${index}: ${token}`}
@@ -202,8 +211,8 @@
 			<Tooltip class="popover" triggeredBy={'.qkv .qkv-column .vector'} placement="right"
 				>{isMLA
 					? 'Click to inspect MLA projections. Q/K are before RoPE; head splitting and rotation happen inside attention.'
-					: 'Before head split:'} Q {queryHeads * headSize}, K {keyValueHeads * headSize}, V {keyValueHeads *
-					valueSize}. Highlighted head: Q/K {headSize}D, V {valueSize}D.</Tooltip
+					: 'Click to inspect QKV projections before head split:'} Q {queryHeads * headSize}, K {keyValueHeads *
+					headSize}, V {keyValueHeads * valueSize}. Highlighted head: Q/K {headSize}D, V {valueSize}D.</Tooltip
 			>
 		</div>
 	</div>

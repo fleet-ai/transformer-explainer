@@ -41,11 +41,13 @@
 	}
 	$: if ($moeModel?.architecture === 'encoder-decoder' && $weightPopover) {
 		t5Inspector.set(
-			$weightPopover === 'softmax'
-				? 'output'
-				: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
-					? 'ffn'
-					: 'self'
+			$weightPopover === 'qkv'
+				? 'qkv'
+				: $weightPopover === 'softmax'
+					? 'output'
+					: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
+						? 'ffn'
+						: 'self'
 		);
 		$weightPopover = null;
 	}
@@ -62,11 +64,13 @@
 	}
 	$: if ($moeModel?.architecture === 'hybrid' && $weightPopover) {
 		hybridInspector.set(
-			$weightPopover === 'softmax'
-				? 'classifier'
-				: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
-					? 'ffn'
-					: 'attention'
+			$weightPopover === 'qkv'
+				? 'qkv'
+				: $weightPopover === 'softmax'
+					? 'classifier'
+					: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
+						? 'ffn'
+						: 'attention'
 		);
 		$weightPopover = null;
 	}

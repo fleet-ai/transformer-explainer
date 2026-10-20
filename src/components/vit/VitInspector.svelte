@@ -330,7 +330,15 @@
 								/>{/if}
 							{@const which = stage === 'qkv' ? projection : stage}<MatrixProduct
 								input={stage === 'down' ? 'GELU(U)' : 'LayerNorm(X)'}
-								weight={stage === 'up' ? 'Wupᵀ' : stage === 'down' ? 'Wdownᵀ' : 'W' + which + 'ᵀ'}
+								weight={stage === 'up'
+									? 'Wupᵀ'
+									: stage === 'down'
+										? 'Wdownᵀ'
+										: which === 'query'
+											? 'Wqᵀ'
+											: which === 'key'
+												? 'Wkᵀ'
+												: 'Wvᵀ'}
 								output={stage === 'up'
 									? 'Up U'
 									: stage === 'down'
