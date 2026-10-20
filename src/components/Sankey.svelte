@@ -62,7 +62,7 @@
 		$hybridRecording?.document.layers[$blockIdx].type === 'mamba';
 	$: usesRoPE =
 		!!$moeModel &&
-		!['mla', 'vit', 'encoder-decoder'].includes($moeModel.architecture ?? '') &&
+		!['vit', 'encoder-decoder'].includes($moeModel.architecture ?? '') &&
 		$moeModel.maskMode !== 'bidirectional';
 	$: backPaths = [
 		{

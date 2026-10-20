@@ -143,7 +143,7 @@
 								? bankVectors[index]?.query
 								: layer?.queryBefore?.flatMap((head) => head[index])}
 							label={layer
-								? `Recorded ${isMLA ? 'QUERY content plus rotated position' : 'QUERY projection before head split'}, ${queryHeads * headSize} coordinates. Colors normalized within this vector.`
+								? `Recorded ${isMLA ? 'QUERY content plus unrotated position' : 'QUERY projection before head split'}, ${queryHeads * headSize} coordinates. Colors normalized within this vector.`
 								: 'Loading recorded projection values.'}
 							active={vectorHoverIdx === index}
 						/>
@@ -152,7 +152,7 @@
 							style={`top:${(100 * $attentionHeadIdx) / queryHeads}%;height:${100 / queryHeads}%;`}
 						></div>
 						<div class="sub-vector head-rest">
-							{#if vectorHoverIdx !== index}<span>{isMLA ? 'Q′' : 'Q'}</span>{/if}
+							{#if vectorHoverIdx !== index}<span>Q</span>{/if}
 						</div>
 					</div>
 					<div class={`sub-vector key relative flex flex-col ${keyVectorColor}`}>
@@ -162,7 +162,7 @@
 								? bankVectors[index]?.key
 								: layer?.keyBefore.flatMap((head) => head[index])}
 							label={layer
-								? `Recorded ${isMLA ? 'expanded content KEY plus shared rotated key' : 'KEY projection before head split'}, ${keyValueHeads * headSize} coordinates. Colors normalized within this vector.`
+								? `Recorded ${isMLA ? 'expanded content KEY plus shared unrotated key' : 'KEY projection before head split'}, ${keyValueHeads * headSize} coordinates. Colors normalized within this vector.`
 								: 'Loading recorded projection values.'}
 							active={vectorHoverIdx === index}
 						/>
@@ -171,7 +171,7 @@
 							style={`top:${(100 * kvHead) / keyValueHeads}%;height:${100 / keyValueHeads}%;`}
 						></div>
 						<div class="sub-vector head-rest">
-							{#if vectorHoverIdx !== index}<span>{isMLA ? 'K′' : 'K'}</span>{/if}
+							{#if vectorHoverIdx !== index}<span>K</span>{/if}
 						</div>
 					</div>
 					<div class={`sub-vector value relative flex flex-col ${valVectorColor}`}>
@@ -201,7 +201,7 @@
 			{/each}
 			<Tooltip class="popover" triggeredBy={'.qkv .qkv-column .vector'} placement="right"
 				>{isMLA
-					? 'Click to inspect MLA projections. Q′/K′ include rotated positions; V bypasses RoPE.'
+					? 'Click to inspect MLA projections. Q/K are before RoPE; head splitting and rotation happen inside attention.'
 					: 'Before head split:'} Q {queryHeads * headSize}, K {keyValueHeads * headSize}, V {keyValueHeads *
 					valueSize}. Highlighted head: Q/K {headSize}D, V {valueSize}D.</Tooltip
 			>

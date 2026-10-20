@@ -1,5 +1,5 @@
-/** One visible bank contains the final recorded vectors that enter MLA attention.
- * Rotary coordinates in queryAfter/keyAfter use the trace's paired ordering.
+/** The QKV bank contains recorded projections before head-local RoPE.
+ * Rotary coordinates in queryBefore/keyBefore use the trace's paired ordering.
  * Never pad absent recordings with schematic values.
  * @param {import('../moe/attention').AttentionOperationsLayer | undefined} layer
  * @param {number} token
@@ -21,8 +21,8 @@ export function mlaBankVectors(layer, token) {
 		return values;
 	};
 	return {
-		query: combine(layer.queryContent, layer.queryAfter),
-		key: combine(layer.keyContent, layer.keyAfter, true),
+		query: combine(layer.queryContent, layer.queryBefore),
+		key: combine(layer.keyContent, layer.keyBefore, true),
 		value: layer.value?.every((rows) => rows[token])
 			? layer.value.flatMap((rows) => rows[token])
 			: undefined
@@ -50,7 +50,7 @@ export function mlaProjectionView(layer, model, head, token, stage) {
 		normalized = layer?.kvLatent?.[token];
 	const k = layer?.keyContent?.[head]?.[token],
 		v = layer?.value?.[head]?.[token];
-	/** @param {'queryProjection' | 'attentionContext'} field */
+	/** @param {'queryProjection' | 'attentionContext' | 'keyContent' | 'value'} field */
 	const flatten = (field) => {
 		const rows = layer?.[field];
 		return rows?.every((head) => head[token]) ? rows.flatMap((head) => head[token]) : undefined;
@@ -65,10 +65,7 @@ export function mlaProjectionView(layer, model, head, token, stage) {
 			outputSize: heads * (content + rotary),
 			inputValues: x,
 			outputValues: flatten('queryProjection'),
-			vectors: [
-				vector(`Q content · head ${head + 1}`, layer?.queryContent?.[head]?.[token], 'query'),
-				vector('Q rotary · before RoPE', layer?.queryBefore?.[head]?.[token], 'query')
-			]
+			vectors: [vector('Q · all heads · before RoPE', flatten('queryProjection'), 'query')]
 		};
 	if (stage === 'compression')
 		return {
@@ -104,19 +101,19 @@ export function mlaProjectionView(layer, model, head, token, stage) {
 	if (stage === 'key' || stage === 'value') {
 		const isKey = stage === 'key';
 		return {
-			label: `${isKey ? 'Key' : 'Value'} expansion · head ${head + 1}`,
+			label: `${isKey ? 'Key' : 'Value'} expansion`,
 			input: 'Normalized latent',
 			weight: isKey ? 'W↑Kᵀ' : 'W↑Vᵀ',
-			output: isKey ? 'K content' : 'V',
+			output: isKey ? 'K content · all heads' : 'V · all heads',
 			inputSize: latent,
-			outputSize: isKey ? content : value,
+			outputSize: heads * (isKey ? content : value),
 			inputValues: normalized,
-			outputValues: isKey ? k : v,
+			outputValues: flatten(isKey ? 'keyContent' : 'value'),
 			vectors: [
 				vector('Shared normalized KV latent', normalized),
 				vector(
-					isKey ? `K content · head ${head + 1}` : `V · head ${head + 1}`,
-					isKey ? k : v,
+					isKey ? 'K content · all heads' : 'V · all heads',
+					flatten(isKey ? 'keyContent' : 'value'),
 					isKey ? 'key' : 'value'
 				)
 			]

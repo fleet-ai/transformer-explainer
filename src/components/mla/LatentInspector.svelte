@@ -95,7 +95,7 @@
 		<div>
 			<h2>MLA projections</h2>
 			<p>
-				DeepSeek-V2-Lite · Block {$blockIdx + 1} of {model?.numLayers} · Head {head + 1} of {model?.attentionHeads}
+				DeepSeek-V2-Lite · Block {$blockIdx + 1} of {model?.numLayers} · Before head split and RoPE
 			</p>
 		</div>
 		<button class="close" aria-label="Close MLA inspector" on:click={() => dispatch('close')}
@@ -118,7 +118,6 @@
 				rotarySize={model?.rotarySize ?? 64}
 				latentSize={model?.kvLatentSize ?? 512}
 				valueSize={model?.valueHeadSize ?? 128}
-				on:rope={(e) => dispatch('rope', e.detail)}
 				on:attention={() => dispatch('attention')}
 				on:select={(e) => {
 					stage = e.detail;
@@ -291,8 +290,12 @@
 		flex-direction: column;
 		gap: 0;
 	}
-	.explanation :global(.matrix-product) { margin: 4px 0; }
-	.explanation :global(.shape-note) { margin: 2px 0; }
+	.explanation :global(.matrix-product) {
+		margin: 4px 0;
+	}
+	.explanation :global(.shape-note) {
+		margin: 2px 0;
+	}
 	.operation-title {
 		margin: 0;
 		color: #75538e;

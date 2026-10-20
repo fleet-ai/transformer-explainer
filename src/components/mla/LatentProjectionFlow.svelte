@@ -9,30 +9,24 @@
 	export let valueSize = 128;
 	const dispatch = createEventDispatcher<{
 		select: string;
-		rope: 'query' | 'key';
 		attention: void;
 	}>();
 	let map: HTMLDivElement;
 	let paths: { id: string; label: string; d: string; bridge: boolean }[] = [];
 	const edges = [
 		['hidden', 'query', 'query', 'Query projection'],
-		['query', 'query-content', 'query', 'Query content bypass'],
-		['query', 'rope-query', 'rope-query', 'Query rotary coordinates'],
-		['query-content', 'query-output', 'query', 'Query content concatenation'],
-		['rope-query', 'query-output', 'rope-query', 'Rotated query concatenation'],
+		['query', 'query-output', 'query', 'Unrotated query projection'],
 		['hidden', 'compression', 'compression', 'KV compression'],
 		['compression', 'norm', 'compression', 'Raw KV latent'],
 		['norm', 'key', 'key', 'Key expansion'],
-		['key', 'key-output', 'key', 'Key content concatenation'],
-		['compression', 'rope-key', 'rope-key', 'Shared key rotary coordinates'],
-		['rope-key', 'key-output', 'rope-key', 'Rotated key concatenation'],
+		['key', 'key-output', 'key', 'Unrotated key content'],
+		['compression', 'position', 'compression', 'Shared unrotated key position'],
+		['position', 'key-output', 'compression', 'Shared key position'],
 		['norm', 'value', 'value', 'Value expansion'],
-		['value', 'value-output', 'value', 'Expanded value bypasses RoPE']
+		['value', 'value-output', 'value', 'Expanded value']
 	];
 	function activate(id: string) {
-		if (id === 'rope-query' || id === 'rope-key')
-			dispatch('rope', id === 'rope-query' ? 'query' : 'key');
-		else dispatch('select', id);
+		dispatch('select', id);
 	}
 	function keyboard(event: KeyboardEvent, id: string) {
 		if (event.key === 'Enter' || event.key === ' ') {
@@ -95,21 +89,10 @@
 		aria-pressed={selected === 'query'}
 		on:click={() => activate('query')}
 	>
-		Wq<small>Query projection</small><small>{heads} × ({contentSize} + {rotarySize})</small>
-	</button>
-	<div class="node content" data-node="query-content">
-		Q content<small>{contentSize}D · bypass</small>
-	</div>
-	<button
-		class="node rope-query"
-		data-node="rope-query"
-		aria-label="RoPE · Rotate Q and K: query"
-		on:click={() => activate('rope-query')}
-	>
-		RoPE<small>Q position · {rotarySize}D</small>
+		Wq<small>Query projection</small>
 	</button>
 	<div class="node result query-result" data-node="query-output">
-		<b>Q′</b><small>{contentSize + rotarySize}D</small><small>{contentSize} + {rotarySize}</small>
+		<b>Q</b><small>{heads * (contentSize + rotarySize)}D</small><small>All heads</small>
 	</div>
 	<button
 		class="node compression"
@@ -129,32 +112,26 @@
 		class="node key"
 		data-node="key"
 		aria-pressed={selected === 'key' || selected === 'expansion'}
-		on:click={() => activate('key')}>W↑K<small>K content · {contentSize}D</small></button
+		on:click={() => activate('key')}>W↑K<small>K content · {heads * contentSize}D</small></button
 	>
-	<button
-		class="node rope-key"
-		data-node="rope-key"
-		aria-label="RoPE · Rotate Q and K: shared key"
-		on:click={() => activate('rope-key')}>RoPE<small>Shared K · {rotarySize}D</small></button
-	>
+	<div class="node position" data-node="position">
+		Shared position<small>{rotarySize}D · before RoPE</small>
+	</div>
 	<div class="node result key-result" data-node="key-output">
-		<b>K′</b><small>{contentSize + rotarySize}D</small><small>{contentSize} + {rotarySize}</small>
+		<b>K</b><small>{heads * contentSize}D content</small><small>+ shared {rotarySize}D</small>
 	</div>
 	<button
 		class="node value"
 		data-node="value"
 		aria-pressed={selected === 'value'}
-		on:click={() => activate('value')}>W↑V<small>V · {valueSize}D</small></button
+		on:click={() => activate('value')}>W↑V<small>V · {heads * valueSize}D</small></button
 	>
 	<div class="node result value-result" data-node="value-output">
-		<b>V</b><small>{valueSize}D</small><small>No RoPE</small>
+		<b>V</b><small>{heads * valueSize}D</small><small>All heads</small>
 	</div>
 </div>
 <div class="next-operations">
-	<button on:click={() => dispatch('attention')}>Q′K′ᵀ → softmax → × V ↗</button>
-	<button aria-pressed={selected === 'attention'} on:click={() => activate('attention')}
-		>Output projection · {heads} × {valueSize} → {hiddenSize}D ↗</button
-	>
+	<button on:click={() => dispatch('attention')}>Head split → Attention ↗</button>
 </div>
 
 <style>
@@ -200,7 +177,7 @@
 	.node {
 		position: absolute;
 		transform: translate(-50%, -50%);
-		width: clamp(90px, 12cqw, 122px);
+		width: clamp(90px, 14cqw, 138px);
 		min-height: 46px;
 		padding: 7px 4px;
 		background: #faf7fd;
@@ -249,41 +226,31 @@
 	}
 	.query {
 		left: 25%;
-		top: 59px;
-	}
-	.content {
-		left: 67%;
-		top: 24px;
-		background: white;
-		border: 0;
-	}
-	.rope-query {
-		left: 67%;
-		top: 100px;
+		top: 48px;
 	}
 	.compression {
 		left: 25%;
-		top: 192px;
+		top: 175px;
 	}
 	.norm {
 		left: 46%;
-		top: 153px;
+		top: 151px;
 	}
 	.key {
 		left: 68%;
-		top: 153px;
+		top: 151px;
 	}
-	.rope-key {
+	.position {
 		left: 68%;
-		top: 208px;
+		top: 215px;
 	}
 	.value {
 		left: 68%;
 		top: 265px;
 	}
 	.result {
-		left: 95%;
-		width: 64px;
+		left: 93%;
+		width: 90px;
 		border: 0;
 		border-left: 5px solid currentColor;
 		border-radius: 0;
@@ -293,11 +260,11 @@
 		font-size: 21px;
 	}
 	.query-result {
-		top: 59px;
+		top: 48px;
 		color: #75a0e1;
 	}
 	.key-result {
-		top: 192px;
+		top: 175px;
 		color: #cf8793;
 	}
 	.value-result {
@@ -325,11 +292,11 @@
 			width: 80px;
 		}
 		.node small {
-			font-size: 10px;
+			font-size: 11px;
 		}
 		.result {
-			width: 52px;
-			left: 94%;
+			width: 70px;
+			left: 93%;
 		}
 		.hidden-state {
 			width: 42px;

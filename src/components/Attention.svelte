@@ -55,7 +55,7 @@
 	$: isPlain =
 		['vit', 'encoder-decoder'].includes($moeModel?.architecture ?? '') ||
 		(isVlm && $moeModel?.maskMode === 'bidirectional');
-	$: usesRoPE = !isPlain && !isMLA;
+	$: usesRoPE = !isPlain;
 	function inspectRoPE(kind: 'query' | 'key' = 'query') {
 		if (isVlm) vlmInspectorStage.set('rope');
 		else if (isHybrid) hybridInspector.set('rope');
@@ -148,14 +148,23 @@
 									>{#if usesRoPE || isMLA}<strong class="rotated-symbol">K′</strong> ·
 									{/if}Key {kvHead + 1}</TextbookTooltip
 								><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotated position' : 'Rotated'} · {headSize}D</small
+									>{isPlain
+										? 'Projected'
+										: isMLA
+											? `${$moeModel?.contentKeySize ?? 128} + ${$moeModel?.rotarySize ?? 64}`
+											: 'Rotated'} · {headSize}D</small
 								>
 							</div>
 
+							{#if isMLA}<span class="content-bypass"
+									>{$moeModel?.contentKeySize ?? 128}D content bypass</span
+								>{/if}
 							{#if usesRoPE}<button
 									class="rotary-gate"
 									on:click={() => inspectRoPE('key')}
-									aria-label="Inspect key RoPE before attention">RoPE<small>rotate K</small></button
+									aria-label="Inspect key RoPE before attention"
+									>RoPE<small>rotate K{isMLA ? ` · ${$moeModel?.rotarySize ?? 64}D` : ''}</small
+									></button
 								>{/if}
 							{#each $tokens as token, index}
 								<div
@@ -196,14 +205,22 @@
 									>{#if usesRoPE || isMLA}<strong class="rotated-symbol">Q′</strong> ·
 									{/if}Query {$attentionHeadIdx + 1}</TextbookTooltip
 								><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotated position' : 'Rotated'} · {headSize}D</small
+									>{isPlain
+										? 'Projected'
+										: isMLA
+											? `${$moeModel?.contentKeySize ?? 128} + ${$moeModel?.rotarySize ?? 64}`
+											: 'Rotated'} · {headSize}D</small
 								>
 							</div>
+							{#if isMLA}<span class="content-bypass"
+									>{$moeModel?.contentKeySize ?? 128}D content bypass</span
+								>{/if}
 							{#if usesRoPE}<button
 									class="rotary-gate"
 									on:click={() => inspectRoPE('query')}
 									aria-label="Inspect query RoPE before attention"
-									>RoPE<small>rotate Q</small></button
+									>RoPE<small>rotate Q{isMLA ? ` · ${$moeModel?.rotarySize ?? 64}D` : ''}</small
+									></button
 								>{/if}
 							{#each $tokens as token, index}
 								<div
@@ -243,7 +260,7 @@
 						<div class="column value">
 							<div class="head1 title">
 								<TextbookTooltip id="qkv">Value {kvHead + 1}</TextbookTooltip><small
-									>{isMLA ? 'Expanded latent' : 'unchanged'} · {valueSize}D</small
+									>unchanged · {valueSize}D</small
 								>
 							</div>
 							{#each $tokens as token, index}
@@ -317,6 +334,27 @@
 	/>{/if}
 
 <style lang="scss">
+	.content-bypass {
+		z-index: 37;
+		position: absolute;
+		left: -146px;
+		top: -24px;
+		width: 96px;
+		height: 22px;
+		border: 1px solid currentColor;
+		border-bottom: 0;
+		text-align: center;
+		font-size: 9px;
+		line-height: 14px;
+		color: #9ca3af;
+		background: white;
+	}
+
+	.latent .column.key .title,
+	.latent .column.query .title {
+		left: -44px;
+		transform: none;
+	}
 	.rotated-symbol {
 		font-size: 1.2rem;
 		font-weight: 700;
