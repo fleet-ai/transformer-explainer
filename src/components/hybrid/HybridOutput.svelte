@@ -51,11 +51,17 @@
 				</div>{/each}
 		</div>
 		{#if hasAttention}<div class="hybrid-computation">
-				<button class="ffn-chain" on:click={() => hybridInspector.set('ffn')}
-					><b>RMSNorm → GELU(Wgate x) ⊙ Wup x → Wdown</b><small
-						>Linear → add block input h → Mamba RMSNorm</small
-					><span>Inspect real gated feed-forward ↗</span></button
-				><MambaCore compact />
+				<div class="ffn-chain">
+					<b>Gated feed-forward · 2048 → 8192 → 2048</b>
+					<div class="ffn-projections">
+						<button on:click={() => hybridInspector.set('ffn-up')}>Wup</button><button
+							on:click={() => hybridInspector.set('ffn-gate')}>Wgate</button
+						><span>GELU ⊙</span><button on:click={() => hybridInspector.set('ffn-down')}
+							>Wdown</button
+						>
+					</div>
+				</div>
+				<MambaCore compact />
 			</div>{:else}<div class="output-projection column">
 				{#each $tokens as token, index}<button
 						class="cell"
@@ -80,6 +86,20 @@
 </div>
 
 <style>
+	.ffn-projections {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 5px;
+		margin-top: 8px;
+		font-size: 9px;
+	}
+	.ffn-projections button {
+		background: white;
+		border: 1px solid #ddd5ef;
+		border-radius: 3px;
+		padding: 5px;
+	}
 	.title small {
 		display: block;
 		font-size: 9px;

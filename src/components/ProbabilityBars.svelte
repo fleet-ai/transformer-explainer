@@ -8,6 +8,7 @@
 	const { theme } = resolveConfig(tailwindConfig);
 
 	export let rowHeight: number;
+	export let compact = false;
 	export let rowGap: number;
 	export let hoveredIndex: number | null = null;
 
@@ -75,9 +76,9 @@
 				hoveredIndex = null;
 			})
 			.attr('x', (d) => 0.4 * rootRem + xScale(d.probability))
-			.attr('dy', rootRem)
+			.attr('dy', compact ? rowHeight / 2 + 4 : rootRem)
 			.attr('text-anchor', 'start')
-			.style('font-size', '0.95rem')
+			.style('font-size', compact ? '11px' : '0.95rem')
 			.style('letter-spacing', '-0.02em')
 			// .style('font-family', 'monospace')
 			.transition()
@@ -123,7 +124,7 @@
 		};
 	});
 
-	$: if ($modelData && svgEl) {
+	$: if ($modelData && svgEl && rowHeight && rowGap >= 0) {
 		drawBars();
 	}
 

@@ -379,10 +379,11 @@
 				const scrollTop = window.scrollY;
 				const scrollLeft = window.scrollX;
 
-				const rightOffset =
-					$moeModel?.architecture === 'encoder-decoder'
-						? Math.max(0, Math.min(rootRem * 3, (target.left - source.right) * 0.2))
-						: rootRem * 3;
+				const rightOffset = ['encoder-decoder', 'vit', 'vision-language'].includes(
+					$moeModel?.architecture ?? ''
+				)
+					? Math.max(0, Math.min(rootRem * 3, (target.left - source.right) * 0.2))
+					: rootRem * 3;
 				const { curveOffset } = pathAdjustor(source, target, curve);
 				return `
 					M ${source.right + scrollLeft},${source.top + scrollTop}
@@ -411,7 +412,7 @@
 			onMouseClick: (e, d) => {
 				e.stopPropagation();
 
-				if ($moeModel?.architecture === 'encoder-decoder') moeTokenIndex.set(d.tokenIndex);
+				moeTokenIndex.set(d.tokenIndex);
 				if ($weightPopover === 'mlpUp') weightPopover.set(null);
 				else weightPopover.set('mlpUp');
 			}
@@ -428,10 +429,11 @@
 				const scrollTop = window.scrollY;
 				const scrollLeft = window.scrollX;
 
-				const leftOffset =
-					$moeModel?.architecture === 'encoder-decoder'
-						? Math.max(0, Math.min(rootRem * 1.5, (target.left - source.right) * 0.2))
-						: rootRem * 1.5;
+				const leftOffset = ['encoder-decoder', 'vit', 'vision-language'].includes(
+					$moeModel?.architecture ?? ''
+				)
+					? Math.max(0, Math.min(rootRem * 1.5, (target.left - source.right) * 0.2))
+					: rootRem * 1.5;
 				const { curveOffset } = pathAdjustor(source, target, curve);
 				return `
 					M ${source.right + scrollLeft},${source.top + scrollTop}
@@ -461,7 +463,7 @@
 			onMouseClick: (e, d) => {
 				e.stopPropagation();
 
-				if ($moeModel?.architecture === 'encoder-decoder') moeTokenIndex.set(d.tokenIndex);
+				moeTokenIndex.set(d.tokenIndex);
 				if ($weightPopover === 'mlpDown') weightPopover.set(null);
 				else weightPopover.set('mlpDown');
 			}
@@ -469,8 +471,12 @@
 	];
 
 	$: pathMap = {
-		mlpUp: $moeModel?.architecture === 'encoder-decoder' ? mlpUpPaths : [],
-		mlpDown: $moeModel?.architecture === 'encoder-decoder' ? mlpDownPaths : [],
+		mlpUp: ['encoder-decoder', 'vit', 'vision-language'].includes($moeModel?.architecture ?? '')
+			? mlpUpPaths
+			: [],
+		mlpDown: ['encoder-decoder', 'vit', 'vision-language'].includes($moeModel?.architecture ?? '')
+			? mlpDownPaths
+			: [],
 		mamba: isMambaOnly
 			? [
 					{

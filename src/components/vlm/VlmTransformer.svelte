@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RecordedProjectionPopup from '../common/RecordedProjectionPopup.svelte';
 	import { recordedAssetUrl } from '$lib/recorded-json.js';
 
 	import { base } from '$app/paths';
@@ -51,8 +52,10 @@
 				</div>
 				<small>Prompt: {$vlmRecording.document.prompt}</small>
 			</div>
-			<a href={recordedAssetUrl(`${base}/traces/vlm/manifest.json`)} target="_blank" rel="noreferrer"
-				>Trace provenance ↗</a
+			<a
+				href={recordedAssetUrl(`${base}/traces/vlm/manifest.json`)}
+				target="_blank"
+				rel="noreferrer">Trace provenance ↗</a
 			>
 		</div>{/if}
 	<RecordedTransformer
@@ -67,19 +70,26 @@
 		</div>{/if}{#if $vlmError}<div class="loading" role="alert">
 			{$vlmError}<button on:click={() => selectVlmPhase($vlmPhase)}>Retry</button>
 		</div>{/if}
-	{#if $vlmInspectorStage}<VlmInspector
+	{#if ['qkv', 'up', 'down', 'gate-projection'].includes($vlmInspectorStage ?? '')}<RecordedProjectionPopup
+			stage={$vlmInspectorStage ?? ''}
+			on:close={() => vlmInspectorStage.set(null)}
+		/>{:else if $vlmInspectorStage}<VlmInspector
 			stage={$vlmInspectorStage}
 			on:close={() => vlmInspectorStage.set(null)}
 		/>{/if}
 </div>
 
 <style>
+	.vlm-transformer :global(.main-section) {
+		flex: 1;
+		min-height: 0;
+	}
 	.vlm-transformer {
 		display: flex;
 		flex-direction: column;
 		width: 100%;
-		min-height: 100%;
-		position: relative;
+		height: 100%;
+		min-height: 0;
 	}
 	.vlm-toolbar {
 		display: flex;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RecordedProjectionPopup from '../common/RecordedProjectionPopup.svelte';
 	import RecordedTransformer from '../RecordedTransformer.svelte';
 	import VitEmbedding from './VitEmbedding.svelte';
 	import VitFeedForward from './VitFeedForward.svelte';
@@ -14,7 +15,10 @@
 		customFeedForward={VitFeedForward}
 		loadRecording={loadVitRecording}
 	/>
-	{#if $vitInspectorStage}<VitInspector
+	{#if ['qkv', 'up', 'down'].includes($vitInspectorStage ?? '')}<RecordedProjectionPopup
+			stage={$vitInspectorStage ?? ''}
+			on:close={() => vitInspectorStage.set(null)}
+		/>{:else if $vitInspectorStage}<VitInspector
 			stage={$vitInspectorStage}
 			on:close={() => vitInspectorStage.set(null)}
 		/>{/if}

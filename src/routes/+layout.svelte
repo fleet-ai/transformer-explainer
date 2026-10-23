@@ -12,9 +12,11 @@
 	$: originalArchitecture =
 		!architecture ||
 		['mla', 'vit', 'encoder-decoder', 'vision-language', 'hybrid'].includes(architecture);
-	$: minScreenWidth = architecture === 'encoder-decoder' ? 0 : 1600;
-	$: minColumnWidth =
-		architecture === 'encoder-decoder' ? 14 : Math.floor(minScreenWidth / 24) - rootRem * 2;
+	$: fitsPage = ['encoder-decoder', 'hybrid', 'vision-language', 'vit'].includes(
+		architecture ?? ''
+	);
+	$: minScreenWidth = fitsPage ? 0 : 1600;
+	$: minColumnWidth = fitsPage ? 14 : Math.floor(minScreenWidth / 24) - rootRem * 2;
 </script>
 
 {#if !originalArchitecture}
@@ -25,7 +27,7 @@
 {:else}
 	<div
 		id="app"
-		class:fit-seq2seq={architecture === 'encoder-decoder'}
+		class:fit-seq2seq={fitsPage}
 		style={`--min-screen-width:${minScreenWidth}px;--min-column-width:${minColumnWidth}px;--predicted-color:${predictedColor};`}
 	>
 		<div id="landing">

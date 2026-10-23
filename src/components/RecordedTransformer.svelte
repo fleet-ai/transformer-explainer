@@ -45,19 +45,17 @@
 	let active = false;
 	let error = '';
 	let vizHeight = 0;
-	$: titleHeight = $moeModel?.architecture === 'encoder-decoder' ? 60 : rootRem * 5;
+	$: squeeze = ['hybrid', 'vision-language', 'vit'].includes($moeModel?.architecture ?? '');
+	$: compact = squeeze || $moeModel?.architecture === 'encoder-decoder';
+	$: titleHeight = compact ? 60 : rootRem * 5;
 	const calculateVectorHeight = () => {
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
 		const height = Math.min(
 			Math.max(
-				(($moeModel?.architecture === 'encoder-decoder'
-					? Math.min(vizHeight - 24, 480)
-					: vizHeight) -
-					titleHeight -
-					gaps) /
+				((compact ? Math.min(vizHeight - 24, 480) : vizHeight) - titleHeight - gaps) /
 					$tokens.length /
-					($moeModel?.architecture === 'encoder-decoder' ? 4 : maxVectorScale),
-				$moeModel?.architecture === 'encoder-decoder' ? 8 : minVectorHeight
+					(compact ? 4 : maxVectorScale),
+				squeeze ? 6 : compact ? 8 : minVectorHeight
 			),
 			maxVectorHeight
 		);
@@ -126,11 +124,13 @@
 		class:attention-open={$expandedBlock.id === 'attention'}
 		class:cross-open={$expandedBlock.id === 'cross-attention'}
 		class:latent-model={$moeModel?.architecture === 'mla'}
+		class:squeeze
+		class:vision-language={$moeModel?.architecture === 'vision-language'}
 		class:seq2seq={$moeModel?.architecture === 'encoder-decoder'}
 		class:decoder={$moeModel?.architecture === 'encoder-decoder' && $moeModel?.stack === 'decoder'}
 		style={`--vector-height: ${$vectorHeight}px;--title-height: ${titleHeight}px;--content-height:${vizHeight - titleHeight}px;`}
 	>
-		{#if !!$expandedBlock.id && $moeModel?.architecture !== 'encoder-decoder'}
+		{#if !!$expandedBlock.id && !compact}
 			<div
 				class={classNames('dim', `${$expandedBlock.id || ''}`)}
 				transition:fade={{ duration: 100 }}
@@ -373,6 +373,261 @@
 	}
 	.hybrid-model.mamba-only .steps .blocks .block-steps {
 		grid-template-columns: 0.4fr 3fr 1.2fr;
+	}
+	/* A fixed page budget: the active attention card borrows width from the MLP. */
+	.squeeze {
+		--compact-card-height: clamp(230px, calc(100dvh - 300px), 460px);
+	}
+	.squeeze :global(.sankey-top),
+	.squeeze :global(.sankey-back) {
+		pointer-events: none;
+	}
+	.squeeze :global(.sankey-top path),
+	.squeeze :global(.sankey-back path) {
+		pointer-events: visiblePainted;
+	}
+	.squeeze :global(.hybrid-computation) {
+		position: relative;
+		z-index: 40;
+	}
+	.squeeze .blocks {
+		min-height: 0;
+	}
+	.squeeze.vision-language {
+		--compact-card-height: clamp(200px, calc(100dvh - 410px), 410px);
+	}
+	.squeeze.hybrid-model {
+		--compact-card-height: clamp(230px, calc(100dvh - 360px), 430px);
+	}
+	.squeeze .nodes {
+		padding: 8px 0 16px;
+	}
+	.squeeze .steps {
+		grid-template-columns: 120px minmax(0, 1fr) 35px 210px;
+	}
+	.squeeze .steps .blocks .block-steps {
+		grid-template-columns: 70px minmax(0, 1.5fr) minmax(235px, 1fr);
+	}
+	.squeeze.attention-open .steps .blocks .block-steps {
+		grid-template-columns: 70px minmax(0, 1fr) 210px;
+	}
+	.squeeze.mamba-only .steps .blocks .block-steps {
+		grid-template-columns: 60px minmax(0, 1fr) 230px;
+	}
+	.squeeze :global(.step) {
+		min-width: 0;
+	}
+	.squeeze :global(.step > .title),
+	.squeeze .steps.expanded :global(.step > .title) {
+		font-size: 13px;
+		white-space: normal;
+		padding-bottom: 8px;
+	}
+	.squeeze :global(.attention > .title > div) {
+		width: auto;
+		white-space: normal;
+	}
+	.squeeze :global(.attention .content) {
+		display: block;
+		width: 100%;
+	}
+	.squeeze :global(.attention .heads) {
+		padding: 0 14px !important;
+		min-width: 0;
+		width: 100%;
+	}
+	.squeeze :global(.attention-bounding) {
+		display: none;
+	}
+	.squeeze :global(.attention .head-block) {
+		height: var(--compact-card-height) !important;
+		min-height: 0 !important;
+	}
+	.squeeze :global(.attention .head-block > .qkv) {
+		padding: 24px 0 24px 70px !important;
+		gap: 24px;
+		justify-content: space-between;
+		flex-shrink: 0;
+	}
+	.squeeze :global(.attention.rotary .head-block > .qkv) {
+		padding-left: 155px !important;
+	}
+	.squeeze :global(.attention .column .title) {
+		font-size: 13px;
+		top: -20px;
+		line-height: 13px;
+	}
+	.squeeze :global(.attention .column .title small) {
+		font-size: 8px;
+	}
+	.squeeze :global(.attention .column .label) {
+		font-size: 9px !important;
+		height: auto !important;
+		line-height: 10px !important;
+		padding: 0 !important;
+	}
+	.squeeze :global(.attention .head-block > .qkv .column) {
+		gap: 9px;
+	}
+	.squeeze :global(.attention .head-block > .qkv .label) {
+		top: -4px;
+	}
+	.squeeze :global(.attention .head-out) {
+		margin: 0 6px !important;
+		flex-shrink: 0;
+	}
+	.squeeze :global(.attention .head-block > .attention-matrix) {
+		flex: 1;
+		min-width: 0;
+		margin-left: 16px;
+	}
+	.squeeze :global(.head-title) {
+		font-size: 12px;
+	}
+	.squeeze :global(.embedding:not(.expanded) .content) {
+		padding-left: 6px;
+	}
+	.squeeze :global(.embedding:not(.expanded) .token-string) {
+		width: 102px;
+		padding-right: 8px;
+	}
+	.squeeze :global(.embedding .label) {
+		font-size: 11px;
+		height: auto;
+		line-height: 1;
+	}
+	.squeeze :global(.softmax:not(.expanded) .content) {
+		padding-right: 12px;
+		grid-template-columns: 70px minmax(0, 1fr);
+	}
+	.squeeze :global(.softmax:not(.expanded) .token-string) {
+		width: 70px;
+	}
+	.squeeze :global(.softmax:not(.expanded) .probability-col) {
+		min-width: 0;
+	}
+	.squeeze :global(.softmax:not(.expanded) .text-box span) {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.squeeze :global(.prob-dim) {
+		bottom: 0;
+	}
+	.squeeze.attention-open :global(.mlp .label),
+	.squeeze.attention-open :global(.mlp .title small),
+	.squeeze.attention-open :global(.mlp .residual-text) {
+		visibility: hidden;
+	}
+	.squeeze :global(.hybrid-computation) {
+		min-width: 0;
+	}
+	.squeeze :global(.hybrid-output .content) {
+		gap: 6px;
+	}
+	.squeeze :global(.mamba-step .content) {
+		padding: 0 22px;
+	}
+	.squeeze :global(.mamba-core) {
+		min-width: 0;
+		padding: 12px 16px;
+	}
+	.squeeze :global(.compact .mamba-caption),
+	.squeeze :global(.compact .state-formula),
+	.squeeze :global(.compact p),
+	.squeeze :global(.compact .scan-head span) {
+		display: none;
+	}
+	.squeeze :global(.compact .mamba-heading) {
+		flex-wrap: wrap;
+	}
+	.squeeze :global(.compact .token-row) {
+		min-height: 20px;
+	}
+	.squeeze :global(.compact .scan-head) {
+		margin: 8px 0;
+	}
+	.squeeze :global(.compact .operation-labels) {
+		font-size: 7px;
+	}
+
+	.squeeze :global(.mlp .label) {
+		display: none;
+	}
+	.squeeze :global(.softmax .text-box) {
+		font-size: 11px;
+	}
+	@media (max-height: 650px) {
+		.squeeze :global(.attention .head-block > .qkv .column) {
+			gap: 5px;
+		}
+		.squeeze
+			:global(.attention .head-block > .qkv .cell:not(:first-of-type):not(:last-of-type) .label) {
+			visibility: hidden;
+		}
+		.squeeze :global(.vit-patch-controls) {
+			gap: 4px;
+			padding-top: 4px;
+		}
+		.squeeze :global(.vit-patch-controls .image-grid) {
+			width: 42px;
+			height: 42px;
+		}
+		.squeeze :global(.vit-patch-controls .patch-actions) {
+			gap: 3px;
+		}
+		.squeeze :global(.vit-patch-controls .selection) {
+			gap: 3px;
+		}
+		.squeeze :global(.vit-patch-controls .selection button) {
+			padding: 2px;
+		}
+	}
+	.squeeze :global(.hybrid-toolbar) {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+	.squeeze :global(.ffn-chain) {
+		padding: 8px;
+		margin-bottom: 8px;
+	}
+	.squeeze :global(.ffn-projections) {
+		gap: 3px;
+	}
+	.squeeze :global(.compact .token-row) {
+		margin-bottom: 3px;
+		min-height: 12px;
+		height: 12px;
+	}
+	.squeeze :global(.compact .token-row .vector),
+	.squeeze :global(.compact .state-vector) {
+		min-height: 12px;
+	}
+	.squeeze :global(.compact .operation-labels) {
+		display: none;
+	}
+	.squeeze :global(.compact .mamba-heading) {
+		gap: 3px;
+		font-size: 9px;
+	}
+	.squeeze :global(.compact .mamba-heading button) {
+		padding: 3px;
+		font-size: 8px;
+	}
+	.squeeze :global(.compact .scan-head) {
+		font-size: 8px;
+		margin: 5px 0;
+	}
+	.squeeze :global(.compact .scan-head select) {
+		padding: 2px;
+		font-size: 9px;
+	}
+	.squeeze :global(.compact .state-vector) {
+		width: 20px;
+	}
+	.squeeze :global(.compact .state-vector small) {
+		display: none;
 	}
 	:global(.step) {
 		height: 100%;

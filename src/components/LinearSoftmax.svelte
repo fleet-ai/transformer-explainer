@@ -33,6 +33,8 @@
 
 	export let className: string | undefined = undefined;
 	export let compact = false;
+	$: squeeze = ['vit', 'vision-language', 'hybrid'].includes($moeModel?.architecture ?? '');
+	let viewportHeight = 720;
 
 	setContext('block-id', 'softmax');
 
@@ -161,8 +163,12 @@
 		gsap.set('.steps', { justifyContent: 'start' });
 	};
 
-	$: rowHeight = compact ? 18 : rootRem * 1.4;
-	$: rowGap = compact ? 4 : 0.5 * rootRem;
+	$: rowHeight = squeeze
+		? Math.max(10, Math.min(18, (viewportHeight - 300) / 16 - 2))
+		: compact
+			? 18
+			: rootRem * 1.4;
+	$: rowGap = squeeze ? 2 : compact ? 4 : 0.5 * rootRem;
 
 	let hoveredIndex: number | null = null;
 
@@ -211,6 +217,8 @@
 		showLogitPopover = !showLogitPopover;
 	};
 </script>
+
+<svelte:window bind:innerHeight={viewportHeight} />
 
 <div
 	class={classNames('softmax', className, {
@@ -403,7 +411,7 @@
 						</div>
 					{/if}
 				</div>
-				<ProbabilityBars bind:hoveredIndex {rowGap} {rowHeight} bind:drawBars />
+				<ProbabilityBars compact={squeeze} bind:hoveredIndex {rowGap} {rowHeight} bind:drawBars />
 			</div>
 		</div>
 		{#if isSoftmaxExpanded && !!$predictedToken}

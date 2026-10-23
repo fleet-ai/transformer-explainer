@@ -29,15 +29,15 @@
 </script>
 
 <div class={`mlp ${className ?? ''}`} data-click="mlp-step">
-	<div class="title">Dense Feed-forward <small>LayerNorm · 192 → 768 → 192 · GELU</small></div>
+	<div class="title">MLP <small>LayerNorm · 192 → 768 → 192 · GELU</small></div>
 	<div class="content resize-watch relative">
 		<div class="first-layer layer">
 			<div class="column initial">
 				{#each $tokens as token, index}<div class="cell">
 						<span class="label float">{token}</span><button
 							class="vector bg-purple-200"
-							aria-label={`Attention output ${token}`}
-							on:click={() => inspect('attention', index)}
+							aria-label={`Up projection multiplication for ${token}`}
+							on:click={() => inspect('up', index)}
 							><VectorCanvas
 								colorScale="purple"
 								data={$moeExample?.layers[$blockIdx].attentionOutputPreview[index]}
@@ -54,19 +54,12 @@
 				id="mlp-residual"
 			/><OperationGroup type="ln" id="mlp-ln" />
 		</div>
-		<div class="column feedforward-input">
-			{#each $tokens as token, index}<button
-					class="cell operation"
-					aria-label={`Up projection ${token}`}
-					on:click={() => inspect('up', index)}>W₁x+b₁</button
-				>{/each}
-		</div>
 		<div class="second-layer">
 			<div class="column">
 				<span class="subtitle">768D · GELU</span>{#each $tokens as token, index}<button
-						class="vector bg-purple-200"
-						aria-label={`GELU ${token}`}
-						on:click={() => inspect('gelu', index)}
+						class="vector expanded-vector bg-indigo-200"
+						aria-label={`Down projection multiplication for ${token}`}
+						on:click={() => inspect('down', index)}
 						><VectorCanvas
 							colorScale="purple"
 							data={layer ? row(layer, 'gelu', $vitVisiblePositions[index], 8) : undefined}
@@ -74,20 +67,13 @@
 					>{/each}
 			</div>
 		</div>
-		<div class="column projection-down">
-			{#each $tokens as token, index}<button
-					class="cell operation"
-					aria-label={`Down projection ${token}`}
-					on:click={() => inspect('down', index)}>W₂h+b₂</button
-				>{/each}
-		</div>
 		<div class="out-layer layer">
 			<OperationGroup type="residual-end" id="mlp-residual" />
 			<div class="column out mlp-out-column">
 				{#each $tokens as token, index}<button
 						class="vector bg-blue-200"
 						aria-label={`Block output ${token}`}
-						on:click={() => inspect('residual', index)}
+						on:click={() => inspect('down', index)}
 						><VectorCanvas
 							colorScale="blue"
 							data={$moeExample?.layers[$blockIdx].blockOutputPreview?.[index]}
@@ -99,6 +85,13 @@
 </div>
 
 <style>
+	.expanded-vector {
+		pointer-events: auto;
+		height: calc(var(--vector-height) * 4);
+	}
+	.second-layer {
+		pointer-events: none;
+	}
 	.label.float {
 		white-space: nowrap;
 		max-width: 5rem;
@@ -112,9 +105,9 @@
 		margin-top: 8px;
 	}
 	.content {
-		display: flex;
-		gap: 10px;
-		align-items: flex-start;
+		display: grid;
+		grid-template-columns: minmax(0, 1.6fr) minmax(12px, 1fr) auto;
+		align-items: start;
 	}
 	.layer {
 		display: flex;

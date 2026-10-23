@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import QkvWeightPopover from './Popovers/QKVWeightPopover.svelte';
-	import { vlmInspectorStage } from '$lib/vlm/store';
+	import { vlmVisiblePositions, vlmSelectedPosition, vlmInspectorStage } from '$lib/vlm/store';
 	import { hybridInspector } from '$lib/hybrid/store';
-	import { vitInspectorStage } from '$lib/vit/store';
+	import { vitVisiblePositions, vitSelectedPosition, vitInspectorStage } from '$lib/vit/store';
 	import { t5Inspector } from '$lib/seq2seq/store';
 	import { attentionInspector } from '$lib/inspectors';
 	import RecordedLMHead from './moe/RecordedLMHead.svelte';
-	import { weightPopover, tooltip, moeModel } from '~/store';
+	import { weightPopover, tooltip, moeModel, moeTokenIndex } from '~/store';
 	import { fade } from 'svelte/transition';
 	import AttentionWeightPopover from './Popovers/AttentionWeightPopover.svelte';
 	import MLPWeightPopover from './Popovers/MLPWeightPopover.svelte';
@@ -36,6 +36,7 @@
 			mlpDown: 'down',
 			softmax: 'classifier'
 		};
+		$vitSelectedPosition = $vitVisiblePositions[$moeTokenIndex] ?? 0;
 		vitInspectorStage.set(stages[String($weightPopover)] ?? 'attention');
 		$weightPopover = null;
 	}
@@ -61,6 +62,7 @@
 			mlpDown: 'down',
 			softmax: 'output'
 		};
+		$vlmSelectedPosition = $vlmVisiblePositions[$moeTokenIndex] ?? 0;
 		vlmInspectorStage.set(stages[String($weightPopover)] ?? 'attention');
 		$weightPopover = null;
 	}
@@ -71,7 +73,9 @@
 				: $weightPopover === 'softmax'
 					? 'classifier'
 					: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
-						? 'ffn'
+						? $weightPopover === 'mlpUp'
+							? 'ffn-up'
+							: 'ffn-down'
 						: 'attention'
 		);
 		$weightPopover = null;

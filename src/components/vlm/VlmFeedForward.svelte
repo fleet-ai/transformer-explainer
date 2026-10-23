@@ -31,19 +31,23 @@
 
 <div class={`mlp ${className ?? ''}`} data-click="mlp-step">
 	<div class="title">
-		Dense Feed-forward <small
+		MLP <small
 			>{$vlmPhase === 'vision' ? 'GELU' : 'SwiGLU'} · {$moeModel?.hiddenSize} → {$moeModel?.intermediateSize}
 			→ {$moeModel?.hiddenSize}</small
 		>
 	</div>
+	{#if $vlmPhase === 'language'}<button
+			class="gate-projection"
+			on:click={() => inspect('gate-projection', $moeTokenIndex)}>Wgate · gate projection ↗</button
+		>{/if}
 	<div class="content resize-watch relative">
 		<div class="first-layer layer">
 			<div class="column initial">
 				{#each $tokens as token, index}<div class="cell">
 						<span class="label float">{token}</span><button
 							class="vector bg-purple-200"
-							aria-label={`Attention output ${token}`}
-							on:click={() => inspect('attention', index)}
+							aria-label={`Up projection multiplication for ${token}`}
+							on:click={() => inspect('up', index)}
 							><VectorCanvas
 								colorScale="purple"
 								data={$moeExample?.layers[$blockIdx].attentionOutputPreview[index]}
@@ -60,20 +64,14 @@
 				id="mlp-residual"
 			/><OperationGroup type="ln" id="mlp-ln" />
 		</div>
-		<div class="column feedforward-input">
-			{#each $tokens as token, index}<button
-					class="cell operation"
-					on:click={() => inspect('up', index)}
-					>{$vlmPhase === 'vision' ? 'W₁x + b₁' : 'Wup · x'}</button
-				>{/each}
-		</div>
 		<div class="second-layer">
 			<div class="column">
 				<span class="subtitle">{$vlmPhase === 'vision' ? 'GELU' : 'SiLU(g) ⊙ up'}</span
 				>{#each $tokens as token, index}<button
-						class="vector bg-purple-200"
-						aria-label={`Inspect activation for ${token}`}
-						on:click={() => inspect($vlmPhase === 'vision' ? 'gelu' : 'gate', index)}
+						class="vector expanded-vector bg-indigo-200"
+						style={`height:calc(var(--vector-height) * ${($moeModel?.intermediateSize ?? 3072) / ($moeModel?.hiddenSize ?? 768)})`}
+						aria-label={`Down projection multiplication for ${token}`}
+						on:click={() => inspect('down', index)}
 						><VectorCanvas
 							colorScale="purple"
 							data={$vlmLayer
@@ -88,20 +86,13 @@
 					>{/each}
 			</div>
 		</div>
-		<div class="column projection-down">
-			{#each $tokens as token, index}<button
-					class="cell operation"
-					on:click={() => inspect('down', index)}
-					>{$vlmPhase === 'vision' ? 'W₂h + b₂' : 'Wdown · h'}</button
-				>{/each}
-		</div>
 		<div class="out-layer layer">
 			<OperationGroup type="residual-end" id="mlp-residual" />
 			<div class="column out mlp-out-column">
 				{#each $tokens as token, index}<button
 						class="vector bg-blue-200"
 						aria-label={`Block output ${token}`}
-						on:click={() => inspect('residual', index)}
+						on:click={() => inspect('down', index)}
 						><VectorCanvas
 							colorScale="blue"
 							data={$moeExample?.layers[$blockIdx].blockOutputPreview?.[index]}
@@ -113,22 +104,46 @@
 </div>
 
 <style>
+	.mlp {
+		position: relative;
+	}
+	.gate-projection {
+		position: absolute;
+		top: 34px;
+		right: 0;
+		z-index: 101;
+		font-size: 9px;
+		color: #8b72ad;
+		border: 1px solid #e5dcf1;
+		border-radius: 3px;
+		padding: 3px 5px;
+	}
+	.expanded-vector {
+		pointer-events: auto;
+		height: calc(var(--vector-height) * 4);
+	}
+	.second-layer {
+		pointer-events: none;
+	}
 	.label.float {
 		white-space: nowrap;
 		max-width: 5rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	.title {
+		pointer-events: none;
+	}
 	.title small {
 		display: block;
 		font-size: 9px;
 		color: #aa98ba;
-		margin-top: 8px;
+		margin-top: 34px;
 	}
 	.content {
-		display: flex;
-		gap: 10px;
-		align-items: flex-start;
+		display: grid;
+		grid-template-columns: minmax(0, 1.6fr) minmax(12px, 1fr) auto;
+		align-items: start;
 	}
 	.layer {
 		display: flex;

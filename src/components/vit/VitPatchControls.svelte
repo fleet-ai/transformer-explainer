@@ -62,10 +62,10 @@
 		display: flex;
 		flex-direction: column;
 		align-items: stretch;
-		gap: 10px;
-		width: 180px;
+		gap: 6px;
+		width: 118px;
 		margin-top: 18px;
-		padding: 12px 8px 0;
+		padding: 8px 4px 0;
 		border-top: 1px solid #eee7f5;
 		color: #8c72a1;
 		position: relative;
@@ -74,8 +74,8 @@
 	.image-grid {
 		display: grid;
 		grid-template-columns: repeat(14, 1fr);
-		width: 98px;
-		height: 98px;
+		width: 70px;
+		height: 70px;
 		background-size: cover;
 		align-self: center;
 	}
@@ -95,7 +95,7 @@
 		gap: 8px;
 	}
 	.selection strong {
-		font-size: 11px;
+		font-size: 9px;
 		line-height: 1.5;
 		text-align: center;
 	}
@@ -117,7 +117,7 @@
 		border-radius: 3px;
 		padding: 4px 6px;
 		background: #fbf8fd;
-		font-size: 11px;
+		font-size: 9px;
 	}
 	.selection button:disabled {
 		opacity: 0.3;
@@ -128,5 +128,18 @@
 	}
 	a {
 		font-size: 10px;
+	}
+	@media (max-height: 650px) {
+		.image-grid {
+			width: 56px;
+			height: 56px;
+		}
+		small,
+		.selection strong {
+			display: none;
+		}
+		.vit-patch-controls {
+			margin-top: 8px;
+		}
 	}
 </style>

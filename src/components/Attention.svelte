@@ -24,6 +24,7 @@
 	} from '~/store';
 	import classNames from 'classnames';
 	import AttentionMatrix from '~/components/AttentionMatrix.svelte';
+	import ResponsiveAttentionMatrix from './common/ResponsiveAttentionMatrix.svelte';
 	import T5AttentionMatrix from './seq2seq/T5AttentionMatrix.svelte';
 
 	import { setContext, getContext, onDestroy } from 'svelte';
@@ -50,6 +51,7 @@
 	}
 	$: isMLA = $moeModel?.architecture === 'mla';
 	$: isMoE = ($moeModel?.architecture ?? 'moe') === 'moe';
+	$: squeeze = ['vit', 'vision-language', 'hybrid'].includes($moeModel?.architecture ?? '');
 	$: isVit = $moeModel?.architecture === 'vit';
 	$: isHybrid = $moeModel?.architecture === 'hybrid';
 	$: isVlm = $moeModel?.architecture === 'vision-language';
@@ -119,7 +121,7 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
-				{#if !isMLA && !isMoE && $moeModel?.architecture !== 'encoder-decoder'}<div
+				{#if !squeeze && !isMLA && !isMoE && $moeModel?.architecture !== 'encoder-decoder'}<div
 						class="head-flow-wrap"
 					>
 						{#if isPlain}<div class="rotary-sequence">
@@ -288,7 +290,7 @@
 					</div>
 					<div class="resize-watch attention-matrix flex">
 						{#if $moeModel?.architecture === 'encoder-decoder'}<T5AttentionMatrix
-							/>{:else}<AttentionMatrix />{/if}
+							/>{:else if squeeze}<ResponsiveAttentionMatrix />{:else}<AttentionMatrix />{/if}
 					</div>
 					<div class="head-out mx-[2rem]">
 						<div class="column out">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RecordedProjectionPopup from '../common/RecordedProjectionPopup.svelte';
 	import RecordedTransformer from '../RecordedTransformer.svelte';
 	import HybridProjection from './HybridProjection.svelte';
 	import HybridCore from './HybridCore.svelte';
@@ -34,13 +35,21 @@
 			Loading block {$blockIdx + 1} · actual recorded tensors…
 		</div>{/if}
 	{#if $hybridError}<div class="status" role="alert">{$hybridError}</div>{/if}
-	{#if $hybridInspector}<HybridInspector
+	{#if ['projection', 'output', 'qkv', 'ffn', 'ffn-up', 'ffn-down', 'ffn-gate'].includes($hybridInspector ?? '')}<RecordedProjectionPopup
+			stage={$hybridInspector ?? ''}
+			on:close={() => hybridInspector.set(null)}
+		/>{:else if $hybridInspector}<HybridInspector
 			stage={$hybridInspector}
 			on:close={() => hybridInspector.set(null)}
 		/>{/if}
 </div>
 
 <style>
+	@media (max-width: 1150px) {
+		.hybrid-toolbar small {
+			display: none;
+		}
+	}
 	.hybrid-transformer {
 		width: 100%;
 		height: 100%;
@@ -53,7 +62,7 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 5px 40px 10px;
+		padding: 5px 12px 10px;
 		color: #90749f;
 		font:
 			11px Arial,
@@ -87,7 +96,7 @@
 	}
 	.hybrid-toolbar small {
 		font-size: 9px;
-		max-width: 170px;
+		max-width: 120px;
 	}
 	.hybrid-transformer :global(.main-section) {
 		flex: 1;
