@@ -33,7 +33,7 @@
 
 	export let className: string | undefined = undefined;
 	export let compact = false;
-	$: squeeze = ['vit', 'vision-language', 'hybrid'].includes($moeModel?.architecture ?? '');
+	$: squeeze = ['vit', 'vision-language'].includes($moeModel?.architecture ?? '');
 	/** A classifier reads the full softmax: no temperature, no sampling filter. */
 	$: classifier = $moeModel?.outputKind === 'classification';
 	let viewportHeight = 720;

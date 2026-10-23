@@ -250,7 +250,7 @@
 		gap: 6px;
 		width: 100%;
 		height: var(--vector-height);
-		font-size: min(13px, calc(var(--vector-height) * 0.62));
+		font-size: var(--vit-label-size, 11px);
 		color: #4b5563;
 		white-space: nowrap;
 		cursor: pointer;
@@ -269,8 +269,8 @@
 	.patch,
 	.cls {
 		display: inline-block;
-		width: min(22px, var(--vector-height));
-		height: min(22px, var(--vector-height));
+		width: clamp(14px, calc(var(--vector-height) + 4px), 22px);
+		height: clamp(14px, calc(var(--vector-height) + 4px), 22px);
 		border: 1px solid #dfd6e9;
 		border-radius: 2px;
 		flex-shrink: 0;
@@ -279,7 +279,7 @@
 		font-size: 7px;
 		background: #f2eaf9;
 		color: #8f65ad;
-		line-height: calc(min(22px, var(--vector-height)) - 2px);
+		line-height: calc(clamp(14px, calc(var(--vector-height) + 4px), 22px) - 2px);
 		text-align: center;
 	}
 	.patch-embedding .cell,
