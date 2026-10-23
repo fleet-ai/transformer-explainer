@@ -258,6 +258,15 @@
 	.expert-layout :global(.mlp.moe) {
 		min-width: 0;
 	}
+	/* The expert card sits under the band layer; only painted bands should take pointer events. */
+	.expert-layout :global(.sankey-top),
+	.expert-layout :global(.sankey-back) {
+		pointer-events: none;
+	}
+	.expert-layout :global(.sankey-top path),
+	.expert-layout :global(.sankey-back path) {
+		pointer-events: visiblePainted;
+	}
 
 	.seq2seq {
 		--t5-card-height: clamp(320px, calc(100dvh - 310px), 480px);

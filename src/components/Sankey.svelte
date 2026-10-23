@@ -9,6 +9,8 @@
 		blockIdx,
 		moeModel,
 		moeTokenIndex,
+		moeExample,
+		bandRedraw,
 		expandedBlock
 	} from '~/store';
 	import * as d3 from 'd3';
@@ -53,11 +55,18 @@
 			curve?: number;
 			type?: 'stroke' | 'shape';
 			id?: string;
+			/** Draw one band per target (or source) from a shared source (or target), as experts do. */
+			fan?: boolean;
+			opacityOf?: (target: Element, source: Element) => number;
+			/** Which end of a fanned band names its token; sources by default. */
+			tokenFrom?: 'source' | 'target';
 			pathGenerator?: (source: DOMRect, target: DOMRect, curve: number) => string;
 		}[]
 	>;
 
 	$: isMLA = $moeModel?.architecture === 'mla';
+	$: isExpert = !$moeModel?.architecture || ['moe', 'mla'].includes($moeModel.architecture);
+	$: isDenseLayer = $moeExample?.layers[$blockIdx]?.feedForwardType === 'dense';
 	$: isT5Decoder = $moeModel?.architecture === 'encoder-decoder' && $moeModel?.stack === 'decoder';
 	$: isMambaOnly =
 		$moeModel?.architecture === 'hybrid' &&
@@ -368,13 +377,46 @@
 			: [])
 	];
 
+	/** The expert card is fed by every token but only the selected one is drawn strongly. */
+	const selectedBand = (element: Element) => (element.classList.contains('chosen') ? 0.5 : 0.12);
+	/** Expert outputs reach the sum as bands as thick as their router weights. */
+	const flowBand = (tap: Element) => 0.1 + 0.4 * Number(tap.getAttribute('data-flow') ?? 1);
+	$: sumPaths = [
+		{
+			from: '.mlp .expert-tap',
+			to: '.mlp .sum-slot',
+			gradientId: 'indigo-purple',
+			curve: 30,
+			opacity: MLP,
+			opacityOf: (_slot: Element, tap: Element) => flowBand(tap)
+		}
+	];
+	$: sumOutPaths = [
+		{
+			from: '.mlp .sum-box',
+			to: '.mlp .raw-sum .raw-vector.chosen',
+			gradientId: 'purple-purple',
+			curve: 20,
+			opacity: 0.4
+		},
+		{
+			from: '.mlp .sum-dot',
+			to: '.mlp .raw-sum .raw-vector:not(.chosen)',
+			gradientId: 'purple-purple',
+			curve: 20,
+			opacity: 0.12
+		}
+	];
+
 	$: mlpUpPaths = [
 		{
 			from: '.mlp .column.initial .vector',
-			to: '.mlp .second-layer .vector',
+			to: isExpert ? '.mlp .expert-card .flow-in' : '.mlp .second-layer .vector',
 			gradientId: 'purple-indigo',
 			curve: 50 + (curveFactor - 1) * 20,
 			opacity: MLP,
+			fan: isExpert,
+			opacityOf: isExpert ? (_target: Element, source: Element) => selectedBand(source) : undefined,
 			pathGenerator: (source, target, curve: number) => {
 				const scrollTop = window.scrollY;
 				const scrollLeft = window.scrollX;
@@ -397,22 +439,25 @@
 			},
 			onMouseOver: () => {
 				const paths = d3.select(`g.mlpUp`).selectAll('path');
-				paths.transition().duration(100).style('opacity', 0.6);
+				if (!isExpert) paths.transition().duration(100).style('opacity', 0.6);
 				tooltip.set(
-					$moeModel?.architecture === 'encoder-decoder'
-						? 'Up projection · 512 → 2048 · click to multiply'
-						: 'click to see MLP process'
+					isExpert
+						? 'The router splits this token across its experts · click to select'
+						: $moeModel?.architecture === 'encoder-decoder'
+							? 'Up projection · 512 → 2048 · click to multiply'
+							: 'click to see MLP process'
 				);
 			},
 			onMouseOut: () => {
 				const paths = d3.select(`g.mlpUp`).selectAll('path');
-				paths.transition().duration(100).style('opacity', MLP);
+				if (!isExpert) paths.transition().duration(100).style('opacity', MLP);
 				tooltip.set(null);
 			},
 			onMouseClick: (e, d) => {
 				e.stopPropagation();
 
 				moeTokenIndex.set(d.tokenIndex);
+				if (isExpert) return;
 				if ($weightPopover === 'mlpUp') weightPopover.set(null);
 				else weightPopover.set('mlpUp');
 			}
@@ -420,9 +465,12 @@
 	];
 	$: mlpDownPaths = [
 		{
-			from: '.mlp .second-layer .vector',
-			to: '.mlp .column.out .vector',
-			gradientId: 'indigo-blue',
+			from: isExpert ? '.mlp .expert-card .flow-out' : '.mlp .second-layer .vector',
+			to: isExpert ? '.mlp .raw-sum .raw-vector' : '.mlp .column.out .vector',
+			gradientId: isExpert ? 'indigo-purple' : 'indigo-blue',
+			fan: isExpert,
+			opacityOf: isExpert ? (target: Element) => selectedBand(target) : undefined,
+			tokenFrom: 'target' as const,
 			curve: 50 + (curveFactor - 1) * 20,
 			opacity: MLP,
 			pathGenerator: (source, target, curve: number) => {
@@ -448,22 +496,25 @@
 			},
 			onMouseOver: () => {
 				const paths = d3.select(`g.mlpDown`).selectAll('path');
-				paths.transition().duration(100).style('opacity', 0.6);
+				if (!isExpert) paths.transition().duration(100).style('opacity', 0.6);
 				tooltip.set(
-					$moeModel?.architecture === 'encoder-decoder'
-						? 'Down projection · 2048 → 512 · click to multiply'
-						: 'click to see MLP process'
+					isExpert
+						? 'Expert outputs are weighted, summed, and merged into one vector · click to select'
+						: $moeModel?.architecture === 'encoder-decoder'
+							? 'Down projection · 2048 → 512 · click to multiply'
+							: 'click to see MLP process'
 				);
 			},
 			onMouseOut: () => {
 				const paths = d3.select(`g.mlpDown`).selectAll('path');
-				paths.transition().duration(100).style('opacity', MLP);
+				if (!isExpert) paths.transition().duration(100).style('opacity', MLP);
 				tooltip.set(null);
 			},
 			onMouseClick: (e, d) => {
 				e.stopPropagation();
 
 				moeTokenIndex.set(d.tokenIndex);
+				if (isExpert) return;
 				if ($weightPopover === 'mlpDown') weightPopover.set(null);
 				else weightPopover.set('mlpDown');
 			}
@@ -471,12 +522,20 @@
 	];
 
 	$: pathMap = {
-		mlpUp: ['encoder-decoder', 'vit', 'vision-language'].includes($moeModel?.architecture ?? '')
-			? mlpUpPaths
-			: [],
-		mlpDown: ['encoder-decoder', 'vit', 'vision-language'].includes($moeModel?.architecture ?? '')
-			? mlpDownPaths
-			: [],
+		mlpUp:
+			isExpert ||
+			['encoder-decoder', 'vit', 'vision-language'].includes($moeModel?.architecture ?? '')
+				? mlpUpPaths
+				: [],
+		mlpDown: isExpert
+			? isDenseLayer
+				? mlpDownPaths
+				: []
+			: ['encoder-decoder', 'vit', 'vision-language'].includes($moeModel?.architecture ?? '')
+				? mlpDownPaths
+				: [],
+		sumIn: isExpert && !isDenseLayer ? sumPaths : [],
+		sumOut: isExpert && !isDenseLayer ? sumOutPaths : [],
 		mamba: isMambaOnly
 			? [
 					{
@@ -636,11 +695,36 @@
 			g.selectAll('path.sankey-path')
 				.data((d) => {
 					const data = dataMap[d].map((item) => {
-						const { from, to, curve, pathGenerator, gradientId, unique, ...rest } = item;
-						const sources = d3.selectAll(from).nodes() as Element[];
-						const targets = d3.selectAll(to).nodes() as Element[];
+						const {
+							from,
+							to,
+							curve,
+							pathGenerator,
+							gradientId,
+							unique,
+							fan,
+							opacityOf,
+							tokenFrom,
+							...rest
+						} = item;
+						let sources = d3.selectAll(from).nodes() as Element[];
+						let targets = d3.selectAll(to).nodes() as Element[];
+						// A fanned band set shares one endpoint: copy the lone side so pairs line up by index.
+						let spreadSources = 1;
+						let spreadTargets = 1;
+						if (fan && sources.length && targets.length && sources.length !== targets.length) {
+							const spread = (items: Element[], count: number) =>
+								items.flatMap((element) => Array<Element>(count).fill(element));
+							if (sources.length < targets.length) {
+								spreadSources = Math.round(targets.length / sources.length);
+								sources = spread(sources, spreadSources);
+							} else {
+								spreadTargets = Math.round(sources.length / targets.length);
+								targets = spread(targets, spreadTargets);
+							}
+						}
 
-						return getRenderedEndpointPairs(sources, targets).map(
+						const bands = getRenderedEndpointPairs(sources, targets).map(
 							({ source, target, index: i }) => {
 								const curveOffset = curve || defaultCurveOffset;
 
@@ -655,7 +739,10 @@
 								}
 
 								return {
-									tokenIndex: i,
+									tokenIndex:
+										tokenFrom === 'target'
+											? Math.floor(i / spreadTargets)
+											: Math.floor(i / spreadSources),
 									isLast: i === sources.length - 1,
 									path,
 									fill:
@@ -664,7 +751,6 @@
 											: item.gradientId
 												? `url(#${gradUrl})`
 												: item.fill,
-									opacity: item.opacity,
 									stroke:
 										item.type === 'stroke'
 											? item.gradientId
@@ -672,10 +758,13 @@
 												: item.fill
 											: 'none',
 									clickable: !!item.onMouseClick,
-									...rest
+									...rest,
+									opacity: opacityOf ? opacityOf(targets[i], sources[i]) : item.opacity
 								};
 							}
 						);
+						// Draw the strongest fanned band last so it stays on top.
+						return fan ? bands.sort((a, b) => a.opacity - b.opacity) : bands;
 					});
 
 					return data.flat();
@@ -739,7 +828,15 @@
 	});
 
 	// Hidden ports change on expansion even when their surrounding card keeps its size.
-	$: if (mounted && pathMap && $tokens && $attentionHeadIdx >= 0 && $expandedBlock) {
+	$: if (
+		mounted &&
+		pathMap &&
+		$tokens &&
+		$attentionHeadIdx >= 0 &&
+		$expandedBlock &&
+		$moeTokenIndex >= 0 &&
+		$bandRedraw >= 0
+	) {
 		drawPath();
 		drawResidualPath();
 	}
