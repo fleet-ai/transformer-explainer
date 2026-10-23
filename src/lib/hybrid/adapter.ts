@@ -122,17 +122,21 @@ function applyCurrent() {
 	const recording = get(hybridRecording);
 	if (!recording) return;
 	applying = true;
-	const block = get(blockIdx),
-		head = get(attentionHeadIdx),
+	const head = get(attentionHeadIdx),
 		token = get(moeTokenIndex);
-	hydrateRecordedExample({
-		schemaVersion: 1,
-		model: recording.document.model,
-		capture: recording.document.capture,
-		vocabulary: recording.document.vocabulary,
-		examples: [makeExample(recording)]
-	});
-	blockIdx.set(block);
+	// Keep the block selected: resetting it here would notify the block subscriber again after
+	// `applying` is cleared (Svelte queues nested store updates) and bounce between two blocks.
+	hydrateRecordedExample(
+		{
+			schemaVersion: 1,
+			model: recording.document.model,
+			capture: recording.document.capture,
+			vocabulary: recording.document.vocabulary,
+			examples: [makeExample(recording)]
+		},
+		0,
+		{ preserveSelection: true }
+	);
 	attentionHeadIdx.set(head);
 	attentionHeadIdxTemp.set(head);
 	moeTokenIndex.set(Math.max(0, Math.min(recording.document.sequenceLength - 1, token)));
