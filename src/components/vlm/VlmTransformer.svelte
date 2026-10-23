@@ -3,7 +3,7 @@
 	import RecordedTransformer from '../RecordedTransformer.svelte';
 	import VlmEmbedding from './VlmEmbedding.svelte';
 	import VlmFeedForward from './VlmFeedForward.svelte';
-	import VlmConnectorOutput from './VlmConnectorOutput.svelte';
+	import VlmConnectorCard from './VlmConnectorCard.svelte';
 	import VlmPopups from './VlmPopups.svelte';
 	import { loadVlmRecording, selectVlmPhase } from '$lib/vlm/adapter';
 	import { vlmPhase, vlmInspectorStage, vlmLoading, vlmError } from '$lib/vlm/store';
@@ -14,7 +14,7 @@
 		modelLabel="Vision-language Transformer"
 		customEmbedding={VlmEmbedding}
 		customFeedForward={VlmFeedForward}
-		customOutput={$vlmPhase === 'vision' ? VlmConnectorOutput : null}
+		customOutput={$vlmPhase === 'vision' ? VlmConnectorCard : null}
 		loadRecording={loadVlmRecording}
 	/>
 	{#if $vlmLoading}<div class="loading" role="status">
