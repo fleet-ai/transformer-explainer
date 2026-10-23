@@ -1,12 +1,10 @@
 <script lang="ts">
 	import HeadSplitInspector from './moe/HeadSplitInspector.svelte';
 	import { attentionInspector } from '$lib/inspectors';
-	import { hybridHeadOperations, hybridInspector } from '$lib/hybrid/store';
+	import { hybridHeadOperations } from '$lib/hybrid/store';
 	import { vitHeadOperations } from '$lib/vit/store';
 	import { vlmHeadOperations, vlmInspectorStage } from '$lib/vlm/store';
-	import LatentHeadFlow from './mla/LatentHeadFlow.svelte';
-	import LatentInspector from './mla/LatentInspector.svelte';
-	import RoPEInspector from './moe/RoPEInspector.svelte';
+	import RoPEPopup from './moe/RoPEPopup.svelte';
 	import VectorCanvas from './common/VectorCanvas.svelte';
 	import HeadStack from '~/components/HeadStack.svelte';
 	import {
@@ -25,6 +23,8 @@
 	} from '~/store';
 	import classNames from 'classnames';
 	import AttentionMatrix from '~/components/AttentionMatrix.svelte';
+	import ResponsiveAttentionMatrix from './common/ResponsiveAttentionMatrix.svelte';
+	import T5AttentionMatrix from './seq2seq/T5AttentionMatrix.svelte';
 
 	import { setContext, getContext, onDestroy } from 'svelte';
 	onDestroy(() => attentionInspector.set(null));
@@ -50,16 +50,16 @@
 	}
 	$: isMLA = $moeModel?.architecture === 'mla';
 	$: isMoE = ($moeModel?.architecture ?? 'moe') === 'moe';
+	$: squeeze = ['vit', 'vision-language', 'hybrid'].includes($moeModel?.architecture ?? '');
 	$: isVit = $moeModel?.architecture === 'vit';
 	$: isHybrid = $moeModel?.architecture === 'hybrid';
 	$: isVlm = $moeModel?.architecture === 'vision-language';
 	$: isPlain =
 		['vit', 'encoder-decoder'].includes($moeModel?.architecture ?? '') ||
 		(isVlm && $moeModel?.maskMode === 'bidirectional');
-	$: usesRoPE = !isPlain && !isMLA;
+	$: usesRoPE = !isPlain;
 	function inspectRoPE(kind: 'query' | 'key' = 'query') {
 		if (isVlm) vlmInspectorStage.set('rope');
-		else if (isHybrid) hybridInspector.set('rope');
 		else attentionInspector.set({ kind: 'rope', vector: kind });
 	}
 	$: valueSize = $moeModel?.valueHeadSize ?? headSize;
@@ -119,7 +119,9 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
-				{#if !isMLA && !isMoE}<div class="head-flow-wrap">
+				{#if !squeeze && !isMLA && !isMoE && $moeModel?.architecture !== 'encoder-decoder'}<div
+						class="head-flow-wrap"
+					>
 						{#if isPlain}<div class="rotary-sequence">
 								<button on:click|stopPropagation={inspectHeadSplit}>Head split ↗</button><span
 									aria-hidden="true">→</span
@@ -142,12 +144,6 @@
 					class="head-block flex w-full items-center justify-between px-2"
 					style={`height:${Math.max($headContentHeight - 110, 320)}px;min-height:calc(var(--vector-height) * ${($tokens.length * 3) / 16} + ${($tokens.length - 1) * 1.5 + 14}rem);`}
 				>
-					{#if isMLA}<div class="mla-projections resize-watch">
-							<LatentHeadFlow
-								on:inspect={(event) => attentionInspector.set({ kind: 'mla', stage: event.detail })}
-								on:rope={(event) => inspectRoPE(event.detail)}
-							/>
-						</div>{/if}
 					<div class="qkv flex h-full flex-col justify-center gap-[5rem] pl-[6rem]">
 						<div class="column key">
 							<div class="head1 title">
@@ -155,14 +151,29 @@
 									>{#if usesRoPE || isMLA}<strong class="rotated-symbol">K′</strong> ·
 									{/if}Key {kvHead + 1}</TextbookTooltip
 								><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotated position' : 'Rotated'} · {headSize}D</small
+									>{isPlain
+										? 'Projected'
+										: isMLA
+											? `${$moeModel?.contentKeySize ?? 128} + ${$moeModel?.rotarySize ?? 64}`
+											: 'Rotated'} · {headSize}D</small
 								>
 							</div>
 
+							{#if isMLA}<span class="content-bypass" aria-hidden="true"
+									><span>{$moeModel?.contentKeySize ?? 128}D content skips RoPE</span></span
+								>{/if}
 							{#if usesRoPE}<button
 									class="rotary-gate"
 									on:click={() => inspectRoPE('key')}
-									aria-label="Inspect key RoPE before attention">RoPE<small>rotate K</small></button
+									aria-label="Inspect key RoPE before attention"
+									>{#if !squeeze}<span class="rotary-dial" aria-hidden="true">↻</span
+										>{/if}RoPE<small
+										>rotate K{isMLA ? ` · ${$moeModel?.rotarySize ?? 64}D` : ''}</small
+									>{#if !squeeze}<small
+											>{isMLA ? ($moeModel?.rotarySize ?? 64) : headSize}D → {isMLA
+												? ($moeModel?.rotarySize ?? 64)
+												: headSize}D</small
+										>{/if}</button
 								>{/if}
 							{#each $tokens as token, index}
 								<div
@@ -203,14 +214,28 @@
 									>{#if usesRoPE || isMLA}<strong class="rotated-symbol">Q′</strong> ·
 									{/if}Query {$attentionHeadIdx + 1}</TextbookTooltip
 								><small
-									>{isPlain ? 'Projected' : isMLA ? 'Content + rotated position' : 'Rotated'} · {headSize}D</small
+									>{isPlain
+										? 'Projected'
+										: isMLA
+											? `${$moeModel?.contentKeySize ?? 128} + ${$moeModel?.rotarySize ?? 64}`
+											: 'Rotated'} · {headSize}D</small
 								>
 							</div>
+							{#if isMLA}<span class="content-bypass" aria-hidden="true"
+									><span>{$moeModel?.contentKeySize ?? 128}D content skips RoPE</span></span
+								>{/if}
 							{#if usesRoPE}<button
 									class="rotary-gate"
 									on:click={() => inspectRoPE('query')}
 									aria-label="Inspect query RoPE before attention"
-									>RoPE<small>rotate Q</small></button
+									>{#if !squeeze}<span class="rotary-dial" aria-hidden="true">↻</span
+										>{/if}RoPE<small
+										>rotate Q{isMLA ? ` · ${$moeModel?.rotarySize ?? 64}D` : ''}</small
+									>{#if !squeeze}<small
+											>{isMLA ? ($moeModel?.rotarySize ?? 64) : headSize}D → {isMLA
+												? ($moeModel?.rotarySize ?? 64)
+												: headSize}D</small
+										>{/if}</button
 								>{/if}
 							{#each $tokens as token, index}
 								<div
@@ -250,7 +275,7 @@
 						<div class="column value">
 							<div class="head1 title">
 								<TextbookTooltip id="qkv">Value {kvHead + 1}</TextbookTooltip><small
-									>{isMLA ? 'Expanded latent' : 'unchanged'} · {valueSize}D</small
+									>unchanged · {valueSize}D</small
 								>
 							</div>
 							{#each $tokens as token, index}
@@ -274,7 +299,8 @@
 						</div>
 					</div>
 					<div class="resize-watch attention-matrix flex">
-						<AttentionMatrix />
+						{#if $moeModel?.architecture === 'encoder-decoder'}<T5AttentionMatrix
+							/>{:else if squeeze}<ResponsiveAttentionMatrix />{:else}<AttentionMatrix />{/if}
 					</div>
 					<div class="head-out mx-[2rem]">
 						<div class="column out">
@@ -306,17 +332,9 @@
 		on:close={() => attentionInspector.set(null)}
 		on:projections={() => weightPopover.set('qkv')}
 		on:rope={(event) => inspectRoPE(event.detail)}
-	/>{:else if $attentionInspector?.kind === 'rope'}<RoPEInspector
+	/>{:else if $attentionInspector?.kind === 'rope'}<RoPEPopup
 		kind={$attentionInspector.vector}
 		on:close={() => attentionInspector.set(null)}
-		on:attention={() => {
-			attentionInspector.set(null);
-			$expandedBlock = { id: 'attention' };
-		}}
-	/>{:else if $attentionInspector?.kind === 'mla'}<LatentInspector
-		stage={$attentionInspector.stage}
-		on:close={() => attentionInspector.set(null)}
-		on:rope={(event) => inspectRoPE(event.detail)}
 		on:attention={() => {
 			attentionInspector.set(null);
 			$expandedBlock = { id: 'attention' };
@@ -324,6 +342,52 @@
 	/>{/if}
 
 <style lang="scss">
+	/* Dashed channel that carries the unrotated content part around the RoPE gate. */
+	.content-bypass {
+		z-index: 34;
+		position: absolute;
+		left: -120px;
+		width: 114px;
+		top: 0;
+		height: calc(100% + 22px);
+		border: 1.5px dashed currentColor;
+		border-top: 0;
+		border-radius: 0 0 8px 8px;
+		pointer-events: none;
+	}
+	.column.key .content-bypass {
+		color: #e9a0a5;
+	}
+	.column.query .content-bypass {
+		color: #80afe9;
+	}
+	.content-bypass span {
+		position: absolute;
+		left: 50%;
+		top: 100%;
+		transform: translateX(-50%);
+		margin-top: 2px;
+		font-size: 9px;
+		line-height: 12px;
+		white-space: nowrap;
+		color: #7b8494;
+	}
+	.latent .rotary-token-input::after {
+		content: '';
+		position: absolute;
+		right: 1px;
+		top: 50%;
+		transform: translateY(-50%);
+		border-left: 5px solid currentColor;
+		border-top: 3px solid transparent;
+		border-bottom: 3px solid transparent;
+	}
+
+	.latent .column.key .title,
+	.latent .column.query .title {
+		left: -44px;
+		transform: none;
+	}
 	.rotated-symbol {
 		font-size: 1.2rem;
 		font-weight: 700;
@@ -405,6 +469,12 @@
 		padding: 0;
 		font-size: 16px;
 	}
+	.rotary-dial {
+		display: block;
+		font-size: 20px;
+		line-height: 1;
+		font-weight: 400;
+	}
 	.rotary-gate small {
 		display: block;
 		font-size: 10px;
@@ -428,22 +498,6 @@
 		text-align: center;
 	}
 
-	.mla-projections {
-		width: 440px;
-		flex: 0 0 440px;
-		position: relative;
-		z-index: 30;
-		padding: 12px;
-	}
-	.latent .head-block > .qkv {
-		padding-left: 4rem;
-	}
-	.attention.latent .heads {
-		padding-left: 3rem;
-	}
-	.latent .head-block {
-		min-width: 900px;
-	}
 	.head-flow-wrap {
 		position: relative;
 		z-index: 30;

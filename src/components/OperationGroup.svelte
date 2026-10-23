@@ -54,7 +54,7 @@
 		e.stopPropagation();
 
 		if ($moeModel?.architecture === 'hybrid') {
-			hybridInspector.set(type === 'ln' ? 'projection' : 'output');
+			hybridInspector.set(`${type}:${id}`);
 			return;
 		}
 		if ($moeModel?.architecture === 'vision-language') {

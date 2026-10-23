@@ -1,3 +1,4 @@
+import { mlaBankVectors, mlaProjectionView } from '../src/lib/mla/projections.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -184,4 +185,44 @@ test('Every MLA head reconstructs content-plus-position scores and attention-wei
     }
     assert.deepEqual(block.attentionOutputPreview, layer.attentionOutput.map(row => row.slice(0, 8)));
   }
+});
+
+
+test('MLA bank remains before RoPE and projection bands show all recorded heads', () => {
+  for (const block of [0, 26]) {
+    const layer = attention.layers[block];
+    for (const token of [0, example.tokens.length - 1]) {
+      const bank = mlaBankVectors(layer, token);
+      assert.equal(bank.query.length, 16 * 192);
+      assert.equal(bank.key.length, 16 * 192);
+      assert.equal(bank.value.length, 16 * 128);
+      for (const head of [0, 15]) {
+        assert.deepEqual(bank.query.slice(head*192, (head+1)*192), [...layer.queryContent[head][token], ...layer.queryBefore[head][token]]);
+        assert.deepEqual(bank.key.slice(head*192, (head+1)*192), [...layer.keyContent[head][token], ...layer.keyBefore[0][token]]);
+        assert.deepEqual(bank.value.slice(head*128, (head+1)*128), layer.value[head][token]);
+        for (const stage of ['key', 'value']) {
+          const view = mlaProjectionView(layer, document.model, head, token, stage);
+          assert.equal(view.inputSize, 512); assert.equal(view.outputSize, 2048);
+          assert.deepEqual(view.inputValues, layer.kvLatent[token]);
+          assert.deepEqual(view.outputValues, (stage === 'key' ? layer.keyContent : layer.value).flatMap(rows => rows[token]));
+        }
+        const query = mlaProjectionView(layer, document.model, head, token, 'query');
+        assert.equal(query.outputSize, 3072);
+        assert.deepEqual(query.outputValues, layer.queryProjection.flatMap(rows => rows[token]));
+        const down = mlaProjectionView(layer, document.model, head, token, 'compression');
+        assert.equal(down.outputSize, 576);
+        assert.deepEqual(down.outputValues, [...layer.rawLatent[token], ...layer.rawKeyRotary[0][token]]);
+        const norm = mlaProjectionView(layer, document.model, head, token, 'norm');
+        assert.deepEqual(norm.inputValues, layer.rawLatent[token]);
+        assert.deepEqual(norm.outputValues, layer.kvLatent[token]);
+      }
+    }
+  }
+});
+
+test('MLA missing recordings remain unavailable instead of fabricated bank or matrix values', () => {
+  assert.deepEqual(mlaBankVectors(undefined, 0), {});
+  const missing = mlaProjectionView(undefined, document.model, 0, 0, 'key');
+  assert.equal(missing.inputValues, undefined);
+  assert.equal(missing.outputValues, undefined);
 });

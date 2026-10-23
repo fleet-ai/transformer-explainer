@@ -32,6 +32,11 @@
 	import TextbookTooltip from '~/components/common/TextbookTooltip.svelte';
 
 	export let className: string | undefined = undefined;
+	export let compact = false;
+	$: squeeze = ['vit', 'vision-language', 'hybrid'].includes($moeModel?.architecture ?? '');
+	/** A classifier reads the full softmax: no temperature, no sampling filter. */
+	$: classifier = $moeModel?.outputKind === 'classification';
+	let viewportHeight = 720;
 
 	setContext('block-id', 'softmax');
 
@@ -160,8 +165,12 @@
 		gsap.set('.steps', { justifyContent: 'start' });
 	};
 
-	let rowHeight = rootRem * 1.4;
-	let rowGap = 0.5 * rootRem;
+	$: rowHeight = squeeze
+		? Math.max(10, Math.min(18, (viewportHeight - 300) / 16 - 2))
+		: compact
+			? 18
+			: rootRem * 1.4;
+	$: rowGap = squeeze ? 2 : compact ? 4 : 0.5 * rootRem;
 
 	let hoveredIndex: number | null = null;
 
@@ -210,6 +219,8 @@
 		showLogitPopover = !showLogitPopover;
 	};
 </script>
+
+<svelte:window bind:innerHeight={viewportHeight} />
 
 <div
 	class={classNames('softmax', className, {
@@ -273,7 +284,7 @@
 			{#if isSoftmaxExpanded}
 				<div class="softmax-subtitle softmax-detail flex text-center text-xs opacity-0">
 					<div class="title-box token-string !justify-end">
-						<div class="title-text">Tokens</div>
+						<div class="title-text">{classifier ? 'Classes' : 'Tokens'}</div>
 					</div>
 					<div class="title-box logits">
 						<div
@@ -284,12 +295,12 @@
 							Logits <EyeOutline class="icon text-gray-400" size="sm" />
 						</div>
 					</div>
-					<div class="title-box scaled">
+					<div class="title-box scaled" style:display={classifier ? 'none' : null}>
 						<TextbookTooltip id="temperature"
 							><div class="title-text">Scaled logits</div></TextbookTooltip
 						>
 					</div>
-					<div class="title-box sampling">
+					<div class="title-box sampling" style:display={classifier ? 'none' : null}>
 						<TextbookTooltip id="sampling"
 							><div class="title-text">
 								{$sampling.type === 'top-k' ? 'Top-k' : 'Softmax & Top-p'}
@@ -297,9 +308,12 @@
 						>
 					</div>
 					<div class="title-box probability">
-						<div class="title-text mr-1">
-							{$sampling.type === 'top-k' ? 'Softmax' : 'Normalization'}
-						</div>
+						{#if classifier}<button
+								class="title-text btn shadow-sm"
+								on:click|stopPropagation={() => vitInspectorStage.set('softmax')}>Softmax</button
+							>{:else}<div class="title-text mr-1">
+								{$sampling.type === 'top-k' ? 'Softmax' : 'Normalization'}
+							</div>{/if}
 					</div>
 				</div>
 			{/if}
@@ -326,7 +340,7 @@
 								{/if}
 							{/each}
 						</div>
-						<div class="content-box vector-box scaled">
+						<div class="content-box vector-box scaled" style:display={classifier ? 'none' : null}>
 							{#each scaledLogits as logit, idx}
 								{#if logit !== undefined}
 									<div
@@ -346,7 +360,7 @@
 								{/if}
 							{/each}
 						</div>
-						<div class="content-box vector-box sampling">
+						<div class="content-box vector-box sampling" style:display={classifier ? 'none' : null}>
 							{#if $sampling.type === 'top-k'}
 								{#each topKLogits as logit, idx}
 									{#if logit !== undefined}
@@ -402,10 +416,10 @@
 						</div>
 					{/if}
 				</div>
-				<ProbabilityBars bind:hoveredIndex {rowGap} {rowHeight} bind:drawBars />
+				<ProbabilityBars compact={squeeze} bind:hoveredIndex {rowGap} {rowHeight} bind:drawBars />
 			</div>
 		</div>
-		{#if isSoftmaxExpanded && !!$predictedToken}
+		{#if isSoftmaxExpanded && !!$predictedToken && !classifier}
 			<div class="softmax-popover">
 				<SoftmaxPopover bind:hoveredIndex />
 			</div>

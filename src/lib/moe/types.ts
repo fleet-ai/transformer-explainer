@@ -119,3 +119,15 @@ export interface TraceDocument {
 	examples: TraceExample[];
 	vocabulary: string[];
 }
+
+/** One feed-forward network that receives the whole token vector: a routed expert, the shared branch, or a dense MLP. */
+export interface ExpertEntry {
+	/** Expert id in the operations recording; the shared branch uses `numExperts`, a dense MLP uses -1. */
+	id: number;
+	kind: 'routed' | 'shared' | 'dense';
+	label: string;
+	/** Router mixing weight; shared and dense networks count as 1. */
+	weight: number;
+	/** Width of this network's intermediate (hidden) layer. */
+	size: number;
+}

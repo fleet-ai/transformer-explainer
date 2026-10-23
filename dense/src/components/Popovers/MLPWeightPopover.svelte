@@ -321,7 +321,7 @@
 		</div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Embeddings<HelpPopover id="mlp-emgeddings" 
+				Embeddings<HelpPopover id="mlp-emgeddings"
 					>{`Embeddings transformed through attention mechanism.`}</HelpPopover
 				>
 			</div>
@@ -340,7 +340,7 @@
 		<div class="operator"><div class="symbol mul">&times;</div></div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Expansion Weights<HelpPopover id="mlp-weights" 
+				Expansion Weights<HelpPopover id="mlp-weights"
 					>{`Projects embedding vectors to expanded latent space. \nParameters were learned in training, fixed in prediction.`}</HelpPopover
 				>
 			</div>
@@ -363,7 +363,7 @@
 		<div class="operator"><div class="symbol plus">+</div></div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Expansion Bias <HelpPopover id="mlp-bias" 
+				Expansion Bias <HelpPopover id="mlp-bias"
 					>{`Offsets added after expansion. \nParameters that learned in training, fixed in prediction.`}</HelpPopover
 				>
 			</div>

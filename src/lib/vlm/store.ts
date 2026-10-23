@@ -7,6 +7,8 @@ export const vlmRecording = writable<VlmRecording | null>(null);
 export const vlmPhase = writable<VlmPhase>('vision');
 export const vlmVisiblePositions = writable<number[]>([0, 1, 2, 3, 4, 5, 6, 7]);
 export const vlmSelectedPosition = writable(0);
+/** Which of the 16 connector outputs (image tokens) the connector card shows. */
+export const vlmVisualToken = writable(0);
 export const vlmInspectorStage = createInspector<string | null>();
 export const vlmLoading = writable(false);
 export const vlmError = writable('');

@@ -16,9 +16,7 @@
 		sampling,
 		temperature,
 		isTextbookOpen,
-		moeModel,
-		moeExample,
-		blockIdx
+		moeModel
 	} from '~/store';
 	import Sankey from '~/components/Sankey.svelte';
 	import Attention from '~/components/Attention.svelte';
@@ -45,11 +43,18 @@
 	let active = false;
 	let error = '';
 	let vizHeight = 0;
-	let titleHeight = rootRem * 5;
+	$: squeeze = ['hybrid', 'vision-language', 'vit'].includes($moeModel?.architecture ?? '');
+	$: compact = squeeze || $moeModel?.architecture === 'encoder-decoder';
+	$: titleHeight = compact ? 60 : rootRem * 5;
 	const calculateVectorHeight = () => {
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
 		const height = Math.min(
-			Math.max((vizHeight - titleHeight - gaps) / $tokens.length / maxVectorScale, minVectorHeight),
+			Math.max(
+				((compact ? Math.min(vizHeight - 24, 480) : vizHeight) - titleHeight - gaps) /
+					$tokens.length /
+					(compact ? 4 : maxVectorScale),
+				squeeze ? 6 : compact ? 8 : minVectorHeight
+			),
 			maxVectorHeight
 		);
 		vectorHeight.set(height);
@@ -110,14 +115,18 @@
 		class:active
 		class="main-section h-full w-full"
 		class:hybrid-model={$moeModel?.architecture === 'hybrid'}
-		class:mamba-only={$moeModel?.architecture === 'hybrid' &&
-			!$moeExample?.layers[$blockIdx]?.queryPreview.length}
+		class:expert-layout={!$moeModel?.architecture ||
+			['moe', 'mla'].includes($moeModel.architecture)}
+		class:attention-open={$expandedBlock.id === 'attention'}
+		class:cross-open={$expandedBlock.id === 'cross-attention'}
 		class:latent-model={$moeModel?.architecture === 'mla'}
+		class:squeeze
+		class:vision-language={$moeModel?.architecture === 'vision-language'}
 		class:seq2seq={$moeModel?.architecture === 'encoder-decoder'}
 		class:decoder={$moeModel?.architecture === 'encoder-decoder' && $moeModel?.stack === 'decoder'}
 		style={`--vector-height: ${$vectorHeight}px;--title-height: ${titleHeight}px;--content-height:${vizHeight - titleHeight}px;`}
 	>
-		{#if !!$expandedBlock.id}
+		{#if !!$expandedBlock.id && !compact}
 			<div
 				class={classNames('dim', `${$expandedBlock.id || ''}`)}
 				transition:fade={{ duration: 100 }}
@@ -206,32 +215,340 @@
 		}
 	}
 
-	.latent-model .steps {
-		grid-template-columns: auto max-content 120px 210px;
-		min-width: 100%;
-		width: max-content;
+	/* Allocate attention's intrinsic width, then let the expert network shrink.
+	   The absolute inner grid cannot contribute its minimum to the outer grid. */
+	.expert-layout .steps .blocks .block-steps {
+		grid-template-columns: minmax(40px, 0.35fr) auto minmax(0, 1.8fr);
 	}
-	.latent-model .steps .blocks .block-steps {
-		position: relative;
-		grid-template-columns: 80px max-content 440px;
+	.expert-layout.attention-open .steps {
+		grid-template-columns: auto minmax(0, 1fr) 72px 155px;
+	}
+	.expert-layout.attention-open :global(.attention .heads) {
+		padding-left: 2rem;
+		padding-right: 4rem;
+	}
+	.expert-layout.attention-open .dim-partial.attention {
+		display: none;
+	}
+	.expert-layout.attention-open :global(.attention .head-out) {
+		margin-left: 1rem;
+		margin-right: 1rem;
+	}
+	.expert-layout.attention-open :global(.transformer-blocks .content) {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+	.expert-layout.attention-open :global(.transformer-blocks .guide) {
+		width: 64px;
+		left: -12px;
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+	.expert-layout.attention-open :global(.transformer-blocks .guide .text) {
+		font-size: 0.65rem;
+		padding-left: 0;
+	}
+
+	.expert-layout.attention-open :global(.step.softmax > .title) {
+		font-size: 0.8rem;
+	}
+	.expert-layout :global(.mlp.moe) {
+		min-width: 0;
+	}
+	/* The expert card sits under the band layer; only painted bands should take pointer events. */
+	.expert-layout :global(.sankey-top),
+	.expert-layout :global(.sankey-back) {
+		pointer-events: none;
+	}
+	.expert-layout :global(.sankey-top path),
+	.expert-layout :global(.sankey-back path) {
+		pointer-events: visiblePainted;
+	}
+
+	.seq2seq {
+		--t5-card-height: clamp(320px, calc(100dvh - 310px), 480px);
 	}
 	.seq2seq .steps {
-		grid-template-columns: auto 7fr 0.45fr 0.85fr;
+		grid-template-columns: clamp(105px, 6vw, 125px) minmax(0, 1fr) 40px 165px;
 	}
 	.seq2seq .steps .blocks .block-steps {
-		grid-template-columns: 0.42fr 2.1fr 1.2fr;
+		grid-template-columns: 90px minmax(0, 1.5fr) minmax(230px, 1fr);
 	}
 	.seq2seq.decoder .steps .blocks .block-steps {
-		grid-template-columns: 0.42fr 2fr 2fr 1.15fr;
+		grid-template-columns: 90px minmax(0, 1fr) minmax(0, 1.05fr) clamp(220px, 19vw, 320px);
 	}
-	.hybrid-model .steps {
-		grid-template-columns: auto 6.5fr 0.5fr 0.9fr;
+
+	.seq2seq.attention-open .steps .blocks .block-steps {
+		grid-template-columns: 90px minmax(0, 1fr) clamp(220px, 24vw, 380px);
 	}
-	.hybrid-model .steps .blocks .block-steps {
-		grid-template-columns: 0.4fr 2fr 2.1fr;
+	.seq2seq.decoder.attention-open .steps .blocks .block-steps {
+		grid-template-columns: 90px minmax(0, 2.4fr) minmax(145px, 0.8fr) clamp(200px, 17vw, 290px);
 	}
-	.hybrid-model.mamba-only .steps .blocks .block-steps {
-		grid-template-columns: 0.4fr 3fr 1.2fr;
+	.seq2seq.decoder.cross-open .steps .blocks .block-steps {
+		grid-template-columns: 90px minmax(145px, 0.8fr) minmax(0, 2.4fr) clamp(200px, 17vw, 290px);
+	}
+	.seq2seq :global(.step > .title),
+	.seq2seq .steps.expanded :global(.step > .title) {
+		padding-bottom: 8px;
+	}
+	.seq2seq.attention-open :global(.cross-qkv),
+	.seq2seq.attention-open :global(.cross-input),
+	.seq2seq.attention-open :global(.cross-residual),
+	.seq2seq.attention-open :global(.cross-head-out),
+	.seq2seq.cross-open :global(.cross-input),
+	.seq2seq.cross-open :global(.cross-residual),
+	.seq2seq.cross-open :global(.t5-self-attention .head-block > .qkv),
+	.seq2seq.cross-open :global(.t5-self-attention .head-out) {
+		display: none;
+	}
+	.seq2seq.attention-open :global(.cross-flow > span),
+	.seq2seq.cross-open :global(.t5-self-attention .head-flow-wrap) {
+		visibility: hidden;
+	}
+	.seq2seq.attention-open :global(.cross-head-block) {
+		padding: 24px 10px 48px;
+	}
+	.seq2seq.attention-open :global(.cross-matrix) {
+		margin: 0;
+	}
+	.seq2seq.cross-open :global(.t5-self-attention .head-block) {
+		padding: 24px 10px 48px;
+	}
+	.seq2seq.attention-open :global(.mlp .title small),
+	.seq2seq.cross-open :global(.mlp .title small) {
+		display: none;
+	}
+	.seq2seq.attention-open :global(.mlp .label),
+	.seq2seq.cross-open :global(.mlp .label) {
+		display: none;
+	}
+	.seq2seq.attention-open :global(.mlp .subtitle),
+	.seq2seq.cross-open :global(.mlp .subtitle) {
+		font-size: 10px;
+	}
+	.seq2seq :global(.step > .title) {
+		font-size: 14px;
+		white-space: normal;
+		padding-bottom: 8px;
+	}
+	.seq2seq .nodes {
+		padding-top: 14px;
+		padding-bottom: 16px;
+	}
+	.seq2seq :global(.embedding:not(.expanded) .content) {
+		padding-left: 6px;
+	}
+	.seq2seq :global(.embedding:not(.expanded) .token-string) {
+		width: calc(clamp(105px, 6vw, 125px) - 18px);
+		padding: 0 10px 0 4px;
+	}
+	.seq2seq :global(.embedding:not(.expanded) .token-string .label) {
+		font-size: 12px;
+		line-height: 1;
+		height: auto;
+		overflow: visible;
+	}
+	.seq2seq :global(.embedding:not(.expanded) .title) {
+		padding-left: 20px;
+	}
+	.seq2seq :global(.softmax:not(.expanded) .content) {
+		padding-right: 16px;
+	}
+	.seq2seq :global(.attention-bounding) {
+		display: none;
+	}
+	.seq2seq :global(.attention > .title > div) {
+		width: auto;
+		white-space: normal;
+	}
+	.seq2seq.attention-open :global(.mlp .residual-text),
+	.seq2seq.cross-open :global(.mlp .residual-text) {
+		visibility: hidden;
+	}
+	.seq2seq :global(.step) {
+		min-width: 0;
+	}
+	.seq2seq :global(.prob-dim) {
+		bottom: 0;
+	}
+	/* A fixed page budget: the active attention card borrows width from the MLP. */
+	.squeeze {
+		--compact-card-height: clamp(230px, calc(100dvh - 300px), 460px);
+	}
+	.squeeze :global(.sankey-top),
+	.squeeze :global(.sankey-back) {
+		pointer-events: none;
+	}
+	.squeeze :global(.sankey-top path),
+	.squeeze :global(.sankey-back path) {
+		pointer-events: visiblePainted;
+	}
+	.squeeze .blocks {
+		min-height: 0;
+	}
+	/* The vision-language controls sit under the token list, so it has the default height. */
+	.squeeze.vision-language {
+		--compact-card-height: clamp(230px, calc(100dvh - 320px), 460px);
+	}
+	.squeeze.vision-language .nodes {
+		padding-top: 22px;
+	}
+	.squeeze.hybrid-model {
+		--compact-card-height: clamp(230px, calc(100dvh - 360px), 430px);
+	}
+	.squeeze .nodes {
+		padding: 8px 0 16px;
+	}
+	.squeeze .steps {
+		grid-template-columns: 120px minmax(0, 1fr) 35px 210px;
+	}
+	.squeeze .steps .blocks .block-steps {
+		grid-template-columns: 70px minmax(0, 1.5fr) minmax(235px, 1fr);
+	}
+	.squeeze.attention-open .steps .blocks .block-steps {
+		grid-template-columns: 70px minmax(0, 1fr) 210px;
+	}
+	.squeeze :global(.step) {
+		min-width: 0;
+	}
+	.squeeze :global(.step > .title),
+	.squeeze .steps.expanded :global(.step > .title) {
+		font-size: 13px;
+		white-space: normal;
+		padding-bottom: 8px;
+	}
+	.squeeze :global(.attention > .title > div) {
+		width: auto;
+		white-space: normal;
+	}
+	.squeeze :global(.attention .content) {
+		display: block;
+		width: 100%;
+	}
+	.squeeze :global(.attention .heads) {
+		padding: 0 14px !important;
+		min-width: 0;
+		width: 100%;
+	}
+	.squeeze :global(.attention-bounding) {
+		display: none;
+	}
+	.squeeze :global(.attention .head-block) {
+		height: var(--compact-card-height) !important;
+		min-height: 0 !important;
+	}
+	.squeeze :global(.attention .head-block > .qkv) {
+		padding: 24px 0 24px 70px !important;
+		gap: 24px;
+		justify-content: space-between;
+		flex-shrink: 0;
+	}
+	.squeeze :global(.attention.rotary .head-block > .qkv) {
+		padding-left: 155px !important;
+	}
+	.squeeze :global(.attention .column .title) {
+		font-size: 13px;
+		top: -20px;
+		line-height: 13px;
+	}
+	.squeeze :global(.attention .column .title small) {
+		font-size: 8px;
+	}
+	.squeeze :global(.attention .column .label) {
+		font-size: 9px !important;
+		height: auto !important;
+		line-height: 10px !important;
+		padding: 0 !important;
+	}
+	.squeeze :global(.attention .head-block > .qkv .column) {
+		gap: 9px;
+	}
+	.squeeze :global(.attention .head-block > .qkv .label) {
+		top: -4px;
+	}
+	.squeeze :global(.attention .head-out) {
+		margin: 0 6px !important;
+		flex-shrink: 0;
+	}
+	.squeeze :global(.attention .head-block > .attention-matrix) {
+		flex: 1;
+		min-width: 0;
+		margin-left: 16px;
+	}
+	.squeeze :global(.head-title) {
+		font-size: 12px;
+	}
+	.squeeze :global(.embedding:not(.expanded) .content) {
+		padding-left: 6px;
+	}
+	.squeeze :global(.embedding:not(.expanded) .token-string) {
+		width: 102px;
+		padding-right: 8px;
+	}
+	.squeeze :global(.embedding .label) {
+		font-size: 11px;
+		height: auto;
+		line-height: 1;
+	}
+	.squeeze :global(.softmax:not(.expanded) .content) {
+		padding-right: 12px;
+		grid-template-columns: 70px minmax(0, 1fr);
+	}
+	.squeeze :global(.softmax:not(.expanded) .token-string) {
+		width: 70px;
+	}
+	.squeeze :global(.softmax:not(.expanded) .probability-col) {
+		min-width: 0;
+	}
+	.squeeze :global(.softmax:not(.expanded) .text-box span) {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.squeeze :global(.prob-dim) {
+		bottom: 0;
+	}
+	.squeeze.attention-open :global(.mlp .label),
+	.squeeze.attention-open :global(.mlp .title small),
+	.squeeze.attention-open :global(.mlp .residual-text) {
+		visibility: hidden;
+	}
+
+	.squeeze :global(.mlp .label) {
+		display: none;
+	}
+	.squeeze :global(.softmax .text-box) {
+		font-size: 11px;
+	}
+	@media (max-height: 650px) {
+		.squeeze :global(.attention .head-block > .qkv .column) {
+			gap: 5px;
+		}
+		.squeeze
+			:global(.attention .head-block > .qkv .cell:not(:first-of-type):not(:last-of-type) .label) {
+			visibility: hidden;
+		}
+		.squeeze :global(.vit-patch-controls) {
+			gap: 4px;
+			padding-top: 4px;
+		}
+		.squeeze :global(.vit-patch-controls .image-grid) {
+			width: 42px;
+			height: 42px;
+		}
+		.squeeze :global(.vit-patch-controls .patch-actions) {
+			gap: 3px;
+		}
+		.squeeze :global(.vit-patch-controls .selection) {
+			gap: 3px;
+		}
+		.squeeze :global(.vit-patch-controls .selection button) {
+			padding: 2px;
+		}
+	}
+	.squeeze :global(.hybrid-toolbar) {
+		padding-left: 12px;
+		padding-right: 12px;
 	}
 	:global(.step) {
 		height: 100%;

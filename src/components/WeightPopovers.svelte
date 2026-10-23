@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import QkvWeightPopover from './Popovers/QKVWeightPopover.svelte';
-	import { vlmInspectorStage } from '$lib/vlm/store';
+	import { vlmVisiblePositions, vlmSelectedPosition, vlmInspectorStage } from '$lib/vlm/store';
 	import { hybridInspector } from '$lib/hybrid/store';
-	import { vitInspectorStage } from '$lib/vit/store';
+	import { vitVisiblePositions, vitSelectedPosition, vitInspectorStage } from '$lib/vit/store';
 	import { t5Inspector } from '$lib/seq2seq/store';
 	import { attentionInspector } from '$lib/inspectors';
 	import RecordedLMHead from './moe/RecordedLMHead.svelte';
-	import { weightPopover, tooltip, moeModel } from '~/store';
+	import { weightPopover, tooltip, moeModel, moeTokenIndex } from '~/store';
 	import { fade } from 'svelte/transition';
 	import AttentionWeightPopover from './Popovers/AttentionWeightPopover.svelte';
 	import MLPWeightPopover from './Popovers/MLPWeightPopover.svelte';
@@ -23,10 +23,6 @@
 		removePathHighlight
 	} from '~/utils/textbook';
 
-	$: if ($moeModel?.architecture === 'mla' && $weightPopover === 'qkv') {
-		attentionInspector.set({ kind: 'mla', stage: 'query' });
-	}
-
 	$: if ($moeModel?.architecture === 'vit' && $weightPopover) {
 		const stages: Record<string, string> = {
 			qkv: 'qkv',
@@ -35,16 +31,21 @@
 			mlpDown: 'down',
 			softmax: 'classifier'
 		};
+		$vitSelectedPosition = $vitVisiblePositions[$moeTokenIndex] ?? 0;
 		vitInspectorStage.set(stages[String($weightPopover)] ?? 'attention');
 		$weightPopover = null;
 	}
 	$: if ($moeModel?.architecture === 'encoder-decoder' && $weightPopover) {
 		t5Inspector.set(
-			$weightPopover === 'softmax'
-				? 'output'
-				: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
-					? 'ffn'
-					: 'self'
+			$weightPopover === 'qkv'
+				? 'qkv'
+				: $weightPopover === 'softmax'
+					? 'output'
+					: $weightPopover === 'mlpUp'
+						? 'ffn-up'
+						: $weightPopover === 'mlpDown'
+							? 'ffn-down'
+							: 'self'
 		);
 		$weightPopover = null;
 	}
@@ -56,16 +57,21 @@
 			mlpDown: 'down',
 			softmax: 'output'
 		};
+		$vlmSelectedPosition = $vlmVisiblePositions[$moeTokenIndex] ?? 0;
 		vlmInspectorStage.set(stages[String($weightPopover)] ?? 'attention');
 		$weightPopover = null;
 	}
 	$: if ($moeModel?.architecture === 'hybrid' && $weightPopover) {
 		hybridInspector.set(
-			$weightPopover === 'softmax'
-				? 'classifier'
-				: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
-					? 'ffn'
-					: 'attention'
+			$weightPopover === 'qkv'
+				? 'qkv'
+				: $weightPopover === 'softmax'
+					? 'classifier'
+					: ['mlpUp', 'mlpDown'].includes(String($weightPopover))
+						? $weightPopover === 'mlpUp'
+							? 'ffn-up'
+							: 'ffn-down'
+						: 'attention-out'
 		);
 		$weightPopover = null;
 	}

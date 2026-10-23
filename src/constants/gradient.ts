@@ -35,6 +35,10 @@ export const gradientMap = {
 		0: theme.colors.indigo[defaultGradientBrightness],
 		100: theme.colors.blue[defaultGradientBrightness]
 	},
+	'indigo-purple': {
+		0: theme.colors.indigo[defaultGradientBrightness],
+		100: theme.colors.purple[defaultGradientBrightness]
+	},
 	'blue-white': { 0: theme.colors.blue[defaultGradientBrightness], 100: theme.colors.white },
 	'red-white': { 0: theme.colors.red[defaultGradientBrightness], 100: theme.colors.white },
 	'green-white': { 0: theme.colors.green[defaultGradientBrightness], 100: theme.colors.white },

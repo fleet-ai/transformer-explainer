@@ -26,13 +26,16 @@
 	let headBlockSize = { width: 0, height: 0 };
 	let opacityOffset = 0.1;
 
+	$: depth = ['vit', 'vision-language', 'hybrid'].includes($moeModel?.architecture ?? '')
+		? Math.min(1, 5 / $modelMeta.attention_head_num)
+		: 1;
 	$: headStyles = Array.from({ length: $modelMeta.attention_head_num }, (_, index) => ({
 		width: `${headBlockSize.width}px`,
 		height: `${headBlockSize.height}px`,
-		transform: `translate(${index * headGap.x}px, ${index * headGap.y}px) scale(${1 - headGap.scale * index})`,
-		x: index * headGap.x,
-		y: index * headGap.y,
-		scale: 1 - headGap.scale * index,
+		transform: `translate(${index * headGap.x * depth}px, ${index * headGap.y * depth}px) scale(${1 - headGap.scale * index * depth})`,
+		x: index * headGap.x * depth,
+		y: index * headGap.y * depth,
+		scale: 1 - headGap.scale * index * depth,
 		zIndex: $modelMeta.attention_head_num - index,
 		opacity: Math.max(0.2, 1 - index * opacityOffset)
 	}));

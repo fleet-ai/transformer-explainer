@@ -149,3 +149,28 @@ export function ropePair(
 		reconstructedB: b * cos + a * sin
 	};
 }
+
+/**
+ * Mamba-2's scan written as one causal token-mixing matrix per head (its "SSD" form):
+ * y[t] = Σ_{s≤t} M[t,s] · x[s] + D · x[t], with M[t,s] = L[t,s] · (C[t] · B[s]) and the decay
+ * L[t,s] = Δ[s] · exp(A · Σ_{k=s+1..t} Δ[k]). Every entry comes from recorded B, C, Δ and A;
+ * the upper triangle is masked (NaN) because no token reads a later one.
+ */
+export function mixingMatrix(data: TensorData, head: number) {
+	const n = data.descriptor.tensors.B.shape[0];
+	const B = Array.from({ length: n }, (_, s) => row(data, 'B', s));
+	const C = Array.from({ length: n }, (_, t) => row(data, 'C', t));
+	const dt = Array.from({ length: n }, (_, t) => scalar(data, 'dt', t, head));
+	const A = scalar(data, 'A', head);
+	const scores = C.map((c) => B.map((b) => dot(c, b)));
+	const decay = scores.map((_, t) =>
+		scores.map((__, s) => {
+			if (s > t) return NaN;
+			let total = 0;
+			for (let k = s + 1; k <= t; k++) total += dt[k];
+			return dt[s] * Math.exp(A * total);
+		})
+	);
+	const mixing = decay.map((values, t) => values.map((l, s) => (s > t ? NaN : l * scores[t][s])));
+	return { scores, decay, mixing, A, dt, D: scalar(data, 'D', head) };
+}

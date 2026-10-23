@@ -2,7 +2,7 @@
 	import { base } from '$app/paths';
 	import HybridTransformer from '~/components/hybrid/HybridTransformer.svelte';
 	import VlmTransformer from '~/components/vlm/VlmTransformer.svelte';
-	import Seq2SeqTransformer from '~/components/seq2seq/Seq2SeqTransformer.svelte';
+	import Seq2SeqBlocks from '~/components/seq2seq/Seq2SeqBlocks.svelte';
 	import VitTransformer from '~/components/vit/VitTransformer.svelte';
 	import RecordedTransformer from '~/components/RecordedTransformer.svelte';
 	import type { RecordedArchitectureId } from '~/lib/architecture-navigation';
@@ -22,7 +22,7 @@
 	{#if data.architecture === 'mla'}
 		<RecordedTransformer tracePath="traces/deepseek-mla.json" modelLabel="DeepSeek · MLA" />
 	{:else if data.architecture === 'encoder-decoder'}
-		<Seq2SeqTransformer />
+		<Seq2SeqBlocks />
 	{:else if data.architecture === 'hybrid'}
 		<HybridTransformer />
 	{:else if data.architecture === 'vision-language'}

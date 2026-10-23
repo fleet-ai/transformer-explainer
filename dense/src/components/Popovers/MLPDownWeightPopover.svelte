@@ -315,7 +315,7 @@
 		</div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Expanded Embeddings <HelpPopover id="mlp-down-emgeddings" 
+				Expanded Embeddings <HelpPopover id="mlp-down-emgeddings"
 					>{`Expanded latent vectors through MLP expansion layer.`}</HelpPopover
 				>
 			</div>
@@ -339,7 +339,7 @@
 		</div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Compression Weights <HelpPopover id="mlp-down-weights" 
+				Compression Weights <HelpPopover id="mlp-down-weights"
 					>{`Projects expanded latent vectors back to original space. \nParameters that learned in training, fixed in prediction.`}</HelpPopover
 				>
 			</div>
@@ -362,7 +362,7 @@
 		<div class="operator"><div class="symbol plus px-3">+</div></div>
 		<div class="matrix flex flex-col items-center">
 			<div class="title flex items-center gap-1">
-				Compression Bias <HelpPopover id="mlp-down-bias" 
+				Compression Bias <HelpPopover id="mlp-down-bias"
 					>{`Offsets added after compression. \nParameters that learned in training, fixed in prediction.`}</HelpPopover
 				>
 			</div>
@@ -408,7 +408,7 @@
 				<Katex
 					displayMode
 					math={`
-	(Emb_{1,1}×W_{1,1} + \\cdots + Emb_{1,768}×W_{768,1})`}
+	(Emb_{1,1}×W_{1,1} + \\cdots + Emb_{1,3072}×W_{3072,1})`}
 				/>
 			</span>
 			<span class="part2">
@@ -419,7 +419,7 @@
 			<Katex
 				displayMode
 				math={`
-	\\sum_{d=1}^{768} Emb_{id} \\cdot Weights_{dj} + Bias_j = Compressed_Emb{ij} 
+	\\sum_{d=1}^{3072} Emb_{id} \\cdot Weights_{dj} + Bias_j = Compressed_Emb{ij} 
 	`}
 			/>
 		</div>

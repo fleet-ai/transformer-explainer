@@ -14,7 +14,14 @@ import {
 } from '~/store';
 import { row, tensor, type TensorData, type TensorFile } from '$lib/vit/types';
 import type { HybridDocument, HybridRecording } from './types';
-import { hybridRecording, hybridLoading, hybridError, hybridInspector } from './store';
+import {
+	hybridRecording,
+	hybridLoading,
+	hybridError,
+	hybridInspector,
+	hybridStage,
+	hybridMambaView
+} from './store';
 const pending = new Map<number, Promise<TensorData>>();
 let applying = false,
 	disposed = false,
@@ -122,17 +129,24 @@ function applyCurrent() {
 	const recording = get(hybridRecording);
 	if (!recording) return;
 	applying = true;
-	const block = get(blockIdx),
-		head = get(attentionHeadIdx),
-		token = get(moeTokenIndex);
-	hydrateRecordedExample({
-		schemaVersion: 1,
-		model: recording.document.model,
-		capture: recording.document.capture,
-		vocabulary: recording.document.vocabulary,
-		examples: [makeExample(recording)]
-	});
-	blockIdx.set(block);
+	const token = get(moeTokenIndex);
+	const model = recording.document.model;
+	// The Mamba view stacks the 64 SSM heads where the attention view stacks its 32 heads.
+	const heads = get(hybridMambaView) ? model.mambaHeads : model.attentionHeads;
+	const head = Math.min(heads - 1, get(attentionHeadIdx));
+	// Keep the block selected: resetting it here would notify the block subscriber again after
+	// `applying` is cleared (Svelte queues nested store updates) and bounce between two blocks.
+	hydrateRecordedExample(
+		{
+			schemaVersion: 1,
+			model: { ...model, attentionHeads: heads },
+			capture: recording.document.capture,
+			vocabulary: recording.document.vocabulary,
+			examples: [makeExample(recording)]
+		},
+		0,
+		{ preserveSelection: true }
+	);
 	attentionHeadIdx.set(head);
 	attentionHeadIdxTemp.set(head);
 	moeTokenIndex.set(Math.max(0, Math.min(recording.document.sequenceLength - 1, token)));
@@ -178,11 +192,46 @@ async function ensureBlock(index: number) {
 		if (request === generation) hybridLoading.set(false);
 	}
 }
-export async function selectHybridBlock(index: number) {
+export async function selectHybridBlock(
+	index: number,
+	stage: 'transformer' | 'mamba' = 'transformer'
+) {
 	const doc = get(hybridRecording)?.document;
 	if (!doc) return;
 	expandedBlock.set({ id: null });
-	blockIdx.set(Math.max(0, Math.min(doc.layers.length - 1, index)));
+	const next = Math.max(0, Math.min(doc.layers.length - 1, index));
+	const changed = next !== get(blockIdx);
+	applying = true;
+	hybridStage.set(doc.layers[next].type === 'hybrid' ? stage : 'mamba');
+	applying = false;
+	if (changed) blockIdx.set(next);
+	else void ensureBlock(next);
+}
+/** Step through the computation: a hybrid block is two steps, its transformer and then its mixer. */
+export function stepHybrid(delta: 1 | -1) {
+	const doc = get(hybridRecording)?.document;
+	if (!doc) return;
+	const steps = doc.layers.flatMap((layer) =>
+		layer.type === 'hybrid'
+			? [
+					{ index: layer.index, stage: 'transformer' as const },
+					{ index: layer.index, stage: 'mamba' as const }
+				]
+			: [{ index: layer.index, stage: 'mamba' as const }]
+	);
+	const block = get(blockIdx),
+		stage = doc.layers[block].type === 'hybrid' ? get(hybridStage) : 'mamba';
+	const at = steps.findIndex((step) => step.index === block && step.stage === stage);
+	const target = steps[Math.max(0, Math.min(steps.length - 1, at + delta))];
+	void selectHybridBlock(target.index, target.stage);
+}
+/** Whether the step buttons can move further in this direction. */
+export function canStepHybrid(delta: 1 | -1, block: number, stage: 'transformer' | 'mamba') {
+	const doc = get(hybridRecording)?.document;
+	if (!doc) return false;
+	const hybrid = doc.layers[block]?.type === 'hybrid';
+	if (delta < 0) return block > 0 || (hybrid && stage === 'mamba');
+	return block < doc.layers.length - 1 || (hybrid && stage === 'transformer');
 }
 export async function loadHybridRecording() {
 	disposed = false;
@@ -208,10 +257,15 @@ export async function loadHybridRecording() {
 	const unsubscribe = blockIdx.subscribe((index) => {
 		if (!applying && !disposed) void ensureBlock(index);
 	});
+	const unsubscribeStage = hybridStage.subscribe(() => {
+		if (!applying && !disposed) void ensureBlock(get(blockIdx));
+	});
 	return () => {
 		disposed = true;
 		generation++;
 		unsubscribe();
+		unsubscribeStage();
+		hybridStage.set('transformer');
 		hybridRecording.set(null);
 		hybridInspector.set(null);
 		recordedControls.set(null);
