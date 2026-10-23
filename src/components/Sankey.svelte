@@ -28,7 +28,13 @@
 		TRANSFORMER_BLOCKS
 	} from '~/constants/opacity';
 	import { textPages } from '~/utils/textbookPages';
-	import { hybridRecording, hybridInspector, hybridMambaView, hybridHot } from '$lib/hybrid/store';
+	import {
+		hybridRecording,
+		hybridInspector,
+		hybridMambaView,
+		hybridHot,
+		hybridStage
+	} from '$lib/hybrid/store';
 	import { t5Inspector } from '$lib/seq2seq/store';
 	import { getRenderedEndpointPairs } from '~/utils/sankeyGeometry';
 
@@ -645,7 +651,25 @@
 							'purple-purple',
 							'linear',
 							'Linear · 2048 → 2048 gives t · click to multiply'
-						)
+						),
+						{
+							// t leaves the shared transformer only into this block's Mamba half.
+							...hybridBand(
+								'hybrid-next',
+								'.ffn-output .column.t-out .vector',
+								'.ffn-output .next-port',
+								'purple-purple',
+								'next',
+								't is added to x on the way into the Mamba mixer · click to go there'
+							),
+							fan: true,
+							opacityOf: (_target: Element, _source: Element, index: number) =>
+								index === $moeTokenIndex ? 0.45 : 0.14,
+							onMouseClick: (e: Event) => {
+								e.stopPropagation();
+								hybridStage.set('mamba');
+							}
+						}
 					];
 
 	$: pathMap = {

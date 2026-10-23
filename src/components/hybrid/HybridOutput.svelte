@@ -196,9 +196,14 @@
 			</div>
 			<button
 				class="op-box next-half"
-				title="The second half of this block: the Mamba mixer"
+				class:hot={$hybridHot === 'next'}
+				title="The second half of this block: t is added to x on the way into the Mamba mixer"
+				on:mouseenter={hover('next').enter}
+				on:mouseleave={hover('next').leave}
 				on:click={() => hybridStage.set('mamba')}
-				>Mamba mixer ›<small>x + t → RMSNorm</small></button
+				><span class="next-port" aria-hidden="true"></span>Mamba mixer ›<small
+					>x + t → RMSNorm</small
+				></button
 			>
 		</div>
 	</div>{/if}
@@ -386,11 +391,21 @@
 	.t-out {
 		margin-left: 14px;
 	}
+	/* t only feeds this block's Mamba half; the band layer draws every token's t into this step. */
 	.next-half {
 		z-index: 120;
-		margin-left: auto;
-		margin-top: calc(6 * var(--vector-height) + 64px);
+		margin-left: 34px;
+		margin-top: calc(3 * var(--vector-height));
+		height: 40px;
 		padding: 4px 8px;
 		white-space: nowrap;
+	}
+	.next-port {
+		position: absolute;
+		left: -2px;
+		top: 0;
+		width: 2px;
+		height: 100%;
+		pointer-events: none;
 	}
 </style>
