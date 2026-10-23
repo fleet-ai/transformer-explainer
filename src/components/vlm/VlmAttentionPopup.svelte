@@ -14,6 +14,10 @@
 	$: grouped = keyValueHeads < heads;
 	$: q = rotary ? 'q′' : 'q';
 	$: k = rotary ? 'k′' : 'k';
+	$: headNote = grouped
+		? `Grouped-query attention: ${heads} query heads share ${keyValueHeads} key/value heads, so query head ${head + 1} reads shared head ${kvHead + 1}.`
+		: 'Every head has its own keys and values.';
+	$: maskNote = `${causal ? 'Text and image positions sit under the same causal mask.' : 'Every patch attends to all patches of the image.'} The weights always sum to 1 over all ${sequenceLength} positions, including the ones the page does not show.`;
 </script>
 
 <VlmFormulaPopup
@@ -69,15 +73,7 @@
 			? `Complete · weights (1, ${sequenceLength}) · context (1, ${headSize})`
 			: 'Scoring every key'} · schematic sweep
 	</p>
-	<p class="vlm-note">
-		{#if grouped}Grouped-query attention: {heads} query heads share {keyValueHeads} key/value heads,
-			so query head {head + 1} reads shared head {kvHead + 1}.
-		{:else}Every head has its own keys and values.
-		{/if}{causal
-			? 'Text and image positions sit under the same causal mask.'
-			: 'Every patch attends to all patches of the image.'} The weights always sum to 1 over all {sequenceLength}
-		positions, including the ones the page does not show.
-	</p>
+	<p class="vlm-note">{headNote} {maskNote}</p>
 </VlmFormulaPopup>
 
 <style>

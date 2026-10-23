@@ -141,7 +141,8 @@
 		display: block;
 		font-size: 9px;
 		color: #aa98ba;
-		margin-top: 4px;
+		/* Below the residual label that the operation group draws over the title row. */
+		margin-top: 30px;
 		white-space: normal;
 	}
 	.content {

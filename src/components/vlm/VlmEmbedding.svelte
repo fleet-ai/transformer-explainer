@@ -9,6 +9,7 @@
 		vlmInspectorStage
 	} from '$lib/vlm/store';
 	import VectorCanvas from '../common/VectorCanvas.svelte';
+	import VlmControls from './VlmControls.svelte';
 	export let className: string | undefined = undefined;
 	function inspect(index: number) {
 		moeTokenIndex.set(index);
@@ -20,37 +21,50 @@
 <div class={`embedding ${className ?? ''}`}>
 	<div class="title">
 		<button on:click={() => vlmInspectorStage.set('embedding')}
-			>{$vlmPhase === 'vision' ? 'Image patches ⊕ position' : 'Image + text embeddings'}</button
+			>{$vlmPhase === 'vision' ? 'Patch embedding' : 'Text + image input'}</button
 		>
 	</div>
 	<div class="content relative">
-		<div class="token-column resize-watch">
-			<div class="column token-string">
-				{#each $tokens as token, index}<div class="cell">
-						<button
-							class="label"
-							class:image-token={$vlmPhase === 'language' &&
+		<div class="embedding-inputs">
+			<div class="token-column resize-watch">
+				<div class="column token-string">
+					{#each $tokens as token, index}<div class="cell">
+							<button
+								class="label"
+								class:image-token={$vlmPhase === 'language' &&
+									$vlmRecording?.document.imageTokenPositions.includes($vlmVisiblePositions[index])}
+								on:click={() => inspect(index)}>{token}</button
+							>
+						</div>{/each}
+				</div>
+			</div>
+			<div class="vector-column block-start-column">
+				<div class="column vectors embedding-column">
+					{#each $tokens as token, index}<button
+							class="vector bg-gray-300"
+							class:from-image={$vlmPhase === 'language' &&
 								$vlmRecording?.document.imageTokenPositions.includes($vlmVisiblePositions[index])}
-							on:click={() => inspect(index)}>{token}</button
-						>
-					</div>{/each}
+							title={$vlmPhase === 'language' &&
+							$vlmRecording?.document.imageTokenPositions.includes($vlmVisiblePositions[index])
+								? 'Image token · the connector output, unchanged'
+								: undefined}
+							aria-label={`Inspect embedding for ${token}`}
+							on:click={() => inspect(index)}
+							><VectorCanvas data={$moeExample?.embeddingPreview[index]} /></button
+						>{/each}
+				</div>
 			</div>
 		</div>
-		<div class="vector-column block-start-column">
-			<div class="column vectors embedding-column">
-				{#each $tokens as token, index}<button
-						class="vector bg-gray-300"
-						aria-label={`Inspect embedding for ${token}`}
-						on:click={() => inspect(index)}
-						><VectorCanvas data={$moeExample?.embeddingPreview[index]} /></button
-					>{/each}
-			</div>
-		</div>
+		<VlmControls />
 	</div>
 </div>
 
 <style>
 	.content {
+		display: flex;
+		flex-direction: column;
+	}
+	.embedding-inputs {
 		display: flex;
 		gap: 12px;
 	}
@@ -72,5 +86,8 @@
 	.vector {
 		border: 0;
 		padding: 0;
+	}
+	.vector.from-image {
+		box-shadow: inset 2px 0 0 #a78bfa;
 	}
 </style>
