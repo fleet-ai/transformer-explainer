@@ -20,7 +20,11 @@
 	import VectorCanvas from '../common/VectorCanvas.svelte';
 	export let className: string | undefined = undefined;
 	setContext('block-id', 'mlp');
+	/** Dense's MLP: 192 → a 4× taller 768 column → 192, with GELU as a box on the wide column. */
+	let geluHot = false;
 	$: layer = $vitRecording?.layers[$blockIdx];
+	$: hidden = $vitRecording?.document.model.hiddenSize ?? 192;
+	$: inner = $vitRecording?.document.model.intermediateSize ?? 768;
 	function inspect(stage: string, index: number) {
 		moeTokenIndex.set(index);
 		vitSelectedPosition.set($vitVisiblePositions[index]);
@@ -29,14 +33,14 @@
 </script>
 
 <div class={`mlp ${className ?? ''}`} data-click="mlp-step">
-	<div class="title">MLP <small>LayerNorm · 192 → 768 → 192 · GELU</small></div>
+	<div class="title">MLP <small>LayerNorm · {hidden} → {inner} → {hidden} · GELU</small></div>
 	<div class="content resize-watch relative">
-		<div class="first-layer layer">
+		<div class="first-layer">
 			<div class="column initial">
 				{#each $tokens as token, index}<div class="cell">
 						<span class="label float">{token}</span><button
 							class="vector bg-purple-200"
-							aria-label={`Up projection multiplication for ${token}`}
+							aria-label={`Up projection for ${token}`}
 							on:click={() => inspect('up', index)}
 							><VectorCanvas
 								colorScale="purple"
@@ -55,24 +59,35 @@
 			/><OperationGroup type="ln" id="mlp-ln" />
 		</div>
 		<div class="second-layer">
-			<div class="column">
-				<span class="subtitle">768D · GELU</span>{#each $tokens as token, index}<button
+			<div class="column" class:hot={geluHot}>
+				<span class="subtitle">{inner}D</span>{#each $tokens as token, index}<button
 						class="vector expanded-vector bg-indigo-200"
-						aria-label={`Down projection multiplication for ${token}`}
+						aria-label={`Down projection for ${token}`}
 						on:click={() => inspect('down', index)}
 						><VectorCanvas
 							colorScale="purple"
 							data={layer ? row(layer, 'gelu', $vitVisiblePositions[index], 8) : undefined}
 						/></button
 					>{/each}
+				<button
+					class="gelu-box"
+					class:hot={geluHot}
+					title={`GELU · applied to each of the ${inner} coordinates`}
+					aria-label={`Open the GELU activation for ${$tokens[$moeTokenIndex] ?? 'this token'}`}
+					on:click={() => inspect('gelu', $moeTokenIndex)}
+					on:mouseenter={() => (geluHot = true)}
+					on:mouseleave={() => (geluHot = false)}
+					on:focus={() => (geluHot = true)}
+					on:blur={() => (geluHot = false)}>GELU</button
+				>
 			</div>
 		</div>
-		<div class="out-layer layer">
+		<div class="out-layer">
 			<OperationGroup type="residual-end" id="mlp-residual" />
 			<div class="column out mlp-out-column">
 				{#each $tokens as token, index}<button
 						class="vector bg-blue-200"
-						aria-label={`Block output ${token}`}
+						aria-label={`Down projection for ${token}`}
 						on:click={() => inspect('down', index)}
 						><VectorCanvas
 							colorScale="blue"
@@ -85,19 +100,6 @@
 </div>
 
 <style>
-	.expanded-vector {
-		pointer-events: auto;
-		height: calc(var(--vector-height) * 4);
-	}
-	.second-layer {
-		pointer-events: none;
-	}
-	.label.float {
-		white-space: nowrap;
-		max-width: 5rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
 	.title small {
 		display: block;
 		font-size: 9px;
@@ -109,27 +111,38 @@
 		grid-template-columns: minmax(0, 1.6fr) minmax(12px, 1fr) auto;
 		align-items: start;
 	}
-	.layer {
+	.first-layer,
+	.out-layer {
 		display: flex;
 	}
-	.operation {
-		font-size: 9px;
-		border: 1px solid #dbc9eb;
-		border-radius: 3px;
-		background: #fbf8fd;
-		color: #9465b0;
-		white-space: nowrap;
-		padding: 0 7px;
+	.first-layer {
+		margin-left: 10px;
 	}
-	.operation:hover {
-		background: #eee0f8;
+	.label.float {
+		white-space: nowrap;
+		max-width: 5rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.vector {
+		border: 0;
+		padding: 0;
 	}
 	.second-layer {
 		position: relative;
 		z-index: 20;
+		pointer-events: none;
 	}
-	.first-layer {
-		margin-left: 10px;
+	.second-layer .column {
+		align-items: center;
+	}
+	.expanded-vector {
+		pointer-events: auto;
+		height: calc(var(--vector-height) * 4);
+		transition: filter 0.12s;
+	}
+	.column.hot .expanded-vector {
+		filter: brightness(0.94) saturate(1.4);
 	}
 	.subtitle {
 		position: absolute;
@@ -139,13 +152,34 @@
 		font-size: 10px;
 		white-space: nowrap;
 	}
-	.vector {
-		border: 0;
+	/* The activation sits on the wide column, between W₁'s band and W₂'s. */
+	.gelu-box {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		/* Above the column's vectors. */
+		z-index: 110;
+		pointer-events: auto;
+		width: 42px;
+		height: 24px;
 		padding: 0;
+		border: 1.5px solid #cbb4df;
+		border-radius: 4px;
+		background: #faf7fd;
+		color: #694684;
+		font:
+			10.5px Arial,
+			sans-serif;
+		cursor: pointer;
+		user-select: none;
 	}
-	.projection-down,
-	.feedforward-input {
-		position: relative;
-		z-index: 20;
+	.gelu-box.hot {
+		background: #f1e9f9;
+		border-color: #b9a0d4;
+	}
+	.gelu-box:focus-visible {
+		outline: 2px solid #9362c1;
+		outline-offset: 1px;
 	}
 </style>
