@@ -33,7 +33,7 @@
 </script>
 
 <div class={`mlp ${className ?? ''}`} data-click="mlp-step">
-	<div class="title">MLP <small>LayerNorm · {hidden} → {inner} → {hidden} · GELU</small></div>
+	<div class="title"><span>MLP <small>{hidden} → {inner} → {hidden} · GELU</small></span></div>
 	<div class="content resize-watch relative">
 		<div class="first-layer">
 			<div class="column initial">
@@ -101,10 +101,9 @@
 
 <style>
 	.title small {
-		display: block;
+		margin-left: 4px;
 		font-size: 9px;
 		color: #aa98ba;
-		margin-top: 8px;
 	}
 	.content {
 		display: grid;

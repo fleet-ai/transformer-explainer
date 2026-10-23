@@ -61,16 +61,51 @@
 		opacity: 0.7;
 		user-select: none;
 	}
-	/* A wider final-block column leaves room for the Wcls box on the [CLS] band. */
-	.vit-transformer :global(.main-section.squeeze .steps) {
-		grid-template-columns: 120px minmax(0, 1fr) 62px 210px;
+	/* Columns grow with the window, so the blocks do not absorb all of it. The final-block column
+	   leaves room for the Wcls box on the [CLS] band. */
+	.vit-transformer :global(.main-section.squeeze .nodes .steps) {
+		grid-template-columns: clamp(124px, 8vw, 156px) minmax(0, 1fr) 62px clamp(210px, 13vw, 250px);
+	}
+	.vit-transformer
+		:global(.main-section.squeeze:not(.attention-open) .nodes .steps .blocks .block-steps) {
+		grid-template-columns: clamp(70px, 6vw, 120px) minmax(0, 1.4fr) minmax(235px, 0.9fr);
 	}
 	/* Dense's Probabilities ⊕ needs its logits column, and room above for its subtitles, while open. */
+	.vit-transformer :global(.main-section.squeeze .nodes .steps:has(.softmax.expanded)) {
+		grid-template-columns: clamp(124px, 8vw, 156px) minmax(0, 1fr) 62px clamp(300px, 18vw, 340px);
+	}
 	.vit-transformer :global(.main-section.squeeze .steps.expanded .softmax.expanded > .title) {
 		padding-bottom: 40px;
 	}
-	/* Dense's Probabilities ⊕ needs its logits column while it is open. */
-	.vit-transformer :global(.main-section.squeeze .steps:has(.softmax.expanded)) {
-		grid-template-columns: 120px minmax(0, 1fr) 62px 300px;
+	/* Step titles sit above the Residual labels, as in Dense. */
+	.vit-transformer :global(.main-section.squeeze .steps .step:not(.softmax) > .title) {
+		padding-bottom: 38px;
+	}
+	/* Below the white "Transformer Block n" header, above the residual bracket. */
+	.vit-transformer :global(.main-section.squeeze .residual-text) {
+		top: -1.45rem;
+		font-size: 0.8rem;
+		line-height: 1;
+	}
+	/* Room between the Q/K/V bank and the head card for the bands that cross into it. */
+	.vit-transformer :global(.main-section.squeeze .attention .heads) {
+		padding-left: clamp(36px, 4.5vw, 84px) !important;
+	}
+	/* Room between each head list's title and its first token. */
+	.vit-transformer :global(.main-section.squeeze .attention .head-block > .qkv) {
+		padding-top: 32px !important;
+	}
+	.vit-transformer :global(.main-section.squeeze .attention .head-block > .qkv .column) {
+		gap: 11px;
+	}
+	.vit-transformer :global(.main-section.squeeze .attention .column .title) {
+		top: -27px;
+	}
+	/* ImageNet class names need more than the compact 70px. */
+	.vit-transformer :global(.main-section.squeeze .softmax:not(.expanded) .content) {
+		grid-template-columns: 96px minmax(0, 1fr);
+	}
+	.vit-transformer :global(.main-section.squeeze .softmax:not(.expanded) .token-string) {
+		width: 96px;
 	}
 </style>

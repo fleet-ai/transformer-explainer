@@ -46,11 +46,17 @@
 	$: squeeze = ['hybrid', 'vision-language', 'vit'].includes($moeModel?.architecture ?? '');
 	$: compact = squeeze || $moeModel?.architecture === 'encoder-decoder';
 	$: titleHeight = compact ? 60 : rootRem * 5;
+	/** ViT rows use more of the page; the cap keeps its Q/K/V bank about as tall as the head card. */
+	const rowBudget = (height: number) =>
+		Math.min(
+			height - ($moeModel?.architecture === 'vit' ? 36 : 24),
+			$moeModel?.architecture === 'vit' ? 660 : 480
+		);
 	const calculateVectorHeight = () => {
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
 		const height = Math.min(
 			Math.max(
-				((compact ? Math.min(vizHeight - 24, 480) : vizHeight) - titleHeight - gaps) /
+				((compact ? rowBudget(vizHeight) : vizHeight) - titleHeight - gaps) /
 					$tokens.length /
 					(compact ? 4 : maxVectorScale),
 				squeeze ? 6 : compact ? 8 : minVectorHeight
@@ -60,7 +66,7 @@
 		vectorHeight.set(height);
 		headContentHeight.set(Math.max($tokens.length * height * 3 + gaps, rootRem * 20));
 	};
-	$: if (vizHeight || $tokens.length) calculateVectorHeight();
+	$: if (vizHeight || $tokens.length || $moeModel) calculateVectorHeight();
 	async function loadTraces() {
 		error = '';
 		try {
