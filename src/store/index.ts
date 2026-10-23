@@ -48,6 +48,8 @@ export const moeExample = writable<TraceExample | null>(null);
 export const moeModel = writable<TraceDocument['model'] | null>(null);
 export const moeAttentionOperations = writable<AttentionOperationsDocument | null>(null);
 export const moeTokenIndex = writable(0);
+/** Bump to make the Sankey bands redraw after a card or box moves without resizing. */
+export const bandRedraw = writable(0);
 
 export const modelMetaMap: Record<string, ModelMetaData> = {
 	'granite-moe': { layer_num: 24, attention_head_num: 16, dimension: 1024 },
