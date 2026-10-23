@@ -28,7 +28,13 @@
 		TRANSFORMER_BLOCKS
 	} from '~/constants/opacity';
 	import { textPages } from '~/utils/textbookPages';
-	import { hybridRecording, hybridInspector, hybridMambaView, hybridHot } from '$lib/hybrid/store';
+	import {
+		hybridRecording,
+		hybridInspector,
+		hybridMambaView,
+		hybridHot,
+		hybridStage
+	} from '$lib/hybrid/store';
 	import { t5Inspector } from '$lib/seq2seq/store';
 	import { getRenderedEndpointPairs } from '~/utils/sankeyGeometry';
 
@@ -633,19 +639,48 @@
 						hybridBand(
 							'hybrid-down',
 							'.ffn-output .second-layer .vector',
-							'.ffn-output .column.ffn-out .vector',
+							'.ffn-output .linear-in',
 							'indigo-purple',
 							'ffn-down',
-							'Wdown · 8192 → 2048 · click to multiply'
+							'Wdown · 8192 → 2048, then Linear · 2048 → 2048 gives t · click to multiply'
 						),
-						hybridBand(
-							'hybrid-linear',
-							'.ffn-output .column.ffn-out .vector',
-							'.ffn-output .column.t-out .vector',
-							'purple-purple',
-							'linear',
-							'Linear · 2048 → 2048 gives t · click to multiply'
-						)
+						{
+							// t leaves the shared transformer only into this block's Mamba half.
+							...hybridBand(
+								'hybrid-next',
+								'.ffn-output .linear-out',
+								'.ffn-output .next-port',
+								'purple-purple',
+								'next',
+								't is added to x on the way into the Mamba mixer · click to go there'
+							),
+							fan: true,
+							opacityOf: (_target: Element, _source: Element, index: number) =>
+								index === $moeTokenIndex ? 0.45 : 0.14,
+							onMouseClick: (e: Event) => {
+								e.stopPropagation();
+								hybridStage.set('mamba');
+							}
+						},
+						{
+							// The Mamba half's result is this block's output, as in every Mamba block.
+							...hybridBand(
+								'hybrid-after',
+								'.ffn-output .next-out-port',
+								'.ffn-output .column.out .vector',
+								'indigo-blue',
+								'next',
+								'Block output x + Mamba(RMSNorm(x + t)) · click to open the Mamba half'
+							),
+							fan: true,
+							tokenFrom: 'target' as const,
+							opacityOf: (_target: Element, _source: Element, index: number) =>
+								index === $moeTokenIndex ? 0.45 : 0.14,
+							onMouseClick: (e: Event) => {
+								e.stopPropagation();
+								hybridStage.set('mamba');
+							}
+						}
 					];
 
 	$: pathMap = {

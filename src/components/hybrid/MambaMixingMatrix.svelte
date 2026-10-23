@@ -1,27 +1,24 @@
 <script lang="ts">
 	import Matrix from '../common/Matrix.svelte';
-	import { attentionHeadIdx, blockIdx, expandedBlock, hoveredMatrixCell } from '~/store';
+	import { attentionHeadIdx, blockIdx, expandedBlock, hoveredMatrixCell, rootRem } from '~/store';
 	import { hybridMambaOperations, hybridInspector } from '$lib/hybrid/store';
 	import { scaleLinear } from 'd3';
 
 	/** The scan of one SSM head as a causal token-mixing matrix, drawn like the attention circles. */
-	let width = 0;
 	$: expanded = $expandedBlock.id === 'attention';
 	$: matrix = $hybridMambaOperations?.matrix;
 	$: stages = matrix
 		? expanded
 			? [
 					{ label: 'C · Bᵀ', data: matrix.scores, kind: 'signed', masked: false },
-					{ label: 'Decay L(Δ, A) · causal', data: matrix.decay, kind: 'decay', masked: true },
-					{ label: 'Mixing M = L ∘ C·Bᵀ', data: matrix.mixing, kind: 'signed', masked: true }
+					{ label: 'Decay L(Δ, A)', data: matrix.decay, kind: 'decay', masked: true },
+					{ label: 'M = L ∘ C·Bᵀ', data: matrix.mixing, kind: 'signed', masked: true }
 				]
 			: [{ label: 'State-space mixing', data: matrix.mixing, kind: 'signed', masked: true }]
 		: [];
 	$: columns = matrix?.mixing.length ?? 1;
-	$: cellSize = Math.max(
-		3,
-		Math.min(18, ((width - (stages.length - 1) * 20) / stages.length - (columns - 1) * 2) / columns)
-	);
+	// The Dense attention matrix's cell size, so the card sizes itself the same way.
+	$: cellSize = Math.min(20, Math.max((1 / columns) * rootRem * 6, 10));
 	function color(data: number[][], kind: string) {
 		const values = data.flat().filter(Number.isFinite);
 		const max = Math.max(...values.map(Math.abs), 1e-6);
@@ -35,7 +32,7 @@
 	}
 </script>
 
-<div class="mamba-matrices resize-watch" class:expanded bind:clientWidth={width}>
+<div class="mamba-matrices resize-watch" class:expanded>
 	<button
 		class="delta-box"
 		title="Step size Δ and the decay e^(ΔA): one per head and token"
@@ -85,16 +82,17 @@
 </div>
 
 <style>
+	/* The padding of the Dense attention matrix, so the head card is as wide as the attention card. */
 	.mamba-matrices {
-		width: 100%;
 		min-width: 0;
+		padding: 0 36px;
 		position: relative;
 		z-index: 35;
 	}
 	.stages {
 		display: grid;
-		grid-template-columns: repeat(var(--stages), minmax(0, 1fr));
-		gap: 20px;
+		grid-template-columns: repeat(var(--stages), auto);
+		gap: 32px;
 		align-items: center;
 	}
 	.stage {
@@ -127,9 +125,12 @@
 		color: #8b93a1;
 		white-space: nowrap;
 	}
+	.expanded .stage-label {
+		font-size: 11px;
+	}
 	.stage-arrow {
 		position: absolute;
-		left: -17px;
+		left: -24px;
 		top: 50%;
 		color: #bbc0ca;
 		font-size: 18px;
@@ -156,7 +157,7 @@
 		border-radius: 3px;
 		cursor: pointer;
 		position: absolute;
-		right: 0;
+		right: 36px;
 		bottom: calc(100% + 14px);
 		display: grid;
 		justify-items: center;

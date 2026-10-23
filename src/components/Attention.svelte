@@ -50,7 +50,7 @@
 	}
 	$: isMLA = $moeModel?.architecture === 'mla';
 	$: isMoE = ($moeModel?.architecture ?? 'moe') === 'moe';
-	$: squeeze = ['vit', 'vision-language', 'hybrid'].includes($moeModel?.architecture ?? '');
+	$: squeeze = ['vit', 'vision-language'].includes($moeModel?.architecture ?? '');
 	$: isVit = $moeModel?.architecture === 'vit';
 	$: isHybrid = $moeModel?.architecture === 'hybrid';
 	$: isVlm = $moeModel?.architecture === 'vision-language';
@@ -119,7 +119,7 @@
 		></div>
 		<div class="heads">
 			<HeadStack>
-				{#if !squeeze && !isMLA && !isMoE && $moeModel?.architecture !== 'encoder-decoder'}<div
+				{#if !squeeze && !isMLA && !isMoE && !isHybrid && $moeModel?.architecture !== 'encoder-decoder'}<div
 						class="head-flow-wrap"
 					>
 						{#if isPlain}<div class="rotary-sequence">

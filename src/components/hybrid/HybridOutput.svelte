@@ -165,41 +165,52 @@
 							on:click={() => open('ffn-product')}>⊙</button
 						>
 					</div>
-					{#each $tokens as token, index}<div
-							class="vector expanded-vector bg-indigo-200"
-							style={`height:${4 * $vectorHeight}px`}
-						>
+					{#each $tokens as token, index}<div class="vector x4 expanded-vector bg-indigo-200">
 							<VectorCanvas colorScale="purple" data={preview('product', index)} />
 						</div>{/each}
 					<span class="band-label up">Wup, Wgate ⊕</span>
 					<span class="band-label down">Wdown ⊕</span>
 				</div>
 			</div>
-			<div class="column ffn-out">
-				{#each $tokens as token, index}<div class="vector bg-purple-200">
-						<VectorCanvas colorScale="purple" data={preview('down', index)} />
-					</div>{/each}
-			</div>
 			<button
 				class="op-box linear-box"
-				title="This block's own linear layer, 2048 → 2048"
-				class:hot={$hybridHot === 'linear'}
-				on:mouseenter={hover('linear').enter}
-				on:mouseleave={hover('linear').leave}
-				on:click={() => open('linear')}>Linear<small>{hidden} → {hidden}</small></button
+				title="This block's own linear layer, 2048 → 2048, after Wdown; its output is t"
+				class:hot={$hybridHot === 'ffn-down'}
+				on:mouseenter={hover('ffn-down').enter}
+				on:mouseleave={hover('ffn-down').leave}
+				on:click={() => open('linear')}
+				>{#each $tokens as _, index}<span
+						class="linear-in"
+						style={`top:${index * ($vectorHeight + 8)}px;height:${$vectorHeight}px`}
+					></span><span
+						class="linear-out"
+						style={`top:${index * ($vectorHeight + 8)}px;height:${$vectorHeight}px`}
+					></span>{/each}Linear<small>{hidden} → {hidden}</small></button
 			>
-			<div class="column t-out">
-				<span class="subtitle">t</span>
-				{#each $tokens as token, index}<div class="vector bg-purple-300">
-						<VectorCanvas colorScale="purple" data={preview('transformerOutput', index)} />
-					</div>{/each}
-			</div>
 			<button
 				class="op-box next-half"
-				title="The second half of this block: the Mamba mixer"
+				class:hot={$hybridHot === 'next'}
+				title="This block's Mamba half: x + t → RMSNorm → Mamba2 mixer, added to x"
+				on:mouseenter={hover('next').enter}
+				on:mouseleave={hover('next').leave}
 				on:click={() => hybridStage.set('mamba')}
-				>Mamba mixer ›<small>x + t → RMSNorm</small></button
+				><span class="next-port" aria-hidden="true"></span><span
+					class="next-out-port"
+					aria-hidden="true"
+				></span><span class="t-label" aria-hidden="true">t</span>Mamba ›<small>x + t · 2 of 2</small
+				></button
 			>
+			<div class="out-layer layer">
+				<OperationGroup type="residual-end" id="embedding-residual" />
+				<div class="column out mlp-out-column">
+					{#each $tokens as token, index}<button
+							class="vector bg-blue-200"
+							aria-label={`Block output ${token}, after the Mamba half`}
+							on:click={() => hybridStage.set('mamba')}
+							><VectorCanvas colorScale="blue" data={layer?.blockOutputPreview?.[index]} /></button
+						>{/each}
+				</div>
+			</div>
 		</div>
 	</div>{/if}
 
@@ -341,14 +352,14 @@
 		cursor: pointer;
 	}
 	.ffn-output .first-layer {
-		margin-right: 62px;
+		margin-right: 44px;
 	}
-	.ffn-output .second-layer {
-		margin-right: 56px;
+	.ffn-output .out-layer {
+		margin-left: 0;
 	}
 	.ffn-ops {
 		position: absolute;
-		left: calc(100% + 6px);
+		right: calc(100% + 4px);
 		top: 0;
 		display: flex;
 		flex-direction: column;
@@ -373,24 +384,59 @@
 	.expanded-vector {
 		pointer-events: auto;
 	}
+	/* The Wdown band runs into this box; its output t runs on into the Mamba step. */
 	.linear-box {
 		z-index: 120;
-		margin-left: 14px;
 		height: calc(6 * var(--vector-height) + 40px);
-		width: 60px;
+		width: 46px;
+		margin-left: auto;
 		font-size: 10px;
 	}
 	.linear-box small {
+		font-size: 7.5px;
 		white-space: nowrap;
 	}
-	.t-out {
-		margin-left: 14px;
+	.linear-in,
+	.linear-out {
+		position: absolute;
+		width: 2px;
+		pointer-events: none;
 	}
+	.linear-in {
+		left: -2px;
+	}
+	.linear-out {
+		right: -2px;
+	}
+	/* The collapsed second half: t goes in, the block output comes out. */
 	.next-half {
 		z-index: 120;
-		margin-left: auto;
-		margin-top: calc(6 * var(--vector-height) + 64px);
-		padding: 4px 8px;
+		margin: calc(3 * var(--vector-height) - 6px) 18px 0 20px;
+		height: 52px;
+		padding: 4px 6px;
 		white-space: nowrap;
+	}
+	.t-label {
+		position: absolute;
+		right: calc(100% + 6px);
+		top: -14px;
+		font-size: 10px;
+		color: #a07cc0;
+	}
+	.next-out-port {
+		position: absolute;
+		right: -2px;
+		top: 0;
+		width: 2px;
+		height: 100%;
+		pointer-events: none;
+	}
+	.next-port {
+		position: absolute;
+		left: -2px;
+		top: 0;
+		width: 2px;
+		height: 100%;
+		pointer-events: none;
 	}
 </style>

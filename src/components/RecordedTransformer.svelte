@@ -43,7 +43,7 @@
 	let active = false;
 	let error = '';
 	let vizHeight = 0;
-	$: squeeze = ['hybrid', 'vision-language', 'vit'].includes($moeModel?.architecture ?? '');
+	$: squeeze = ['vision-language', 'vit'].includes($moeModel?.architecture ?? '');
 	$: compact = squeeze || $moeModel?.architecture === 'encoder-decoder';
 	$: titleHeight = compact ? 60 : rootRem * 5;
 	const calculateVectorHeight = () => {
@@ -116,7 +116,7 @@
 		class="main-section h-full w-full"
 		class:hybrid-model={$moeModel?.architecture === 'hybrid'}
 		class:expert-layout={!$moeModel?.architecture ||
-			['moe', 'mla'].includes($moeModel.architecture)}
+			['moe', 'mla', 'hybrid'].includes($moeModel.architecture)}
 		class:attention-open={$expandedBlock.id === 'attention'}
 		class:cross-open={$expandedBlock.id === 'cross-attention'}
 		class:latent-model={$moeModel?.architecture === 'mla'}
@@ -250,6 +250,14 @@
 
 	.expert-layout.attention-open :global(.step.softmax > .title) {
 		font-size: 0.8rem;
+	}
+	/* The hover outline is padded per head; Zamba2's 32 heads would push it below the page. */
+	.hybrid-model :global(.attention-bounding) {
+		padding-bottom: 40px !important;
+	}
+	/* Zamba2's MLP column holds more steps than an expert card; take some of the band gap. */
+	.hybrid-model :global(.attention .heads) {
+		padding-right: 4rem !important;
 	}
 	.expert-layout :global(.mlp.moe) {
 		min-width: 0;
@@ -432,14 +440,17 @@
 	.squeeze :global(.attention-bounding) {
 		display: none;
 	}
+	/* Like the Dense card: the key, query and value groups sit together in the middle with a fixed
+	   gap, and the card is as tall as they are, never taller than the page budget. */
 	.squeeze :global(.attention .head-block) {
-		height: var(--compact-card-height) !important;
+		height: auto !important;
 		min-height: 0 !important;
+		max-height: var(--compact-card-height);
 	}
 	.squeeze :global(.attention .head-block > .qkv) {
-		padding: 24px 0 24px 70px !important;
-		gap: 24px;
-		justify-content: space-between;
+		padding: 40px 0 28px 70px !important;
+		gap: 52px;
+		justify-content: center;
 		flex-shrink: 0;
 	}
 	.squeeze :global(.attention.rotary .head-block > .qkv) {
