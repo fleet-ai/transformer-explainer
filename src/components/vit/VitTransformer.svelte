@@ -63,7 +63,7 @@
 	}
 	/* ViT's rows grow with the window (RecordedTransformer's height budget), so the head card grows too. */
 	.vit-transformer :global(.main-section.squeeze) {
-		--compact-card-height: clamp(260px, calc(100dvh - 290px), 740px);
+		--compact-card-height: clamp(260px, calc(100dvh - 300px), 500px);
 		--vit-label-size: clamp(11px, calc(var(--vector-height) * 0.72), 14px);
 		--vit-token-column: clamp(132px, 8.5vw, 168px);
 	}
@@ -100,7 +100,7 @@
 	}
 	/* The head card's K, Q and V token lists spread out as the card grows (3 lists of 9 rows). */
 	.vit-transformer :global(.main-section.squeeze .attention .head-block > .qkv .column) {
-		gap: clamp(9px, calc((var(--compact-card-height) - 150px) / 27), 17px);
+		gap: clamp(9px, calc((var(--compact-card-height) - 150px) / 27), 12px);
 	}
 	/* Keep each list's caption (Key 1 · Projected · 64D) clear of its first token label. */
 	.vit-transformer :global(.main-section.squeeze .attention .head-block .column .title) {

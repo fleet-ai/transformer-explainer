@@ -47,7 +47,7 @@
 	$: compact = squeeze || $moeModel?.architecture === 'encoder-decoder';
 	$: titleHeight = compact ? 60 : rootRem * 5;
 	/** ViT's rows grow with the window, as Dense's do; other compact tabs keep a fixed budget. */
-	$: heightBudget = $moeModel?.architecture === 'vit' ? 760 : 480;
+	$: heightBudget = $moeModel?.architecture === 'vit' ? 560 : 480;
 	const calculateVectorHeight = () => {
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
 		const height = Math.min(
