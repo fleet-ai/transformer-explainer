@@ -1,5 +1,4 @@
 <script lang="ts">
-	import RecordedProjectionPopup from '../common/RecordedProjectionPopup.svelte';
 	import { recordedAssetUrl } from '$lib/recorded-json.js';
 
 	import { base } from '$app/paths';
@@ -8,7 +7,7 @@
 	import VlmEmbedding from './VlmEmbedding.svelte';
 	import VlmFeedForward from './VlmFeedForward.svelte';
 	import VlmConnectorOutput from './VlmConnectorOutput.svelte';
-	import VlmInspector from './VlmInspector.svelte';
+	import VlmPopups from './VlmPopups.svelte';
 	import { loadVlmRecording, selectVlmPhase, selectVlmPage } from '$lib/vlm/adapter';
 	import {
 		vlmRecording,
@@ -70,10 +69,7 @@
 		</div>{/if}{#if $vlmError}<div class="loading" role="alert">
 			{$vlmError}<button on:click={() => selectVlmPhase($vlmPhase)}>Retry</button>
 		</div>{/if}
-	{#if ['qkv', 'up', 'down', 'gate-projection'].includes($vlmInspectorStage ?? '')}<RecordedProjectionPopup
-			stage={$vlmInspectorStage ?? ''}
-			on:close={() => vlmInspectorStage.set(null)}
-		/>{:else if $vlmInspectorStage}<VlmInspector
+	{#if $vlmInspectorStage}<VlmPopups
 			stage={$vlmInspectorStage}
 			on:close={() => vlmInspectorStage.set(null)}
 		/>{/if}
