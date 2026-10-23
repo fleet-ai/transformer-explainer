@@ -43,7 +43,7 @@
 	let active = false;
 	let error = '';
 	let vizHeight = 0;
-	$: squeeze = ['hybrid', 'vision-language', 'vit'].includes($moeModel?.architecture ?? '');
+	$: squeeze = ['vision-language', 'vit'].includes($moeModel?.architecture ?? '');
 	$: compact = squeeze || $moeModel?.architecture === 'encoder-decoder';
 	$: titleHeight = compact ? 60 : rootRem * 5;
 	const calculateVectorHeight = () => {
@@ -116,7 +116,7 @@
 		class="main-section h-full w-full"
 		class:hybrid-model={$moeModel?.architecture === 'hybrid'}
 		class:expert-layout={!$moeModel?.architecture ||
-			['moe', 'mla'].includes($moeModel.architecture)}
+			['moe', 'mla', 'hybrid'].includes($moeModel.architecture)}
 		class:attention-open={$expandedBlock.id === 'attention'}
 		class:cross-open={$expandedBlock.id === 'cross-attention'}
 		class:latent-model={$moeModel?.architecture === 'mla'}
@@ -250,6 +250,14 @@
 
 	.expert-layout.attention-open :global(.step.softmax > .title) {
 		font-size: 0.8rem;
+	}
+	/* The hover outline is padded per head; Zamba2's 32 heads would push it below the page. */
+	.hybrid-model :global(.attention-bounding) {
+		padding-bottom: 40px !important;
+	}
+	/* Zamba2's MLP column holds more steps than an expert card; take some of the band gap. */
+	.hybrid-model :global(.attention .heads) {
+		padding-right: 4rem !important;
 	}
 	.expert-layout :global(.mlp.moe) {
 		min-width: 0;

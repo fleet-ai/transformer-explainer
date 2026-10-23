@@ -35,8 +35,8 @@
 		{
 			id: 'key',
 			name: 'B',
-			title: 'input matrix',
-			sub: `shared by all heads · ${state}D`,
+			title: 'input',
+			sub: `${state}D · all heads`,
 			color: 'bg-red-400',
 			scale: 'red',
 			data: ops?.B
@@ -44,8 +44,8 @@
 		{
 			id: 'query',
 			name: 'C',
-			title: 'output matrix',
-			sub: `shared by all heads · ${state}D`,
+			title: 'output',
+			sub: `${state}D · all heads`,
 			color: 'bg-blue-400',
 			scale: 'blue',
 			data: ops?.C
@@ -54,7 +54,7 @@
 			id: 'value',
 			name: 'x',
 			title: `head ${$attentionHeadIdx + 1}`,
-			sub: `${headSize}D · + D·x skips to y`,
+			sub: `${headSize}D · + D·x to y`,
 			color: 'bg-green-400',
 			scale: 'green',
 			data: ops?.x
@@ -77,7 +77,7 @@
 			{#if $hybridMambaView}<HeadStack>
 					<div
 						class="head-block flex w-full items-center justify-between px-2"
-						style={`height:${Math.max($headContentHeight - 110, 320)}px;`}
+						style={`height:${Math.max($headContentHeight - 110, 320)}px;min-height:calc(var(--vector-height) * ${($tokens.length * 3) / 16} + ${($tokens.length - 1) * 1.5 + 14}rem);`}
 					>
 						<div class="qkv flex h-full flex-col justify-center gap-[5rem] pl-[6rem]">
 							{#each columns as column}
