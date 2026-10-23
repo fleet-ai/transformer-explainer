@@ -14,13 +14,17 @@
 	export let width = 170;
 	export let height = 330;
 	export let maxGhosts = 5;
+	/** SwiGLU by default; an ungated MLP (as in vision encoders) runs Wup → activation → Wdown. */
+	export let gated = true;
+	export let activation: 'SiLU' | 'GELU' = 'SiLU';
+	export let bias = false;
 
 	const FLOW_HEIGHT = 266;
 	const BOX_HEIGHT = 26;
 	const BAND_PX = 30;
 	let flowWidth = 150;
-	type Step = 'up' | 'gate' | 'silu' | 'product' | 'down';
-	const STEPS: Step[] = ['up', 'gate', 'silu', 'product', 'down'];
+	type Step = 'up' | 'gate' | 'silu' | 'gelu' | 'product' | 'down';
+	const STEPS: Step[] = ['up', 'gate', 'silu', 'gelu', 'product', 'down'];
 	let step: Step | null = null;
 	/** Bands and the box of one operation light up together. */
 	let hovered: Step | null = null;
@@ -38,7 +42,8 @@
 		return { order, flow: (item.weight / maxWeight) * (order === 0 ? 1 : 0.75) };
 	});
 	$: projectionStep = step === 'up' || step === 'gate' || step === 'down' ? step : null;
-	$: formulaStep = step === 'silu' || step === 'product' ? step : null;
+	$: formulaStep = step === 'silu' || step === 'gelu' || step === 'product' ? step : null;
+	$: act = (activation === 'GELU' ? 'gelu' : 'silu') as Step;
 	$: if (entry || $moeTokenIndex >= 0 || $blockIdx >= 0) step = null;
 	// Flow geometry: the vector enters at the left edge, every projection sits on its own row,
 	// and the result leaves at the right edge.
@@ -52,10 +57,32 @@
 	const prodY = 184;
 	const downY = 226;
 	const outY = 250;
+	const actY = (rowY + downY) / 2;
 	const half = BOX_HEIGHT / 2;
 	$: mid1 = (rowY + half + prodY - 14) / 2;
 	$: mid2 = (siluY + half + prodY - 14) / 2;
-	$: bands = [
+	$: bands = gated ? gatedBands : plainBands;
+	$: boxes = gated ? gatedBoxes : plainBoxes;
+	$: plainBands = [
+		{
+			id: 'up',
+			w: hiddenPx,
+			d: `M8 ${yIn} C${xc} ${yIn} ${xc} ${rowY - 34} ${xc} ${rowY - half}`
+		},
+		{ id: 'up', w: interPx, d: `M${xc} ${rowY + half} V${actY - half}` },
+		{ id: act, w: interPx, d: `M${xc} ${actY + half} V${downY - half}` },
+		{
+			id: 'down',
+			w: hiddenPx,
+			d: `M${xc} ${downY + half} C${xc} ${outY} ${xc + 24} ${outY} ${flowWidth - 8} ${outY}`
+		}
+	];
+	$: plainBoxes = [
+		{ id: 'up', label: 'Wup', x: xc, y: rowY, w: boxWidth, h: undefined },
+		{ id: act, label: activation, x: xc, y: actY, w: boxWidth, h: undefined },
+		{ id: 'down', label: 'Wdown', x: xc, y: downY, w: boxWidth, h: undefined }
+	];
+	$: gatedBands = [
 		{
 			id: 'up',
 			w: hiddenPx,
@@ -84,18 +111,19 @@
 			d: `M${xc} ${downY + half} C${xc} ${outY} ${xc + 24} ${outY} ${flowWidth - 8} ${outY}`
 		}
 	];
-	$: boxes = [
-		{ id: 'up', label: 'Wup', x: xl, y: rowY, w: boxWidth },
-		{ id: 'gate', label: 'Wgate', x: xr, y: rowY, w: boxWidth },
-		{ id: 'silu', label: 'SiLU', x: xr, y: siluY, w: boxWidth },
+	$: gatedBoxes = [
+		{ id: 'up', label: 'Wup', x: xl, y: rowY, w: boxWidth, h: undefined },
+		{ id: 'gate', label: 'Wgate', x: xr, y: rowY, w: boxWidth, h: undefined },
+		{ id: 'silu', label: 'SiLU', x: xr, y: siluY, w: boxWidth, h: undefined },
 		{ id: 'product', label: '⊙', x: xc, y: prodY, w: 30, h: 30 },
-		{ id: 'down', label: 'Wdown', x: xc, y: downY, w: boxWidth }
+		{ id: 'down', label: 'Wdown', x: xc, y: downY, w: boxWidth, h: undefined }
 	];
 
 	const stepName: Record<string, string> = {
 		up: 'up projection (Wup)',
 		gate: 'gate projection (Wgate)',
 		silu: 'SiLU activation',
+		gelu: 'GELU activation',
 		product: 'element-wise product of up and SiLU(gate)',
 		down: 'down projection (Wdown)'
 	};
@@ -136,7 +164,9 @@
 					height={FLOW_HEIGHT}
 					viewBox={`0 0 ${flowWidth} ${FLOW_HEIGHT}`}
 					role="group"
-					aria-label={`${hiddenSize} input to up and gate projections, SiLU, product, down projection, ${hiddenSize} output`}
+					aria-label={gated
+						? `${hiddenSize} input to up and gate projections, SiLU, product, down projection, ${hiddenSize} output`
+						: `${hiddenSize} input to up projection, ${activation}, down projection, ${hiddenSize} output`}
 				>
 					{#each bands as band}<path
 							d={band.d}
@@ -230,6 +260,9 @@
 			{hiddenSize}
 			intermediateSize={entry.size}
 			{token}
+			{bias}
+			outputName={entry.kind === 'dense' ? 'Feed-forward output' : 'Expert output'}
+			downInput={gated ? 'Gated input' : `${activation} output`}
 			label={entry.label}
 			on:close={() => (step = null)}
 		/>

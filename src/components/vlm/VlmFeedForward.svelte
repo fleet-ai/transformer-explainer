@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { setContext } from 'svelte';
+	import { onMount, setContext, tick } from 'svelte';
 	import {
 		tokens,
 		blockIdx,
@@ -8,50 +8,68 @@
 		vectorHeight,
 		attentionHeadIdx,
 		modelMeta,
-		moeModel
+		moeModel,
+		bandRedraw
 	} from '~/store';
-	import {
-		vlmLayer,
-		vlmPhase,
-		vlmVisiblePositions,
-		vlmSelectedPosition,
-		vlmInspectorStage
-	} from '$lib/vlm/store';
+	import { vlmLayer, vlmPhase, vlmVisiblePositions, vlmSelectedPosition } from '$lib/vlm/store';
 	import { row } from '$lib/vit/types';
+	import { tokenLabel } from '$lib/moe/format';
+	import type { ExpertEntry } from '$lib/moe/types';
 	import OperationGroup from '../OperationGroup.svelte';
 	import VectorCanvas from '../common/VectorCanvas.svelte';
+	import ExpertCard from '../moe/ExpertCard.svelte';
+
+	/** Every token runs through the same dense MLP: GELU in the vision encoder, SwiGLU in the
+	 *  language decoder. It is drawn as the expert card of the MoE and MLA tabs, with one entry. */
 	export let className: string | undefined = undefined;
 	setContext('block-id', 'mlp');
-	function inspect(stage: string, index: number) {
-		moeTokenIndex.set(index);
-		vlmSelectedPosition.set($vlmVisiblePositions[index]);
-		vlmInspectorStage.set(stage);
+	const CARD_HEIGHT = 330;
+	const MAX_CARD_WIDTH = 190;
+	let network: HTMLDivElement;
+	let networkWidth = 200;
+	$: vision = $vlmPhase === 'vision';
+	$: hidden = $moeModel?.hiddenSize ?? 768;
+	$: intermediate = $moeModel?.intermediateSize ?? 3072;
+	$: layer = $moeExample?.layers[$blockIdx];
+	$: entries = [
+		{ id: -1, kind: 'dense', label: 'Feed-forward', weight: 1, size: intermediate }
+	] as ExpertEntry[];
+	$: cardWidth = Math.max(110, Math.min(MAX_CARD_WIDTH, networkWidth - 16));
+	$: if (network && ($vectorHeight || $tokens || $vlmPhase)) tick().then(measure);
+	$: if (cardWidth) tick().then(() => bandRedraw.update((count) => count + 1));
+
+	function measure() {
+		if (network) networkWidth = network.clientWidth;
 	}
+	function choose(index: number) {
+		moeTokenIndex.set(index);
+		vlmSelectedPosition.set($vlmVisiblePositions[index] ?? index);
+	}
+	onMount(() => {
+		const observer = new ResizeObserver(measure);
+		observer.observe(network);
+		measure();
+		return () => observer.disconnect();
+	});
 </script>
 
-<div class={`mlp ${className ?? ''}`} data-click="mlp-step">
+<div class={`mlp vlm-mlp ${className ?? ''}`} data-click="mlp-step">
 	<div class="title">
-		MLP <small
-			>{$vlmPhase === 'vision' ? 'GELU' : 'SwiGLU'} · {$moeModel?.hiddenSize} → {$moeModel?.intermediateSize}
-			→ {$moeModel?.hiddenSize}</small
+		Feed-forward <small
+			>{vision ? 'GELU' : 'SwiGLU'} · {hidden} → {intermediate} → {hidden} · every token</small
 		>
 	</div>
-	{#if $vlmPhase === 'language'}<button
-			class="gate-projection"
-			on:click={() => inspect('gate-projection', $moeTokenIndex)}>Wgate · gate projection ↗</button
-		>{/if}
 	<div class="content resize-watch relative">
-		<div class="first-layer layer">
+		<div class="first-stage">
 			<div class="column initial">
 				{#each $tokens as token, index}<div class="cell">
 						<span class="label float">{token}</span><button
-							class="vector bg-purple-200"
-							aria-label={`Up projection multiplication for ${token}`}
-							on:click={() => inspect('up', index)}
-							><VectorCanvas
-								colorScale="purple"
-								data={$moeExample?.layers[$blockIdx].attentionOutputPreview[index]}
-							/>
+							class="vector initial-vector bg-purple-200"
+							class:chosen={index === $moeTokenIndex}
+							aria-label={`Select ${token} for the feed-forward card`}
+							aria-pressed={index === $moeTokenIndex}
+							on:click={() => choose(index)}
+							><VectorCanvas colorScale="purple" data={layer?.attentionOutputPreview[index]} />
 							<div
 								class="sub-vector head1"
 								style={`position:absolute;top:${($vectorHeight / $modelMeta.attention_head_num) * $attentionHeadIdx}px;height:${$vectorHeight / $modelMeta.attention_head_num}px`}
@@ -64,72 +82,57 @@
 				id="mlp-residual"
 			/><OperationGroup type="ln" id="mlp-ln" />
 		</div>
-		<div class="second-layer">
-			<div class="column">
-				<span class="subtitle">{$vlmPhase === 'vision' ? 'GELU' : 'SiLU(g) ⊙ up'}</span
-				>{#each $tokens as token, index}<button
-						class="vector expanded-vector bg-indigo-200"
-						style={`height:calc(var(--vector-height) * ${($moeModel?.intermediateSize ?? 3072) / ($moeModel?.hiddenSize ?? 768)})`}
-						aria-label={`Down projection multiplication for ${token}`}
-						on:click={() => inspect('down', index)}
-						><VectorCanvas
-							colorScale="purple"
-							data={$vlmLayer
-								? row(
-										$vlmLayer,
-										$vlmPhase === 'vision' ? 'gelu' : 'product',
-										$vlmVisiblePositions[index],
-										8
-									)
-								: undefined}
-						/></button
-					>{/each}
+		<div class="card-network" bind:this={network} style={`height:${CARD_HEIGHT}px;`}>
+			<div class="card-slot" style={`width:${cardWidth}px;`}>
+				<ExpertCard
+					{entries}
+					hiddenSize={hidden}
+					token={tokenLabel($tokens[$moeTokenIndex] ?? 'x')}
+					width={cardWidth}
+					height={CARD_HEIGHT}
+					gated={!vision}
+					activation={vision ? 'GELU' : 'SiLU'}
+					bias={vision}
+				/>
+			</div>
+			<div class="selection-note" style={`top:${CARD_HEIGHT + 8}px;`}>
+				<strong>{tokenLabel($tokens[$moeTokenIndex] ?? '')}</strong> → {vision
+					? 'GELU MLP'
+					: 'SwiGLU MLP'}<span>· click a box to see its formula</span>
 			</div>
 		</div>
-		<div class="out-layer layer">
+		<div class="out-stage">
+			<div class="column raw-sum">
+				<span class="subtitle">Output</span>{#each $tokens as _, index}<div class="cell">
+						<div
+							class="raw-vector"
+							class:chosen={index === $moeTokenIndex}
+							title="Feed-forward output, before the residual addition"
+						>
+							<VectorCanvas
+								colorScale="purple"
+								data={$vlmLayer
+									? row($vlmLayer, 'down', $vlmVisiblePositions[index], 8)
+									: undefined}
+							/>
+						</div>
+					</div>{/each}
+			</div>
 			<OperationGroup type="residual-end" id="mlp-residual" />
 			<div class="column out mlp-out-column">
-				{#each $tokens as token, index}<button
-						class="vector bg-blue-200"
-						aria-label={`Block output ${token}`}
-						on:click={() => inspect('down', index)}
-						><VectorCanvas
-							colorScale="blue"
-							data={$moeExample?.layers[$blockIdx].blockOutputPreview?.[index]}
-						/></button
-					>{/each}
+				{#each $tokens as token, index}<div class="cell">
+						<div class="vector bg-blue-200" title={`Block output · ${token}`}>
+							<VectorCanvas colorScale="blue" data={layer?.blockOutputPreview?.[index]} />
+						</div>
+					</div>{/each}
 			</div>
 		</div>
 	</div>
 </div>
 
 <style>
-	.mlp {
+	.vlm-mlp {
 		position: relative;
-	}
-	.gate-projection {
-		position: absolute;
-		top: 34px;
-		right: 0;
-		z-index: 101;
-		font-size: 9px;
-		color: #8b72ad;
-		border: 1px solid #e5dcf1;
-		border-radius: 3px;
-		padding: 3px 5px;
-	}
-	.expanded-vector {
-		pointer-events: auto;
-		height: calc(var(--vector-height) * 4);
-	}
-	.second-layer {
-		pointer-events: none;
-	}
-	.label.float {
-		white-space: nowrap;
-		max-width: 5rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 	.title {
 		pointer-events: none;
@@ -138,50 +141,94 @@
 		display: block;
 		font-size: 9px;
 		color: #aa98ba;
-		margin-top: 34px;
+		margin-top: 4px;
+		white-space: normal;
 	}
 	.content {
 		display: grid;
-		grid-template-columns: minmax(0, 1.6fr) minmax(12px, 1fr) auto;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		gap: 10px;
 		align-items: start;
 	}
-	.layer {
+	.first-stage,
+	.out-stage {
 		display: flex;
-	}
-	.operation {
-		font-size: 9px;
-		border: 1px solid #dbc9eb;
-		border-radius: 3px;
-		background: #fbf8fd;
-		color: #9465b0;
-		white-space: nowrap;
-		padding: 0 7px;
-	}
-	.operation:hover {
-		background: #eee0f8;
-	}
-	.second-layer {
+		align-items: flex-start;
 		position: relative;
-		z-index: 20;
 	}
-	.first-layer {
+	.first-stage {
 		margin-left: 10px;
 	}
-	.subtitle {
+	.initial-vector {
+		padding: 0;
+		border: 0;
+		cursor: pointer;
+		display: block;
+		overflow: hidden;
+	}
+	.initial-vector.chosen {
+		box-shadow: 0 0 0 1px #b497d0;
+	}
+	.label.float {
+		white-space: nowrap;
+		max-width: 5rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.card-network {
+		position: relative;
+		min-width: 0;
+	}
+	.card-slot {
 		position: absolute;
-		top: calc(100% + 10px);
+		top: 0;
 		left: 50%;
 		transform: translateX(-50%);
-		font-size: 10px;
+		/* Below the Sankey layer, so bands into and out of the card draw over its edges. */
+		z-index: 5;
+	}
+	.selection-note {
+		position: absolute;
+		left: 0;
+		width: 100%;
+		color: #ad99bf;
+		text-align: center;
+		font-size: 0.6rem;
 		white-space: nowrap;
 	}
-	.vector {
-		border: 0;
-		padding: 0;
+	.selection-note strong {
+		font: inherit;
+		color: #9773ae;
 	}
-	.projection-down,
-	.feedforward-input {
+	.selection-note > span {
+		margin-left: 0.5em;
+		font-size: 0.55rem;
+		color: #bcaacb;
+	}
+	.raw-sum {
+		width: 10px;
+	}
+	.raw-sum .subtitle {
+		width: 48px;
+		left: -18px;
+		font-size: 0.55rem;
+		top: 100%;
+		transform: translateY(8px);
+	}
+	.raw-vector {
 		position: relative;
-		z-index: 20;
+		height: var(--vector-height);
+		width: 10px;
+		background: #e9d5ff;
+	}
+	.raw-vector.chosen {
+		box-shadow: 0 0 0 1px #b497d0;
+	}
+	.out-stage .column.out {
+		margin-left: 7px;
+	}
+	button:focus-visible {
+		outline: 2px solid #b596cf;
+		outline-offset: 3px;
 	}
 </style>
