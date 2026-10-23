@@ -61,6 +61,10 @@
 		opacity: 0.7;
 		user-select: none;
 	}
+	/* The head card is as tall as the Q/K/V bank (three vectors per row), as in Dense. */
+	.vit-transformer :global(.main-section.squeeze) {
+		--compact-card-height: max(230px, calc(var(--vector-height) * 18 + 42px));
+	}
 	/* Columns grow with the window, so the blocks do not absorb all of it. The final-block column
 	   leaves room for the Wcls box on the [CLS] band. */
 	.vit-transformer :global(.main-section.squeeze .nodes .steps) {
@@ -100,6 +104,10 @@
 	}
 	.vit-transformer :global(.main-section.squeeze .attention .column .title) {
 		top: -27px;
+	}
+	.vit-transformer :global(.main-section.squeeze .attention .column .label) {
+		font-size: 10.5px !important;
+		line-height: 12px !important;
 	}
 	/* ImageNet class names need more than the compact 70px. */
 	.vit-transformer :global(.main-section.squeeze .softmax:not(.expanded) .content) {

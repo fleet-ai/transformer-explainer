@@ -250,7 +250,7 @@
 		gap: 6px;
 		width: 100%;
 		height: var(--vector-height);
-		font-size: 11px;
+		font-size: min(13px, calc(var(--vector-height) * 0.62));
 		color: #4b5563;
 		white-space: nowrap;
 		cursor: pointer;
@@ -269,17 +269,17 @@
 	.patch,
 	.cls {
 		display: inline-block;
-		width: 16px;
-		height: 16px;
+		width: min(22px, var(--vector-height));
+		height: min(22px, var(--vector-height));
 		border: 1px solid #dfd6e9;
 		border-radius: 2px;
 		flex-shrink: 0;
 	}
 	.cls {
-		font-size: 6.5px;
+		font-size: 7px;
 		background: #f2eaf9;
 		color: #8f65ad;
-		line-height: 14px;
+		line-height: calc(min(22px, var(--vector-height)) - 2px);
 		text-align: center;
 	}
 	.patch-embedding .cell,

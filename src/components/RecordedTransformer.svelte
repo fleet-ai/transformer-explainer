@@ -46,12 +46,9 @@
 	$: squeeze = ['hybrid', 'vision-language', 'vit'].includes($moeModel?.architecture ?? '');
 	$: compact = squeeze || $moeModel?.architecture === 'encoder-decoder';
 	$: titleHeight = compact ? 60 : rootRem * 5;
-	/** ViT rows use more of the page; the cap keeps its Q/K/V bank about as tall as the head card. */
+	/** ViT's tallest element is the 4× MLP column, so its rows may use the whole page height. */
 	const rowBudget = (height: number) =>
-		Math.min(
-			height - ($moeModel?.architecture === 'vit' ? 36 : 24),
-			$moeModel?.architecture === 'vit' ? 660 : 480
-		);
+		$moeModel?.architecture === 'vit' ? height - 36 : Math.min(height - 24, 480);
 	const calculateVectorHeight = () => {
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
 		const height = Math.min(
