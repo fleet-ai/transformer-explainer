@@ -432,14 +432,17 @@
 	.squeeze :global(.attention-bounding) {
 		display: none;
 	}
+	/* Like the Dense card: the key, query and value groups sit together in the middle with a fixed
+	   gap, and the card is as tall as they are, never taller than the page budget. */
 	.squeeze :global(.attention .head-block) {
-		height: var(--compact-card-height) !important;
+		height: auto !important;
 		min-height: 0 !important;
+		max-height: var(--compact-card-height);
 	}
 	.squeeze :global(.attention .head-block > .qkv) {
-		padding: 24px 0 24px 70px !important;
-		gap: 24px;
-		justify-content: space-between;
+		padding: 40px 0 28px 70px !important;
+		gap: 52px;
+		justify-content: center;
 		flex-shrink: 0;
 	}
 	.squeeze :global(.attention.rotary .head-block > .qkv) {
