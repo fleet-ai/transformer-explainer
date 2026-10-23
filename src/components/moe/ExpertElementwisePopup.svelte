@@ -2,8 +2,10 @@
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { CloseOutline, RefreshOutline } from 'flowbite-svelte-icons';
 	import { projectionSweep } from '$lib/moe/projection-sweep';
-	/** SiLU and the gate product work on each coordinate alone, unlike the matrix projections. */
-	export let kind: 'silu' | 'product';
+	/** Activations, the gate product and the residual addition work on each coordinate alone,
+	 *  unlike the matrix projections. */
+	export let kind: 'silu' | 'product' | 'gelu' | 'residual';
+	/** Length of the vector the operation runs over (the hidden size for a residual addition). */
 	export let intermediateSize: number;
 	export let label: string;
 	export let token: string;
@@ -15,21 +17,41 @@
 
 	const sigmoid = (value: number) => 1 / (1 + Math.exp(-value));
 	const silu = (value: number) => value * sigmoid(value);
-	$: title = kind === 'silu' ? 'SiLU activation' : 'Gate product ⊙';
+	/** The tanh approximation of GELU, as the pretrained vision encoders use it. */
+	const gelu = (value: number) =>
+		0.5 * value * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (value + 0.044715 * value ** 3)));
+	$: plotted = kind === 'silu' || kind === 'gelu';
+	$: title = {
+		silu: 'SiLU activation',
+		gelu: 'GELU activation',
+		product: 'Gate product ⊙',
+		residual: 'Residual addition'
+	}[kind];
+	$: names = {
+		silu: { input: 'Gate projection g', middle: '', output: 'Activated gate a' },
+		gelu: { input: 'Up projection u', middle: '', output: 'Activated hidden h' },
+		product: { input: 'Up projection u', middle: 'SiLU(gate) a', output: 'Gated product h' },
+		residual: {
+			input: 'Block stream x',
+			middle: 'Sublayer output f(x)',
+			output: 'Updated stream r'
+		}
+	}[kind];
 
-	// The SiLU curve; it is the formula drawn out, with no recorded values on it.
+	// The activation curve; it is the formula drawn out, with no recorded values on it.
 	const W = 280;
 	const H = 170;
 	const PAD = 18;
 	const xMin = -6;
 	const xMax = 6;
-	const yMin = silu(-1.278) - 0.05;
-	const yMax = silu(xMax);
+	$: activation = kind === 'gelu' ? gelu : silu;
+	$: yMin = (kind === 'gelu' ? gelu(-0.752) : silu(-1.278)) - 0.05;
+	$: yMax = activation(xMax);
 	const sx = (x: number) => PAD + ((x - xMin) / (xMax - xMin)) * (W - PAD * 2);
-	const sy = (y: number) => H - PAD - ((y - yMin) / (yMax - yMin)) * (H - PAD * 2);
-	const curve = Array.from({ length: 121 }, (_, k) => {
+	$: sy = (y: number) => H - PAD - ((y - yMin) / (yMax - yMin)) * (H - PAD * 2);
+	$: curve = Array.from({ length: 121 }, (_, k) => {
 		const x = xMin + ((xMax - xMin) * k) / 120;
-		return `${k === 0 ? 'M' : 'L'}${sx(x).toFixed(1)} ${sy(silu(x)).toFixed(1)}`;
+		return `${k === 0 ? 'M' : 'L'}${sx(x).toFixed(1)} ${sy(activation(x)).toFixed(1)}`;
 	}).join(' ');
 
 	function portal(element: HTMLElement) {
@@ -117,7 +139,7 @@
 			<div class="equation">
 				<div class="tensor">
 					<div>
-						{kind === 'silu' ? 'Gate projection g' : 'Up projection u'}
+						{names.input}
 						<span class="token">“{token}”</span>
 					</div>
 					<div class="cells input" class:working={!progress.complete} aria-hidden="true">
@@ -125,25 +147,31 @@
 					</div>
 					<strong>(1, {intermediateSize})</strong>
 				</div>
-				<span class="operator">{kind === 'silu' ? '→' : '⊙'}</span>
-				{#if kind === 'silu'}
+				<span class="operator">{plotted ? '→' : kind === 'residual' ? '+' : '⊙'}</span>
+				{#if plotted}
 					<div class="plot">
-						<div>SiLU(g) = g · σ(g)</div>
+						<div>
+							{kind === 'gelu' ? 'GELU(u) ≈ ½u · (1 + tanh(…))' : 'SiLU(g) = g · σ(g)'}
+						</div>
 						<svg
 							viewBox={`0 0 ${W} ${H}`}
 							role="img"
-							aria-label="The SiLU curve, g times sigmoid of g"
+							aria-label={kind === 'gelu'
+								? 'The GELU curve, tanh approximation'
+								: 'The SiLU curve, g times sigmoid of g'}
 						>
 							<line class="axis" x1={sx(xMin)} x2={sx(xMax)} y1={sy(0)} y2={sy(0)} />
 							<line class="axis" x1={sx(0)} x2={sx(0)} y1={sy(yMin)} y2={sy(yMax)} />
 							<path class="curve" d={curve} />
-							<text class="axis-label" x={W - PAD} y={sy(0) + 14} text-anchor="end">g</text>
+							<text class="axis-label" x={W - PAD} y={sy(0) + 14} text-anchor="end"
+								>{kind === 'gelu' ? 'u' : 'g'}</text
+							>
 						</svg>
 						<strong>applied to each of {intermediateSize} coordinates</strong>
 					</div>
 				{:else}
 					<div class="tensor">
-						<div>SiLU(gate) a</div>
+						<div>{names.middle}</div>
 						<div class="cells activated" aria-hidden="true">
 							{#each Array(32) as _}<i></i>{/each}
 						</div>
@@ -152,7 +180,7 @@
 				{/if}
 				<span class="operator">=</span>
 				<div class="tensor">
-					<div>{kind === 'silu' ? 'Activated gate a' : 'Gated product h'}</div>
+					<div>{names.output}</div>
 					<div class="cells output" aria-hidden="true">
 						{#each Array(32) as _, i}<i
 								class:done={i < progress.completed}
@@ -170,6 +198,19 @@
 						>) = g<sub>{progress.coordinate}</sub> / (1 + e<sup
 							>−g<sub>{progress.coordinate}</sub></sup
 						>)
+					</div>
+				{:else if kind === 'gelu'}
+					<div>
+						h<sub>{progress.coordinate}</sub> = ½ u<sub>{progress.coordinate}</sub> · (1 +
+						tanh(√(2/π) · (u<sub>{progress.coordinate}</sub> + 0.044715 u<sub
+							>{progress.coordinate}</sub
+						><sup>3</sup>)))
+					</div>
+				{:else if kind === 'residual'}
+					<div>
+						r<sub>{progress.coordinate}</sub> = x<sub>{progress.coordinate}</sub> + f(x)<sub
+							>{progress.coordinate}</sub
+						>
 					</div>
 				{:else}
 					<div>
@@ -192,6 +233,7 @@
 					? `Complete · output (1, ${intermediateSize})`
 					: 'Applying across the vector'} · schematic sweep
 			</p>
+			<slot />
 		</div>
 	</div>
 </div>

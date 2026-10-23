@@ -27,9 +27,11 @@
 		$moeModel?.attentionHeads ?? 16,
 		(isMLA ? 1 : $moeModel?.keyValueHeads) ?? 8
 	);
-	$: position = $moeTokenIndex;
-	$: tokenOptions = ($moeExample?.tokens ?? []).map((token) => ({
-		value: token.index,
+	// The picker selects a shown token; its sequence position can differ when only a window of
+	// a long sequence is shown, as in the vision-language tab.
+	$: position = $moeExample?.tokens[$moeTokenIndex]?.index ?? $moeTokenIndex;
+	$: tokenOptions = ($moeExample?.tokens ?? []).map((token, shown) => ({
+		value: shown,
 		label: `${token.index}: ${tokenLabel(token.text)}`
 	}));
 
@@ -38,7 +40,7 @@
 	const START = 24;
 	const C = 100;
 	const R = 78;
-	$: turn = position * STEP;
+	$: turn = (position * STEP) % 360;
 	const point = (degrees: number, radius = R) => ({
 		x: C + radius * Math.cos((degrees * Math.PI) / 180),
 		y: C - radius * Math.sin((degrees * Math.PI) / 180)

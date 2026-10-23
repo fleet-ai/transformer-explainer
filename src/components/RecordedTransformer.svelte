@@ -385,8 +385,12 @@
 	.squeeze .blocks {
 		min-height: 0;
 	}
+	/* The vision-language controls sit under the token list, so it has the default height. */
 	.squeeze.vision-language {
-		--compact-card-height: clamp(200px, calc(100dvh - 410px), 410px);
+		--compact-card-height: clamp(230px, calc(100dvh - 320px), 460px);
+	}
+	.squeeze.vision-language .nodes {
+		padding-top: 22px;
 	}
 	.squeeze.hybrid-model {
 		--compact-card-height: clamp(230px, calc(100dvh - 360px), 430px);

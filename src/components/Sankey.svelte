@@ -67,6 +67,7 @@
 	$: isMLA = $moeModel?.architecture === 'mla';
 	$: isExpert = !$moeModel?.architecture || ['moe', 'mla'].includes($moeModel.architecture);
 	$: isDenseLayer = $moeExample?.layers[$blockIdx]?.feedForwardType === 'dense';
+	$: isVlm = $moeModel?.architecture === 'vision-language';
 	$: isT5Decoder = $moeModel?.architecture === 'encoder-decoder' && $moeModel?.stack === 'decoder';
 	$: isMambaOnly =
 		$moeModel?.architecture === 'hybrid' &&
@@ -683,6 +684,22 @@
 						gradientId: 'purple-purple',
 						opacity: ATTENTION_HEAD_BACK,
 						onMouseClick: () => hybridInspector.set('output')
+					}
+				]
+			: [],
+		/* The shown patch rows of the last vision block fan into the connector card; the bands of
+		   patches that belong to the card's image token are drawn strongly. */
+		connector: isVlm
+			? [
+					{
+						from: '.transformer-blocks .column.final .vector',
+						to: '.vlm-connector .vlm-connector-in',
+						gradientId: 'blue-purple',
+						curve: 30,
+						opacity: MLP,
+						fan: true,
+						opacityOf: (target: Element, _source: Element, index: number) =>
+							target.getAttribute('data-members')?.[index] === '1' ? 0.5 : 0.1
 					}
 				]
 			: [],
