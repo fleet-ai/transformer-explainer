@@ -104,7 +104,8 @@
 		display: block;
 		font-size: 9px;
 		color: #aa98ba;
-		margin-top: 8px;
+		/* Below the residual label that the operation group draws over the title row. */
+		margin-top: 30px;
 	}
 	.content {
 		display: grid;

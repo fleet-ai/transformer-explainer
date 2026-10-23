@@ -46,11 +46,13 @@
 	$: squeeze = ['vision-language', 'vit'].includes($moeModel?.architecture ?? '');
 	$: compact = squeeze || $moeModel?.architecture === 'encoder-decoder';
 	$: titleHeight = compact ? 60 : rootRem * 5;
+	/** ViT's rows grow with the window, as Dense's do; other compact tabs keep a fixed budget. */
+	$: heightBudget = $moeModel?.architecture === 'vit' ? 560 : 480;
 	const calculateVectorHeight = () => {
 		const gaps = rootRem * 0.5 * ($tokens.length - 1);
 		const height = Math.min(
 			Math.max(
-				((compact ? Math.min(vizHeight - 24, 480) : vizHeight) - titleHeight - gaps) /
+				((compact ? Math.min(vizHeight - 24, heightBudget) : vizHeight) - titleHeight - gaps) /
 					$tokens.length /
 					(compact ? 4 : maxVectorScale),
 				squeeze ? 6 : compact ? 8 : minVectorHeight
@@ -60,7 +62,7 @@
 		vectorHeight.set(height);
 		headContentHeight.set(Math.max($tokens.length * height * 3 + gaps, rootRem * 20));
 	};
-	$: if (vizHeight || $tokens.length) calculateVectorHeight();
+	$: if (vizHeight || $tokens.length || heightBudget) calculateVectorHeight();
 	async function loadTraces() {
 		error = '';
 		try {
