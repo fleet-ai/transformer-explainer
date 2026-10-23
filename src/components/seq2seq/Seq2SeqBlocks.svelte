@@ -47,8 +47,17 @@
 	$: decOps = dec?.attentionOperations.layers[0] as T5Attention | undefined;
 	$: encTokens = enc?.example.tokens.map((token) => token.text) ?? [];
 	$: decTokens = dec?.example.tokens.map((token) => token.text) ?? [];
-	$: encSel = encSelected < 0 ? Math.max(0, encTokens.length - 1) : encSelected;
-	$: decSel = decSelected < 0 ? Math.max(0, decTokens.length - 1) : decSelected;
+	// A selection belongs to one example; start from the last token again when it changes.
+	let shownExample: string | undefined;
+	$: if (ex?.id !== shownExample) {
+		shownExample = ex?.id;
+		encSelected = -1;
+		decSelected = -1;
+	}
+	const validRow = (row: number, length: number) =>
+		row >= 0 && row < length ? row : Math.max(0, length - 1);
+	$: encSel = validRow(encSelected, encTokens.length);
+	$: decSel = validRow(decSelected, decTokens.length);
 	$: candidates =
 		$t5Document && dec
 			? recordedProbabilities(
@@ -337,7 +346,7 @@
 						selected={encSel}
 						on:head={(e) => onHead(e.detail)}
 						on:select={(e) => (encSelected = e.detail)}
-						on:open={(e) => openCard('encoder', e.detail, encSel)}
+						on:open={(e) => openCard('encoder', e.detail.kind, e.detail.row)}
 					/>
 				</div>
 				<div style="grid-column:5;grid-row:3">
@@ -408,7 +417,7 @@
 						selected={decSel}
 						on:head={(e) => onHead(e.detail)}
 						on:select={(e) => (decSelected = e.detail)}
-						on:open={(e) => openCard('decoder', e.detail, decSel)}
+						on:open={(e) => openCard('decoder', e.detail.kind, e.detail.row)}
 					/>
 				</div>
 				<div style="grid-column:4;grid-row:6">
@@ -426,7 +435,7 @@
 						selected={decSel}
 						on:head={(e) => onHead(e.detail)}
 						on:select={(e) => (decSelected = e.detail)}
-						on:open={(e) => openCard('cross', e.detail, decSel)}
+						on:open={(e) => openCard('cross', e.detail.kind, e.detail.row)}
 					/>
 				</div>
 				<div style="grid-column:5;grid-row:6">

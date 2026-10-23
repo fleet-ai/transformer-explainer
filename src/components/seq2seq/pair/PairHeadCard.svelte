@@ -20,7 +20,8 @@
 	const dispatch = createEventDispatcher<{
 		head: number;
 		select: number;
-		open: 'q' | 'k' | 'v' | 'matrix' | 'out';
+		/** The clicked row: a key or value row for K and V, a query row otherwise. */
+		open: { kind: 'q' | 'k' | 'v' | 'matrix' | 'out'; row: number };
 	}>();
 	let hotRow = -1;
 	let hotCol = -1;
@@ -122,7 +123,8 @@
 					y={keyY(i) - dashH / 2}
 					width="12"
 					height={dashH}
-					on:click={() => dispatch('open', 'k')}><title>Key · {token}</title></rect
+					on:click={() => dispatch('open', { kind: 'k', row: i })}
+					><title>Key · {token}</title></rect
 				>
 			{/each}
 			{#each queryTokens as token, i}
@@ -144,7 +146,7 @@
 					height={dashH}
 					on:click={() => {
 						dispatch('select', i);
-						dispatch('open', 'q');
+						dispatch('open', { kind: 'q', row: i });
 					}}><title>Query · {token}</title></rect
 				>
 			{/each}
@@ -165,7 +167,8 @@
 					y={valueY(i) - dashH / 2}
 					width="12"
 					height={dashH}
-					on:click={() => dispatch('open', 'v')}><title>Value · {token}</title></rect
+					on:click={() => dispatch('open', { kind: 'v', row: i })}
+					><title>Value · {token}</title></rect
 				>
 			{/each}
 
@@ -182,7 +185,7 @@
 							hotRow = row;
 							hotCol = col;
 						}}
-						on:click={() => dispatch('open', 'matrix')}
+						on:click={() => dispatch('open', { kind: 'matrix', row })}
 						><title
 							>{queryTokens[row]} → {keyTokens[col]}: {masked(row, col)
 								? 'masked'
@@ -201,7 +204,8 @@
 					y={rowY(i) - dashH / 2}
 					width="12"
 					height={dashH}
-					on:click={() => dispatch('open', 'out')}><title>Head output · {token}</title></rect
+					on:click={() => dispatch('open', { kind: 'out', row: i })}
+					><title>Head output · {token}</title></rect
 				>
 			{/each}
 
@@ -211,7 +215,7 @@
 				x={g.mLeft + (cols * cell) / 2}
 				y={g.mTop + rows * cell + 20}
 				text-anchor="middle"
-				on:click={() => dispatch('open', 'matrix')}>Attention ⊕</text
+				on:click={() => dispatch('open', { kind: 'matrix', row: selected })}>Attention ⊕</text
 			>
 		</svg>
 		<div class="pager">
