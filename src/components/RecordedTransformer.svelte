@@ -16,9 +16,7 @@
 		sampling,
 		temperature,
 		isTextbookOpen,
-		moeModel,
-		moeExample,
-		blockIdx
+		moeModel
 	} from '~/store';
 	import Sankey from '~/components/Sankey.svelte';
 	import Attention from '~/components/Attention.svelte';
@@ -117,8 +115,6 @@
 		class:active
 		class="main-section h-full w-full"
 		class:hybrid-model={$moeModel?.architecture === 'hybrid'}
-		class:mamba-only={$moeModel?.architecture === 'hybrid' &&
-			!$moeExample?.layers[$blockIdx]?.queryPreview.length}
 		class:expert-layout={!$moeModel?.architecture ||
 			['moe', 'mla'].includes($moeModel.architecture)}
 		class:attention-open={$expandedBlock.id === 'attention'}
@@ -380,9 +376,6 @@
 	.hybrid-model .steps .blocks .block-steps {
 		grid-template-columns: 0.4fr 2fr 2.1fr;
 	}
-	.hybrid-model.mamba-only .steps .blocks .block-steps {
-		grid-template-columns: 0.4fr 3fr 1.2fr;
-	}
 	/* A fixed page budget: the active attention card borrows width from the MLP. */
 	.squeeze {
 		--compact-card-height: clamp(230px, calc(100dvh - 300px), 460px);
@@ -419,9 +412,6 @@
 	}
 	.squeeze.attention-open .steps .blocks .block-steps {
 		grid-template-columns: 70px minmax(0, 1fr) 210px;
-	}
-	.squeeze.mamba-only .steps .blocks .block-steps {
-		grid-template-columns: 60px minmax(0, 1fr) 230px;
 	}
 	.squeeze :global(.step) {
 		min-width: 0;

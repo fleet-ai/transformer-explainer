@@ -1,12 +1,11 @@
 <script lang="ts">
-	import RecordedProjectionPopup from '../common/RecordedProjectionPopup.svelte';
 	import RecordedTransformer from '../RecordedTransformer.svelte';
 	import HybridProjection from './HybridProjection.svelte';
 	import HybridCore from './HybridCore.svelte';
 	import HybridOutput from './HybridOutput.svelte';
-	import HybridInspector from './HybridInspector.svelte';
+	import HybridPopups from './HybridPopups.svelte';
 	import { loadHybridRecording, selectHybridBlock } from '$lib/hybrid/adapter';
-	import { hybridRecording, hybridLoading, hybridError, hybridInspector } from '$lib/hybrid/store';
+	import { hybridRecording, hybridLoading, hybridError, hybridStage } from '$lib/hybrid/store';
 	import { blockIdx } from '~/store';
 </script>
 
@@ -14,15 +13,31 @@
 	<div class="hybrid-toolbar">
 		<span>All 38 blocks</span>
 		<div class="block-selector" aria-label="Hybrid model blocks">
-			{#each $hybridRecording?.document.layers ?? [] as layer}<button
-					class:selected={$blockIdx === layer.index}
-					class:hybrid={layer.type === 'hybrid'}
-					aria-label={`Block ${layer.index + 1}: ${layer.type === 'hybrid' ? 'attention and Mamba' : 'Mamba'}`}
-					aria-pressed={$blockIdx === layer.index}
-					on:click={() => selectHybridBlock(layer.index)}>{layer.index + 1}</button
-				>{/each}
+			{#each $hybridRecording?.document.layers ?? [] as layer}{#if layer.type === 'hybrid'}<span
+						class="hybrid-pair"
+						class:selected={$blockIdx === layer.index}
+						><button
+							class="half transformer"
+							class:on={$blockIdx === layer.index && $hybridStage === 'transformer'}
+							aria-label={`Block ${layer.index + 1}, half 1: shared transformer`}
+							aria-pressed={$blockIdx === layer.index && $hybridStage === 'transformer'}
+							on:click={() => selectHybridBlock(layer.index, 'transformer')}
+							>{layer.index + 1}</button
+						><button
+							class="half mamba"
+							class:on={$blockIdx === layer.index && $hybridStage === 'mamba'}
+							aria-label={`Block ${layer.index + 1}, half 2: Mamba mixer`}
+							aria-pressed={$blockIdx === layer.index && $hybridStage === 'mamba'}
+							on:click={() => selectHybridBlock(layer.index, 'mamba')}>M</button
+						></span
+					>{:else}<button
+						class:selected={$blockIdx === layer.index}
+						aria-label={`Block ${layer.index + 1}: Mamba`}
+						aria-pressed={$blockIdx === layer.index}
+						on:click={() => selectHybridBlock(layer.index)}>{layer.index + 1}</button
+					>{/if}{/each}
 		</div>
-		<small>Purple: attention + gated FFN + Mamba · other blocks: Mamba</small>
+		<small>Purple: shared transformer, then Mamba · other blocks: Mamba</small>
 	</div>
 	<RecordedTransformer
 		modelLabel="Zamba2 · Transformer–Mamba"
@@ -35,13 +50,7 @@
 			Loading block {$blockIdx + 1} · actual recorded tensors…
 		</div>{/if}
 	{#if $hybridError}<div class="status" role="alert">{$hybridError}</div>{/if}
-	{#if ['projection', 'output', 'qkv', 'ffn', 'ffn-up', 'ffn-down', 'ffn-gate'].includes($hybridInspector ?? '')}<RecordedProjectionPopup
-			stage={$hybridInspector ?? ''}
-			on:close={() => hybridInspector.set(null)}
-		/>{:else if $hybridInspector}<HybridInspector
-			stage={$hybridInspector}
-			on:close={() => hybridInspector.set(null)}
-		/>{/if}
+	<HybridPopups />
 </div>
 
 <style>
@@ -84,12 +93,33 @@
 		flex: 1;
 		cursor: pointer;
 	}
-	.block-selector button.hybrid {
+	.block-selector button.selected,
+	.block-selector .half.on {
+		background: #a575c6;
+		color: white;
+		border-color: #a575c6;
+	}
+	/* A hybrid block is two steps: its shared transformer, then its Mamba mixer. */
+	.hybrid-pair {
+		display: flex;
+		flex: 2;
+		gap: 1px;
+	}
+	.block-selector .half {
+		min-width: 0;
+	}
+	.block-selector .half.transformer {
 		background: #efe2f8;
 		color: #9060af;
 		border-color: #d7bde8;
+		border-radius: 3px 0 0 3px;
 	}
-	.block-selector button.selected {
+	.block-selector .half.mamba {
+		border-radius: 0 3px 3px 0;
+		font-size: 9px;
+	}
+	.block-selector .half.transformer.on,
+	.block-selector .half.mamba.on {
 		background: #a575c6;
 		color: white;
 		border-color: #a575c6;

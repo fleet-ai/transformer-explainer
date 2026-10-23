@@ -71,7 +71,7 @@
 						? $weightPopover === 'mlpUp'
 							? 'ffn-up'
 							: 'ffn-down'
-						: 'attention'
+						: 'attention-out'
 		);
 		$weightPopover = null;
 	}

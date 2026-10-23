@@ -28,7 +28,7 @@
 		TRANSFORMER_BLOCKS
 	} from '~/constants/opacity';
 	import { textPages } from '~/utils/textbookPages';
-	import { hybridRecording, hybridInspector } from '$lib/hybrid/store';
+	import { hybridRecording, hybridInspector, hybridMambaView, hybridHot } from '$lib/hybrid/store';
 	import { t5Inspector } from '$lib/seq2seq/store';
 	import { getRenderedEndpointPairs } from '~/utils/sankeyGeometry';
 
@@ -71,6 +71,8 @@
 	$: isMambaOnly =
 		$moeModel?.architecture === 'hybrid' &&
 		$hybridRecording?.document.layers[$blockIdx].type === 'mamba';
+	/** Zamba2's Mamba view: every Mamba block and the second half of each hybrid block. */
+	$: isMambaView = $moeModel?.architecture === 'hybrid' && $hybridMambaView;
 	$: usesRoPE =
 		!!$moeModel &&
 		!['vit', 'encoder-decoder'].includes($moeModel.architecture ?? '') &&
@@ -113,7 +115,7 @@
 		},
 		{
 			from: isMLA ? '.mla-v-out' : '.qkv .qkv-column .value',
-			to: '.head-block .value .vector',
+			to: isMambaView ? '.head-block .value .rotary-port' : '.head-block .value .vector',
 			gradientId: 'green-green2',
 			// fill: theme.colors.green[defaultGradientBrightness],
 			opacity: ATTENTION_HEAD_BACK,
@@ -200,7 +202,7 @@
 		},
 		{
 			from: '.qkv .qkv-column .value .sub-vector.head1',
-			to: '.head-block .value .vector',
+			to: isMambaView ? '.head-block .value .rotary-port' : '.head-block .value .vector',
 			// fill: theme.colors.green[200]
 			gradientId: 'green-green',
 			opacity: ATTENTION_HEAD_1
@@ -545,6 +547,106 @@
 		}
 	];
 
+	/** Zamba2 bands; each one is an operation and opens its formula popup. */
+	const hybridBand = (
+		id: string,
+		from: string,
+		to: string,
+		gradientId: string,
+		stage: string,
+		tip: string,
+		group = stage
+	) => ({
+		from,
+		to,
+		gradientId,
+		id: `${id} hybrid-op-${group}`,
+		curve: 30,
+		opacity: MLP,
+		onMouseOver: () => {
+			hybridHot.set(group);
+			tooltip.set(tip);
+		},
+		onMouseOut: () => {
+			hybridHot.set(null);
+			tooltip.set(null);
+		},
+		onMouseClick: (e: Event, d: { tokenIndex: number }) => {
+			e.stopPropagation();
+			moeTokenIndex.set(d.tokenIndex);
+			hybridInspector.set(stage);
+		}
+	});
+	$: hybridPaths =
+		$moeModel?.architecture !== 'hybrid'
+			? []
+			: isMambaView
+				? [
+						{
+							// z skips the convolution and the scan: a bypass above the head cards.
+							...hybridBand(
+								'hybrid-z',
+								'.mamba-bank .qkv-weighted:first-child .mamba-z',
+								'.mamba-output .gate-box',
+								'purple-purple',
+								'gate',
+								'z · 4096 · goes straight from in_proj to the gate · click for the formula'
+							),
+							type: 'stroke',
+							unique: true,
+							opacity: 0.55,
+							pathGenerator: (source: DOMRect, target: DOMRect) => {
+								const x0 = source.left + window.scrollX + source.width / 2;
+								const y0 = source.top + window.scrollY;
+								const bus = target.top + window.scrollY - 9;
+								const x1 = target.left + window.scrollX + target.width / 2;
+								return `M ${x0},${y0} V ${bus + 4} Q ${x0},${bus} ${x0 + 4},${bus} H ${x1 - 4} Q ${x1},${bus} ${x1},${bus + 4} V ${target.top + window.scrollY}`;
+							}
+						},
+						hybridBand(
+							'hybrid-gate',
+							'.mamba-output .column.initial .vector',
+							'.mamba-output .second-layer .vector',
+							'purple-purple',
+							'gate',
+							'y ⊙ SiLU(z), then RMSNorm · click for the formula'
+						),
+						hybridBand(
+							'hybrid-out',
+							'.mamba-output .second-layer .vector',
+							'.mamba-output .column.out .vector',
+							'indigo-blue',
+							'out-proj',
+							'Wout · 4096 → 2048, then the residual · click to multiply'
+						)
+					]
+				: [
+						hybridBand(
+							'hybrid-up',
+							'.ffn-output .column.initial .vector',
+							'.ffn-output .second-layer .vector',
+							'purple-indigo',
+							'ffn-up',
+							'Wup and Wgate · 2048 → 8192 · click to multiply'
+						),
+						hybridBand(
+							'hybrid-down',
+							'.ffn-output .second-layer .vector',
+							'.ffn-output .column.ffn-out .vector',
+							'indigo-purple',
+							'ffn-down',
+							'Wdown · 8192 → 2048 · click to multiply'
+						),
+						hybridBand(
+							'hybrid-linear',
+							'.ffn-output .column.ffn-out .vector',
+							'.ffn-output .column.t-out .vector',
+							'purple-purple',
+							'linear',
+							'Linear · 2048 → 2048 gives t · click to multiply'
+						)
+					];
+
 	$: pathMap = {
 		mlpUp:
 			isExpert ||
@@ -560,6 +662,7 @@
 				: [],
 		sumIn: isExpert && !isDenseLayer ? sumPaths : [],
 		sumOut: isExpert && !isDenseLayer ? sumOutPaths : [],
+		hybrid: hybridPaths,
 		mamba: isMambaOnly
 			? [
 					{
