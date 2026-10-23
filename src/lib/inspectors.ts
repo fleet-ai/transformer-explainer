@@ -21,5 +21,5 @@ export function createInspectorGroup() {
 
 export const createInspector = createInspectorGroup();
 export const attentionInspector = createInspector<
-	{ kind: 'heads' } | { kind: 'rope'; vector: 'query' | 'key' } | { kind: 'mla'; stage: string }
+	{ kind: 'heads' } | { kind: 'rope'; vector: 'query' | 'key' }
 >();

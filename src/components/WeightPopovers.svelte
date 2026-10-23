@@ -23,11 +23,6 @@
 		removePathHighlight
 	} from '~/utils/textbook';
 
-	$: if ($moeModel?.architecture === 'mla' && $weightPopover === 'qkv') {
-		attentionInspector.set({ kind: 'mla', stage: 'query' });
-		$weightPopover = null;
-	}
-
 	$: if ($moeModel?.architecture === 'vit' && $weightPopover) {
 		const stages: Record<string, string> = {
 			qkv: 'qkv',

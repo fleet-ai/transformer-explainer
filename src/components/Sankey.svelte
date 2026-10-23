@@ -57,7 +57,7 @@
 			id?: string;
 			/** Draw one band per target (or source) from a shared source (or target), as experts do. */
 			fan?: boolean;
-			opacityOf?: (target: Element, source: Element) => number;
+			opacityOf?: (target: Element, source: Element, index: number) => number;
 			/** Which end of a fanned band names its token; sources by default. */
 			tokenFrom?: 'source' | 'target';
 			pathGenerator?: (source: DOMRect, target: DOMRect, curve: number) => string;
@@ -75,27 +75,50 @@
 		!!$moeModel &&
 		!['vit', 'encoder-decoder'].includes($moeModel.architecture ?? '') &&
 		$moeModel.maskMode !== 'bidirectional';
+	/** MLA cards draw the selected token's bands strongly and every other token's faintly. */
+	const tokenBand = (_target: Element, _source: Element, index: number) =>
+		index === $moeTokenIndex ? 0.5 : 0.14;
+	$: mlaInPaths = ['.mla-q-in', '.mla-kv-in'].map((to) => ({
+		from: '.qkv .vector-column .column.vectors .vector',
+		to,
+		gradientId: $blockIdx === 0 ? 'gray-blue' : 'transparent-blue',
+		opacity: EMBEDDING,
+		curve: 30,
+		fan: true,
+		opacityOf: (_target: Element, _source: Element, index: number) =>
+			index === $moeTokenIndex ? 0.55 : 0.12,
+		onMouseClick: (e: Event, d: { tokenIndex: number }) => {
+			e.stopPropagation();
+			moeTokenIndex.set(d.tokenIndex);
+		}
+	}));
 	$: backPaths = [
 		{
-			from: '.qkv .qkv-column .query',
+			from: isMLA ? '.mla-q-out' : '.qkv .qkv-column .query',
 			to: usesRoPE ? '.head-block .query .rotary-port' : '.head-block .query .vector',
 			// fill: theme.colors.blue[defaultGradientBrightness],
 			gradientId: 'blue-blue2',
-			opacity: ATTENTION_HEAD_BACK
+			opacity: ATTENTION_HEAD_BACK,
+			fan: isMLA,
+			opacityOf: isMLA ? tokenBand : undefined
 		},
 		{
-			from: '.qkv .qkv-column .key',
+			from: isMLA ? '.mla-k-out' : '.qkv .qkv-column .key',
 			to: usesRoPE ? '.head-block .key .rotary-port' : '.head-block .key .vector',
 			// fill: theme.colors.red[defaultGradientBrightness],
 			gradientId: 'red-red2',
-			opacity: ATTENTION_HEAD_BACK
+			opacity: ATTENTION_HEAD_BACK,
+			fan: isMLA,
+			opacityOf: isMLA ? tokenBand : undefined
 		},
 		{
-			from: '.qkv .qkv-column .value',
+			from: isMLA ? '.mla-v-out' : '.qkv .qkv-column .value',
 			to: '.head-block .value .vector',
 			gradientId: 'green-green2',
 			// fill: theme.colors.green[defaultGradientBrightness],
-			opacity: ATTENTION_HEAD_BACK
+			opacity: ATTENTION_HEAD_BACK,
+			fan: isMLA,
+			opacityOf: isMLA ? tokenBand : undefined
 		},
 		{
 			from: isT5Decoder
@@ -114,7 +137,7 @@
 		}))
 	};
 
-	$: qkvPaths = [
+	$: bankPaths = [
 		{
 			from: '.qkv .vector-column .column.vectors .vector',
 			to: '.qkv .qkv-column .vector',
@@ -159,6 +182,7 @@
 			}
 		}
 	];
+	$: qkvPaths = isMLA ? mlaInPaths : bankPaths;
 	$: selfAttentionPaths = [
 		{
 			from: '.qkv .qkv-column .query .sub-vector.head1',
@@ -759,7 +783,7 @@
 											: 'none',
 									clickable: !!item.onMouseClick,
 									...rest,
-									opacity: opacityOf ? opacityOf(targets[i], sources[i]) : item.opacity
+									opacity: opacityOf ? opacityOf(targets[i], sources[i], i) : item.opacity
 								};
 							}
 						);

@@ -4,7 +4,6 @@
 	import { hybridHeadOperations, hybridInspector } from '$lib/hybrid/store';
 	import { vitHeadOperations } from '$lib/vit/store';
 	import { vlmHeadOperations, vlmInspectorStage } from '$lib/vlm/store';
-	import LatentInspector from './mla/LatentInspector.svelte';
 	import RoPEPopup from './moe/RoPEPopup.svelte';
 	import VectorCanvas from './common/VectorCanvas.svelte';
 	import HeadStack from '~/components/HeadStack.svelte';
@@ -161,8 +160,8 @@
 								>
 							</div>
 
-							{#if isMLA}<span class="content-bypass"
-									>{$moeModel?.contentKeySize ?? 128}D content bypass</span
+							{#if isMLA}<span class="content-bypass" aria-hidden="true"
+									><span>{$moeModel?.contentKeySize ?? 128}D content skips RoPE</span></span
 								>{/if}
 							{#if usesRoPE}<button
 									class="rotary-gate"
@@ -223,8 +222,8 @@
 											: 'Rotated'} · {headSize}D</small
 								>
 							</div>
-							{#if isMLA}<span class="content-bypass"
-									>{$moeModel?.contentKeySize ?? 128}D content bypass</span
+							{#if isMLA}<span class="content-bypass" aria-hidden="true"
+									><span>{$moeModel?.contentKeySize ?? 128}D content skips RoPE</span></span
 								>{/if}
 							{#if usesRoPE}<button
 									class="rotary-gate"
@@ -341,31 +340,48 @@
 			attentionInspector.set(null);
 			$expandedBlock = { id: 'attention' };
 		}}
-	/>{:else if $attentionInspector?.kind === 'mla'}<LatentInspector
-		stage={$attentionInspector.stage}
-		on:close={() => attentionInspector.set(null)}
-		on:rope={(event) => inspectRoPE(event.detail)}
-		on:attention={() => {
-			attentionInspector.set(null);
-			$expandedBlock = { id: 'attention' };
-		}}
-	/>{/if}
+	/>/>{/if}
 
 <style lang="scss">
+	/* Dashed channel that carries the unrotated content part around the RoPE gate. */
 	.content-bypass {
-		z-index: 37;
+		z-index: 34;
 		position: absolute;
-		left: -146px;
-		top: -24px;
-		width: 96px;
-		height: 22px;
-		border: 1px solid currentColor;
-		border-bottom: 0;
-		text-align: center;
+		left: -120px;
+		width: 114px;
+		top: 0;
+		height: calc(100% + 22px);
+		border: 1.5px dashed currentColor;
+		border-top: 0;
+		border-radius: 0 0 8px 8px;
+		pointer-events: none;
+	}
+	.column.key .content-bypass {
+		color: #e9a0a5;
+	}
+	.column.query .content-bypass {
+		color: #80afe9;
+	}
+	.content-bypass span {
+		position: absolute;
+		left: 50%;
+		top: 100%;
+		transform: translateX(-50%);
+		margin-top: 2px;
 		font-size: 9px;
-		line-height: 14px;
-		color: #9ca3af;
-		background: white;
+		line-height: 12px;
+		white-space: nowrap;
+		color: #7b8494;
+	}
+	.latent .rotary-token-input::after {
+		content: '';
+		position: absolute;
+		right: 1px;
+		top: 50%;
+		transform: translateY(-50%);
+		border-left: 5px solid currentColor;
+		border-top: 3px solid transparent;
+		border-bottom: 3px solid transparent;
 	}
 
 	.latent .column.key .title,
