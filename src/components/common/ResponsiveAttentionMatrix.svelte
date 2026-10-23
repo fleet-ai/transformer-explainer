@@ -93,9 +93,9 @@
 		{/each}
 	</div>
 	{#if expanded}<div class="stage-actions">
-			<button on:click|stopPropagation={inspect}>Recorded values ↗</button><button
-				on:click|stopPropagation={toggle}>Collapse −</button
-			>
+			<button on:click|stopPropagation={inspect}
+				>{$moeModel?.architecture === 'vit' ? 'Formula ↗' : 'Recorded values ↗'}</button
+			><button on:click|stopPropagation={toggle}>Collapse −</button>
 		</div>{/if}
 </div>
 
