@@ -100,3 +100,22 @@ test('inspector uses all 128 rotary dimensions and real adapted FFN matrices in 
 		}
 	}
 });
+
+test('the scan equals one causal mixing matrix per head (Mamba-2 SSD form) in every block', () => {
+	for (const descriptor of document.layers) {
+		const layer = data(descriptor);
+		const n = document.sequenceLength;
+		for (const head of [0, 17, 63]) {
+			const { mixing, D } = math.mixingMatrix(layer, head);
+			for (let t = 0; t < n; t++) {
+				for (let s = t + 1; s < n; s++) assert.ok(Number.isNaN(mixing[t][s]));
+				for (let channel = 0; channel < 64; channel++) {
+					const x = (s) => tensors.scalar(layer, 'x', s, head, channel);
+					let y = D * x(t);
+					for (let s = 0; s <= t; s++) y += mixing[t][s] * x(s);
+					near(y, tensors.scalar(layer, 'scanOutput', t, head * 64 + channel), 5e-4);
+				}
+			}
+		}
+	}
+});
