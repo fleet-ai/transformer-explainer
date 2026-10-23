@@ -67,9 +67,7 @@
 	$: isMLA = $moeModel?.architecture === 'mla';
 	$: isExpert = !$moeModel?.architecture || ['moe', 'mla'].includes($moeModel.architecture);
 	$: isDenseLayer = $moeExample?.layers[$blockIdx]?.feedForwardType === 'dense';
-	/** Vision-language blocks draw their dense MLP as the same card as the expert layouts. */
 	$: isVlm = $moeModel?.architecture === 'vision-language';
-	$: cardMlp = isExpert || isVlm;
 	$: isT5Decoder = $moeModel?.architecture === 'encoder-decoder' && $moeModel?.stack === 'decoder';
 	$: isMambaOnly =
 		$moeModel?.architecture === 'hybrid' &&
@@ -438,12 +436,12 @@
 	$: mlpUpPaths = [
 		{
 			from: '.mlp .column.initial .vector',
-			to: cardMlp ? '.mlp .expert-card .flow-in' : '.mlp .second-layer .vector',
+			to: isExpert ? '.mlp .expert-card .flow-in' : '.mlp .second-layer .vector',
 			gradientId: 'purple-indigo',
 			curve: 50 + (curveFactor - 1) * 20,
 			opacity: MLP,
-			fan: cardMlp,
-			opacityOf: cardMlp ? (_target: Element, source: Element) => selectedBand(source) : undefined,
+			fan: isExpert,
+			opacityOf: isExpert ? (_target: Element, source: Element) => selectedBand(source) : undefined,
 			pathGenerator: (source, target, curve: number) => {
 				const scrollTop = window.scrollY;
 				const scrollLeft = window.scrollX;
@@ -466,27 +464,25 @@
 			},
 			onMouseOver: () => {
 				const paths = d3.select(`g.mlpUp`).selectAll('path');
-				if (!cardMlp) paths.transition().duration(100).style('opacity', 0.6);
+				if (!isExpert) paths.transition().duration(100).style('opacity', 0.6);
 				tooltip.set(
 					isExpert
 						? 'The router splits this token across its experts · click to select'
-						: isVlm
-							? 'Every token runs through the same feed-forward · click to select'
-							: $moeModel?.architecture === 'encoder-decoder'
-								? 'Up projection · 512 → 2048 · click to multiply'
-								: 'click to see MLP process'
+						: $moeModel?.architecture === 'encoder-decoder'
+							? 'Up projection · 512 → 2048 · click to multiply'
+							: 'click to see MLP process'
 				);
 			},
 			onMouseOut: () => {
 				const paths = d3.select(`g.mlpUp`).selectAll('path');
-				if (!cardMlp) paths.transition().duration(100).style('opacity', MLP);
+				if (!isExpert) paths.transition().duration(100).style('opacity', MLP);
 				tooltip.set(null);
 			},
 			onMouseClick: (e, d) => {
 				e.stopPropagation();
 
 				moeTokenIndex.set(d.tokenIndex);
-				if (cardMlp) return;
+				if (isExpert) return;
 				if ($weightPopover === 'mlpUp') weightPopover.set(null);
 				else weightPopover.set('mlpUp');
 			}
@@ -494,11 +490,11 @@
 	];
 	$: mlpDownPaths = [
 		{
-			from: cardMlp ? '.mlp .expert-card .flow-out' : '.mlp .second-layer .vector',
-			to: cardMlp ? '.mlp .raw-sum .raw-vector' : '.mlp .column.out .vector',
-			gradientId: cardMlp ? 'indigo-purple' : 'indigo-blue',
-			fan: cardMlp,
-			opacityOf: cardMlp ? (target: Element) => selectedBand(target) : undefined,
+			from: isExpert ? '.mlp .expert-card .flow-out' : '.mlp .second-layer .vector',
+			to: isExpert ? '.mlp .raw-sum .raw-vector' : '.mlp .column.out .vector',
+			gradientId: isExpert ? 'indigo-purple' : 'indigo-blue',
+			fan: isExpert,
+			opacityOf: isExpert ? (target: Element) => selectedBand(target) : undefined,
 			tokenFrom: 'target' as const,
 			curve: 50 + (curveFactor - 1) * 20,
 			opacity: MLP,
@@ -525,27 +521,25 @@
 			},
 			onMouseOver: () => {
 				const paths = d3.select(`g.mlpDown`).selectAll('path');
-				if (!cardMlp) paths.transition().duration(100).style('opacity', 0.6);
+				if (!isExpert) paths.transition().duration(100).style('opacity', 0.6);
 				tooltip.set(
 					isExpert
 						? 'Expert outputs are weighted, summed, and merged into one vector · click to select'
-						: isVlm
-							? 'Feed-forward output before the residual addition · click to select'
-							: $moeModel?.architecture === 'encoder-decoder'
-								? 'Down projection · 2048 → 512 · click to multiply'
-								: 'click to see MLP process'
+						: $moeModel?.architecture === 'encoder-decoder'
+							? 'Down projection · 2048 → 512 · click to multiply'
+							: 'click to see MLP process'
 				);
 			},
 			onMouseOut: () => {
 				const paths = d3.select(`g.mlpDown`).selectAll('path');
-				if (!cardMlp) paths.transition().duration(100).style('opacity', MLP);
+				if (!isExpert) paths.transition().duration(100).style('opacity', MLP);
 				tooltip.set(null);
 			},
 			onMouseClick: (e, d) => {
 				e.stopPropagation();
 
 				moeTokenIndex.set(d.tokenIndex);
-				if (cardMlp) return;
+				if (isExpert) return;
 				if ($weightPopover === 'mlpDown') weightPopover.set(null);
 				else weightPopover.set('mlpDown');
 			}
