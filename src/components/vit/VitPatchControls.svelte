@@ -1,57 +1,49 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { AngleLeftOutline, AngleRightOutline } from 'flowbite-svelte-icons';
 	import { recordedAssetUrl } from '$lib/recorded-json.js';
 	import { showVitPatchPage } from '$lib/vit/adapter';
-	import { vitRecording, vitVisiblePositions, vitInspectorStage } from '$lib/vit/store';
-	$: page = Math.floor((($vitVisiblePositions[1] ?? 1) - 1) / 8);
-	function choosePatch(patch: number) {
-		showVitPatchPage(Math.floor(patch / 8));
+	import { vitRecording, vitVisiblePositions } from '$lib/vit/store';
+	/** The image is the input; its grid picks which 8 patches the diagram shows beside [CLS]. */
+	const PAGE = 8;
+	$: grid = $vitRecording?.document.image.gridSize ?? 14;
+	$: patches = grid * grid;
+	$: pages = Math.ceil(patches / PAGE);
+	$: page = Math.floor((($vitVisiblePositions[1] ?? 1) - 1) / PAGE);
+	$: first = page * PAGE;
+	$: last = Math.min(patches, first + PAGE) - 1;
+	function go(next: number) {
+		showVitPatchPage(Math.max(0, Math.min(pages - 1, next)));
 	}
 </script>
 
-{#if $vitRecording}<div class="vit-patch-controls">
+{#if $vitRecording}<div class="vit-patch-controls" role="none" on:click|stopPropagation>
 		<div
 			class="image-grid"
-			style={`background-image:url('${base}/${$vitRecording.document.image.src}')`}
-			aria-label="Select image patches"
+			style={`background-image:url('${base}/${$vitRecording.document.image.src}');--grid:${grid}`}
+			role="group"
+			aria-label="Choose which image patches to show"
 		>
-			{#each Array(196) as _, patch}<button
+			{#each Array(patches) as _, patch}<button
 					class:visible={$vitVisiblePositions.includes(patch + 1)}
-					aria-label={`Show patch ${Math.floor(patch / 14)},${patch % 14}`}
-					title={`Patch ${Math.floor(patch / 14)},${patch % 14}`}
-					on:click={() => choosePatch(patch)}
+					aria-label={`Show patch ${Math.floor(patch / grid)},${patch % grid}`}
+					title={`Patch ${Math.floor(patch / grid)},${patch % grid}`}
+					on:click={() => go(Math.floor(patch / PAGE))}
 				></button>{/each}
 		</div>
-		<div class="selection">
-			<strong>Full DeiT-tiny · 12 blocks · 3 heads · 197 positions</strong>
-			<div class="patch-pager">
-				<button
-					aria-label="Previous patch group"
-					disabled={page === 0}
-					on:click={() => {
-						page--;
-						showVitPatchPage(page);
-					}}>‹</button
-				><span>Patch group {page + 1} / 25</span><button
-					aria-label="Next patch group"
-					disabled={page === 24}
-					on:click={() => {
-						page++;
-						showVitPatchPage(page);
-					}}>›</button
-				>
-			</div>
-			<div class="patch-actions">
-				<button on:click={() => vitInspectorStage.set('embedding')}>Image → patches ↗</button
-				><button on:click={() => vitInspectorStage.set('classifier')}
-					>[CLS] → 1,000 classes ↗</button
-				>
-			</div>
-			<small
-				>Diagram: [CLS] + {$vitVisiblePositions.length - 1} patches. All 197 positions participate in
-				every recorded attention row; displayed probabilities are not renormalized.</small
+		<div class="pager">
+			<span class="count" title={`Patches ${first}–${last} of ${patches}`}
+				>{page + 1} of {pages}</span
+			><button aria-label="Previous patches" disabled={page === 0} on:click={() => go(page - 1)}
+				><AngleLeftOutline size="sm" /></button
+			><button aria-label="Next patches" disabled={page === pages - 1} on:click={() => go(page + 1)}
+				><AngleRightOutline size="sm" /></button
 			>
 		</div>
+		<small
+			>[CLS] + {$vitVisiblePositions.length - 1} of {patches} patches shown. Attention uses all {$vitRecording
+				.document.sequenceLength} positions.</small
+		>
 		<a href={recordedAssetUrl(`${base}/traces/vit/manifest.json`)} target="_blank" rel="noreferrer"
 			>Trace provenance ↗</a
 		>
@@ -61,26 +53,28 @@
 	.vit-patch-controls {
 		display: flex;
 		flex-direction: column;
-		align-items: stretch;
+		align-items: center;
 		gap: 6px;
-		width: 118px;
+		width: 108px;
 		margin-top: 18px;
-		padding: 8px 4px 0;
-		border-top: 1px solid #eee7f5;
-		color: #8c72a1;
+		padding-top: 10px;
+		border-top: 1px solid #f3f4f6;
+		color: #9ca3af;
 		position: relative;
 		z-index: 50;
+		user-select: none;
 	}
 	.image-grid {
 		display: grid;
-		grid-template-columns: repeat(14, 1fr);
+		grid-template-columns: repeat(var(--grid), 1fr);
 		width: 70px;
 		height: 70px;
 		background-size: cover;
-		align-self: center;
+		border: 1px solid #e5e7eb;
 	}
 	.image-grid button {
-		border: 0.3px solid #d1c5dd;
+		border: 0.3px solid #e5e7eb88;
+		cursor: pointer;
 	}
 	.image-grid button.visible {
 		border: 1px solid #9b62c6;
@@ -89,53 +83,47 @@
 	.image-grid button:hover {
 		background: #a465d488;
 	}
-	.selection {
+	.pager {
 		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-	.selection strong {
-		font-size: 9px;
-		line-height: 1.5;
-		text-align: center;
-	}
-	.patch-pager {
-		display: flex;
-		gap: 5px;
 		align-items: center;
-		justify-content: space-between;
-		font-size: 10px;
+		gap: 3px;
+		font-size: 11px;
 		white-space: nowrap;
 	}
-	.patch-actions {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
+	.count {
+		font-weight: 500;
+		margin-right: 2px;
 	}
-	.selection button {
-		border: 1px solid #ddcdeb;
-		border-radius: 3px;
-		padding: 4px 6px;
-		background: #fbf8fd;
-		font-size: 9px;
+	.pager button {
+		border-radius: 0.3rem;
+		padding: 0.1rem;
+		border: 1px solid #d1d5db;
+		color: #9ca3af;
+		background: white;
+		box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+		cursor: pointer;
+		line-height: 0;
 	}
-	.selection button:disabled {
-		opacity: 0.3;
+	.pager button:disabled {
+		color: #e5e7eb;
+		border-color: #e5e7eb;
+		cursor: default;
 	}
 	small {
 		font-size: 9px;
-		line-height: 1.45;
+		line-height: 1.4;
+		text-align: center;
 	}
 	a {
-		font-size: 10px;
+		font-size: 9.5px;
+		color: #a78bca;
 	}
 	@media (max-height: 650px) {
 		.image-grid {
 			width: 56px;
 			height: 56px;
 		}
-		small,
-		.selection strong {
+		small {
 			display: none;
 		}
 		.vit-patch-controls {
