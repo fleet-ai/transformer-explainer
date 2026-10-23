@@ -17,6 +17,8 @@
 	let progress = projectionSweep(0, 64);
 
 	$: isMLA = $moeModel?.architecture === 'mla';
+	/** Grouped-query models share each key head; Zamba2 gives every query head its own key. */
+	$: sharedKey = ($moeModel?.keyValueHeads ?? 8) < ($moeModel?.attentionHeads ?? 16);
 	$: headSize = isMLA ? ($moeModel?.rotarySize ?? 64) : ($moeModel?.attentionHeadSize ?? 64);
 	$: half = headSize / 2;
 	$: base = ($moeModel?.ropeTheta ?? 10000).toLocaleString('en-US');
@@ -140,7 +142,7 @@
 					bind:value={$moeTokenIndex}
 				/>
 				<div class="rows">
-					{#each [{ id: 'query', name: isMLA ? `Query ${$attentionHeadIdx + 1} · rotary part` : `Query ${$attentionHeadIdx + 1}`, out: 'Q′', tone: 'blue' }, { id: 'key', name: isMLA ? 'Shared rotary key' : `Shared key ${mapping.keyValueHead + 1}`, out: 'K′', tone: 'red' }] as row}
+					{#each [{ id: 'query', name: isMLA ? `Query ${$attentionHeadIdx + 1} · rotary part` : `Query ${$attentionHeadIdx + 1}`, out: 'Q′', tone: 'blue' }, { id: 'key', name: isMLA ? 'Shared rotary key' : `${sharedKey ? 'Shared key' : 'Key'} ${mapping.keyValueHead + 1}`, out: 'K′', tone: 'red' }] as row}
 						<div class={`row ${row.tone}`} class:focus={kind === row.id}>
 							<div class="tensor">
 								<div>{row.name}</div>

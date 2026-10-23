@@ -14,6 +14,17 @@
 	} from '~/store';
 	import { textPages } from '~/utils/textbookPages';
 	import TextbookTooltip from './common/TextbookTooltip.svelte';
+	import { hybridRecording, hybridStage } from '$lib/hybrid/store';
+	import { stepHybrid, canStepHybrid } from '$lib/hybrid/adapter';
+
+	/** A Zamba2 hybrid block is two steps: its shared transformer, then its Mamba mixer. */
+	$: isHybrid = $moeModel?.architecture === 'hybrid';
+	$: hybridHalf =
+		isHybrid && $hybridRecording?.document.layers[$blockIdx]?.type === 'hybrid'
+			? $hybridStage === 'mamba'
+				? ' · Mamba mixer (2 of 2)'
+				: ' · Shared transformer (1 of 2)'
+			: '';
 
 	let resizeObserver: ResizeObserver;
 	let boundingPos = { left: 0, top: 0, width: 0 };
@@ -24,9 +35,7 @@
 		await tick();
 		if (!mounted) return;
 		const container = document.querySelector('.nodes');
-		const embedding = document.querySelector(
-			'.block-steps.main .qkv .content .block-start-column'
-		);
+		const embedding = document.querySelector('.block-steps.main .qkv .content .block-start-column');
 		const block =
 			$blockIdx === $modelMeta.layer_num - 1
 				? document.querySelector('.step.transformer-blocks .content .column.final')
@@ -65,7 +74,8 @@
 		e.stopPropagation();
 		textPages.find((page) => page.id === 'blocks')?.complete();
 
-		$blockIdx = Math.min($blockIdx + 1, $modelMeta.layer_num - 1);
+		if (isHybrid) stepHybrid(1);
+		else $blockIdx = Math.min($blockIdx + 1, $modelMeta.layer_num - 1);
 
 		window.dataLayer?.push({
 			event: `pagination-transformer-block-next`,
@@ -78,7 +88,8 @@
 		e.stopPropagation();
 		textPages.find((page) => page.id === 'blocks')?.complete();
 
-		$blockIdx = Math.max($blockIdx - 1, 0);
+		if (isHybrid) stepHybrid(-1);
+		else $blockIdx = Math.max($blockIdx - 1, 0);
 
 		window.dataLayer?.push({
 			event: `pagination-transformer-block-prev`,
@@ -109,21 +120,30 @@
 	class:active={$isBoundingBoxActive}
 >
 	<TextbookTooltip id="blocks">
-		<span class="title-text">{$moeModel?.stack === 'encoder' ? 'Encoder' : $moeModel?.stack === 'decoder' ? 'Decoder' : 'Transformer'} Block {$blockIdx + 1}</span>
+		<span class="title-text"
+			>{$moeModel?.stack === 'encoder'
+				? 'Encoder'
+				: $moeModel?.stack === 'decoder'
+					? 'Decoder'
+					: 'Transformer'} Block {$blockIdx + 1}{hybridHalf}</span
+		>
 	</TextbookTooltip>
 	<button
 		aria-label="Previous transformer block"
 		data-click="transformer-block-prev-btn"
 		on:click={onClickPrev}
-		disabled={$isOnAnimation || $blockIdx === 0}
+		disabled={$isOnAnimation ||
+			(isHybrid ? !canStepHybrid(-1, $blockIdx, $hybridStage) : $blockIdx === 0)}
 		><AngleLeftOutline size="sm" /></button
 	>
 	<button
 		aria-label="Next transformer block"
 		data-click="transformer-block-next-btn"
 		on:click={onClickNext}
-		disabled={$isOnAnimation || $blockIdx === $modelMeta.layer_num - 1}
-		><AngleRightOutline size="sm" /></button
+		disabled={$isOnAnimation ||
+			(isHybrid
+				? !canStepHybrid(1, $blockIdx, $hybridStage)
+				: $blockIdx === $modelMeta.layer_num - 1)}><AngleRightOutline size="sm" /></button
 	>
 </div>
 

@@ -16,9 +16,7 @@
 		sampling,
 		temperature,
 		isTextbookOpen,
-		moeModel,
-		moeExample,
-		blockIdx
+		moeModel
 	} from '~/store';
 	import Sankey from '~/components/Sankey.svelte';
 	import Attention from '~/components/Attention.svelte';
@@ -117,8 +115,6 @@
 		class:active
 		class="main-section h-full w-full"
 		class:hybrid-model={$moeModel?.architecture === 'hybrid'}
-		class:mamba-only={$moeModel?.architecture === 'hybrid' &&
-			!$moeExample?.layers[$blockIdx]?.queryPreview.length}
 		class:expert-layout={!$moeModel?.architecture ||
 			['moe', 'mla'].includes($moeModel.architecture)}
 		class:attention-open={$expandedBlock.id === 'attention'}
@@ -374,15 +370,6 @@
 	.seq2seq :global(.prob-dim) {
 		bottom: 0;
 	}
-	.hybrid-model .steps {
-		grid-template-columns: auto 6.5fr 0.5fr 0.9fr;
-	}
-	.hybrid-model .steps .blocks .block-steps {
-		grid-template-columns: 0.4fr 2fr 2.1fr;
-	}
-	.hybrid-model.mamba-only .steps .blocks .block-steps {
-		grid-template-columns: 0.4fr 3fr 1.2fr;
-	}
 	/* A fixed page budget: the active attention card borrows width from the MLP. */
 	.squeeze {
 		--compact-card-height: clamp(230px, calc(100dvh - 300px), 460px);
@@ -394,10 +381,6 @@
 	.squeeze :global(.sankey-top path),
 	.squeeze :global(.sankey-back path) {
 		pointer-events: visiblePainted;
-	}
-	.squeeze :global(.hybrid-computation) {
-		position: relative;
-		z-index: 40;
 	}
 	.squeeze .blocks {
 		min-height: 0;
@@ -419,9 +402,6 @@
 	}
 	.squeeze.attention-open .steps .blocks .block-steps {
 		grid-template-columns: 70px minmax(0, 1fr) 210px;
-	}
-	.squeeze.mamba-only .steps .blocks .block-steps {
-		grid-template-columns: 60px minmax(0, 1fr) 230px;
 	}
 	.squeeze :global(.step) {
 		min-width: 0;
@@ -529,37 +509,6 @@
 	.squeeze.attention-open :global(.mlp .residual-text) {
 		visibility: hidden;
 	}
-	.squeeze :global(.hybrid-computation) {
-		min-width: 0;
-	}
-	.squeeze :global(.hybrid-output .content) {
-		gap: 6px;
-	}
-	.squeeze :global(.mamba-step .content) {
-		padding: 0 22px;
-	}
-	.squeeze :global(.mamba-core) {
-		min-width: 0;
-		padding: 12px 16px;
-	}
-	.squeeze :global(.compact .mamba-caption),
-	.squeeze :global(.compact .state-formula),
-	.squeeze :global(.compact p),
-	.squeeze :global(.compact .scan-head span) {
-		display: none;
-	}
-	.squeeze :global(.compact .mamba-heading) {
-		flex-wrap: wrap;
-	}
-	.squeeze :global(.compact .token-row) {
-		min-height: 20px;
-	}
-	.squeeze :global(.compact .scan-head) {
-		margin: 8px 0;
-	}
-	.squeeze :global(.compact .operation-labels) {
-		font-size: 7px;
-	}
 
 	.squeeze :global(.mlp .label) {
 		display: none;
@@ -596,47 +545,6 @@
 	.squeeze :global(.hybrid-toolbar) {
 		padding-left: 12px;
 		padding-right: 12px;
-	}
-	.squeeze :global(.ffn-chain) {
-		padding: 8px;
-		margin-bottom: 8px;
-	}
-	.squeeze :global(.ffn-projections) {
-		gap: 3px;
-	}
-	.squeeze :global(.compact .token-row) {
-		margin-bottom: 3px;
-		min-height: 12px;
-		height: 12px;
-	}
-	.squeeze :global(.compact .token-row .vector),
-	.squeeze :global(.compact .state-vector) {
-		min-height: 12px;
-	}
-	.squeeze :global(.compact .operation-labels) {
-		display: none;
-	}
-	.squeeze :global(.compact .mamba-heading) {
-		gap: 3px;
-		font-size: 9px;
-	}
-	.squeeze :global(.compact .mamba-heading button) {
-		padding: 3px;
-		font-size: 8px;
-	}
-	.squeeze :global(.compact .scan-head) {
-		font-size: 8px;
-		margin: 5px 0;
-	}
-	.squeeze :global(.compact .scan-head select) {
-		padding: 2px;
-		font-size: 9px;
-	}
-	.squeeze :global(.compact .state-vector) {
-		width: 20px;
-	}
-	.squeeze :global(.compact .state-vector small) {
-		display: none;
 	}
 	:global(.step) {
 		height: 100%;

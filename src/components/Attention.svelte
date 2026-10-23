@@ -1,7 +1,7 @@
 <script lang="ts">
 	import HeadSplitInspector from './moe/HeadSplitInspector.svelte';
 	import { attentionInspector } from '$lib/inspectors';
-	import { hybridHeadOperations, hybridInspector } from '$lib/hybrid/store';
+	import { hybridHeadOperations } from '$lib/hybrid/store';
 	import { vitHeadOperations } from '$lib/vit/store';
 	import { vlmHeadOperations, vlmInspectorStage } from '$lib/vlm/store';
 	import RoPEPopup from './moe/RoPEPopup.svelte';
@@ -60,7 +60,6 @@
 	$: usesRoPE = !isPlain;
 	function inspectRoPE(kind: 'query' | 'key' = 'query') {
 		if (isVlm) vlmInspectorStage.set('rope');
-		else if (isHybrid) hybridInspector.set('rope');
 		else attentionInspector.set({ kind: 'rope', vector: kind });
 	}
 	$: valueSize = $moeModel?.valueHeadSize ?? headSize;
@@ -340,7 +339,7 @@
 			attentionInspector.set(null);
 			$expandedBlock = { id: 'attention' };
 		}}
-	/>/>{/if}
+	/>{/if}
 
 <style lang="scss">
 	/* Dashed channel that carries the unrotated content part around the RoPE gate. */
