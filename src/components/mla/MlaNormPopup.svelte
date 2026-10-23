@@ -2,11 +2,17 @@
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { CloseOutline, RefreshOutline } from 'flowbite-svelte-icons';
 	import { projectionSweep } from '$lib/moe/projection-sweep';
-	/** RMSNorm on the KV latent: divide by the root mean square, then scale each coordinate. */
+	/** RMSNorm on the KV latent: divide by the root mean square, then scale each coordinate.
+	 *  Other architectures reuse it for their block norms, including LayerNorm. */
 	export let size = 512;
 	export let rotary = 64;
 	export let epsilon = 1e-6;
 	export let token = 'x';
+	export let kind: 'rmsnorm' | 'layernorm' = 'rmsnorm';
+	export let title = 'MLA · Latent RMSNorm';
+	export let inputLabel = 'Raw KV latent';
+	export let outputLabel = 'Normalized latent';
+	$: layer = kind === 'layernorm';
 	const dispatch = createEventDispatcher<{ close: void }>();
 	let panel: HTMLDivElement;
 	let frame = 0;
@@ -81,11 +87,11 @@
 		bind:this={panel}
 		role="dialog"
 		aria-modal="true"
-		aria-label="MLA · latent RMSNorm"
+		aria-label={title}
 		tabindex="-1"
 	>
 		<header>
-			<h3>MLA · Latent RMSNorm</h3>
+			<h3>{title}</h3>
 			<div class="controls">
 				<button aria-label="Replay animation" on:click={replay}><RefreshOutline /></button>
 				<button aria-label="Close" on:click={() => dispatch('close')}><CloseOutline /></button>
@@ -93,12 +99,12 @@
 		</header>
 		<div class="body">
 			<p class="notice">
-				No weights to multiply · one scale is computed from the whole vector, then applied to every
-				coordinate · schematic animation
+				No weights to multiply · {layer ? 'a mean and a scale are' : 'one scale is'} computed from the
+				whole vector, then applied to every coordinate · schematic animation
 			</p>
 			<div class="equation">
 				<div class="tensor">
-					<div>Raw KV latent <span class="token">“{token}”</span></div>
+					<div>{inputLabel} <span class="token">“{token}”</span></div>
 					<div class="cells input" class:working={!progress.complete} aria-hidden="true">
 						{#each Array(32) as _}<i></i>{/each}
 					</div>
@@ -106,12 +112,12 @@
 				</div>
 				<span class="operator">→</span>
 				<div class="norm-box" aria-hidden="true">
-					<strong>RMSNorm</strong>
-					<span>÷ RMS · × γ</span>
+					<strong>{layer ? 'LayerNorm' : 'RMSNorm'}</strong>
+					<span>{layer ? '− μ · ÷ σ · × γ + β' : '÷ RMS · × γ'}</span>
 				</div>
 				<span class="operator">=</span>
 				<div class="tensor">
-					<div>Normalized latent</div>
+					<div>{outputLabel}</div>
 					<div class="cells output" aria-hidden="true">
 						{#each Array(32) as _, i}<i
 								class:done={i < progress.completed}
@@ -122,22 +128,36 @@
 				</div>
 			</div>
 			<div class="formula-lines" aria-hidden="true">
-				<div>
-					RMS(x) = √( (1/{size}) ∑<sub>d=1…{size}</sub> x<sub>d</sub>² + ε ), ε = {epsilon.toExponential(
-						0
-					)}
-				</div>
-				<div>y<sub>{j}</sub> = γ<sub>{j}</sub> · x<sub>{j}</sub> / RMS(x)</div>
+				{#if layer}
+					<div>
+						μ = (1/{size}) ∑<sub>d=1…{size}</sub> x<sub>d</sub>, σ² = (1/{size}) ∑<sub
+							>d=1…{size}</sub
+						>
+						(x<sub>d</sub> − μ)², ε = {epsilon.toExponential(0)}
+					</div>
+					<div>
+						y<sub>{j}</sub> = γ<sub>{j}</sub> · (x<sub>{j}</sub> − μ) / √(σ² + ε) + β<sub>{j}</sub>
+					</div>
+				{:else}
+					<div>
+						RMS(x) = √( (1/{size}) ∑<sub>d=1…{size}</sub> x<sub>d</sub>² + ε ), ε = {epsilon.toExponential(
+							0
+						)}
+					</div>
+					<div>y<sub>{j}</sub> = γ<sub>{j}</sub> · x<sub>{j}</sub> / RMS(x)</div>
+				{/if}
 			</div>
 			<p class="status" role="status">
 				{progress.complete ? `Complete · output (1, ${size})` : 'Normalizing across the vector'} · schematic
 				sweep
 			</p>
-			<p class="notice">
-				γ is a learned scale per coordinate. The {rotary}D rotary key skips this step. The cache
-				stores the normalized latent together with the rotated key, {size + rotary} numbers per token
-				in this layer.
-			</p>
+			<slot>
+				<p class="notice">
+					γ is a learned scale per coordinate. The {rotary}D rotary key skips this step. The cache
+					stores the normalized latent together with the rotated key, {size + rotary} numbers per token
+					in this layer.
+				</p>
+			</slot>
 		</div>
 	</div>
 </div>

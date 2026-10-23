@@ -7,6 +7,12 @@
 	export let intermediateSize: number;
 	export let label: string;
 	export let token: string;
+	/** Vision encoders add a learned bias after each projection. */
+	export let bias = false;
+	/** Name of the down projection's result; dense networks have no experts. */
+	export let outputName = 'Expert output';
+	/** What the down projection reads: the gated product, or an activation without a gate. */
+	export let downInput = 'Gated input';
 	const dispatch = createEventDispatcher<{ close: void }>();
 	let panel: HTMLDivElement;
 	let frame = 0;
@@ -97,14 +103,16 @@
 			</div>
 		</header>
 		<div class="body">
-			<p class="notice">Schematic animation · full tensor dimensions · bias-free</p>
+			<p class="notice">
+				Schematic animation · full tensor dimensions · {bias ? '+ bias' : 'bias-free'}
+			</p>
 			<div
 				class="equation"
 				aria-label={`Input (1, ${inputSize}) times weights (${inputSize}, ${outputSize}) equals output (1, ${outputSize})`}
 			>
 				<div class="tensor">
 					<div>
-						{step === 'down' ? 'Gated input' : 'Input'} <span class="token">“{token}”</span>
+						{step === 'down' ? downInput : 'Input'} <span class="token">“{token}”</span>
 					</div>
 					<div
 						class="projection-vector input"
@@ -125,7 +133,7 @@
 				</div>
 				<span class="operator">=</span>
 				<div class="tensor">
-					<div>{step === 'down' ? 'Expert output' : `${name} projection`}</div>
+					<div>{step === 'down' ? outputName : `${name} projection`}</div>
 					<div class="projection-vector output" aria-hidden="true">
 						{#each Array(32) as _, i}<i
 								class:done={i < progress.completed}
@@ -138,6 +146,8 @@
 			<div class="formula" aria-hidden="true">
 				{symbol}<sub>{progress.coordinate}</sub> = ∑<sub>d=1…{inputSize}</sub>
 				{inputSymbol}<sub>d</sub> · W{step}<sub>{progress.coordinate},d</sub>
+				{#if bias}
+					+ b<sub>{progress.coordinate}</sub>{/if}
 			</div>
 			<p class="status" role="status">
 				{progress.complete
