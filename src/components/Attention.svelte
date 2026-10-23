@@ -5,7 +5,7 @@
 	import { vitHeadOperations } from '$lib/vit/store';
 	import { vlmHeadOperations, vlmInspectorStage } from '$lib/vlm/store';
 	import LatentInspector from './mla/LatentInspector.svelte';
-	import RoPEInspector from './moe/RoPEInspector.svelte';
+	import RoPEPopup from './moe/RoPEPopup.svelte';
 	import VectorCanvas from './common/VectorCanvas.svelte';
 	import HeadStack from '~/components/HeadStack.svelte';
 	import {
@@ -168,8 +168,14 @@
 									class="rotary-gate"
 									on:click={() => inspectRoPE('key')}
 									aria-label="Inspect key RoPE before attention"
-									>RoPE<small>rotate K{isMLA ? ` · ${$moeModel?.rotarySize ?? 64}D` : ''}</small
-									></button
+									>{#if !squeeze}<span class="rotary-dial" aria-hidden="true">↻</span
+										>{/if}RoPE<small
+										>rotate K{isMLA ? ` · ${$moeModel?.rotarySize ?? 64}D` : ''}</small
+									>{#if !squeeze}<small
+											>{isMLA ? ($moeModel?.rotarySize ?? 64) : headSize}D → {isMLA
+												? ($moeModel?.rotarySize ?? 64)
+												: headSize}D</small
+										>{/if}</button
 								>{/if}
 							{#each $tokens as token, index}
 								<div
@@ -224,8 +230,14 @@
 									class="rotary-gate"
 									on:click={() => inspectRoPE('query')}
 									aria-label="Inspect query RoPE before attention"
-									>RoPE<small>rotate Q{isMLA ? ` · ${$moeModel?.rotarySize ?? 64}D` : ''}</small
-									></button
+									>{#if !squeeze}<span class="rotary-dial" aria-hidden="true">↻</span
+										>{/if}RoPE<small
+										>rotate Q{isMLA ? ` · ${$moeModel?.rotarySize ?? 64}D` : ''}</small
+									>{#if !squeeze}<small
+											>{isMLA ? ($moeModel?.rotarySize ?? 64) : headSize}D → {isMLA
+												? ($moeModel?.rotarySize ?? 64)
+												: headSize}D</small
+										>{/if}</button
 								>{/if}
 							{#each $tokens as token, index}
 								<div
@@ -322,7 +334,7 @@
 		on:close={() => attentionInspector.set(null)}
 		on:projections={() => weightPopover.set('qkv')}
 		on:rope={(event) => inspectRoPE(event.detail)}
-	/>{:else if $attentionInspector?.kind === 'rope'}<RoPEInspector
+	/>{:else if $attentionInspector?.kind === 'rope'}<RoPEPopup
 		kind={$attentionInspector.vector}
 		on:close={() => attentionInspector.set(null)}
 		on:attention={() => {
@@ -441,6 +453,12 @@
 		z-index: 36;
 		padding: 0;
 		font-size: 16px;
+	}
+	.rotary-dial {
+		display: block;
+		font-size: 20px;
+		line-height: 1;
+		font-weight: 400;
 	}
 	.rotary-gate small {
 		display: block;
