@@ -250,7 +250,7 @@
 		gap: 6px;
 		width: 100%;
 		height: var(--vector-height);
-		font-size: 11px;
+		font-size: var(--vit-label-size, 11px);
 		color: #4b5563;
 		white-space: nowrap;
 		cursor: pointer;
@@ -269,8 +269,8 @@
 	.patch,
 	.cls {
 		display: inline-block;
-		width: 16px;
-		height: 16px;
+		width: clamp(14px, calc(var(--vector-height) + 4px), 22px);
+		height: clamp(14px, calc(var(--vector-height) + 4px), 22px);
 		border: 1px solid #dfd6e9;
 		border-radius: 2px;
 		flex-shrink: 0;
