@@ -129,10 +129,13 @@ export function showVitPositions(
 		attentionHeadIdxTemp.set(head);
 	}
 }
+/** Patches shown beside [CLS]: six rows in all, as many as Dense shows, so rows keep Dense's size. */
+export const VIT_PATCH_PAGE = 5;
+export const VIT_PATCH_PAGES = Math.ceil(196 / VIT_PATCH_PAGE);
 export function showVitPatchPage(page: number): void {
-	const first = Math.max(0, Math.min(24, Math.floor(page))) * 8 + 1;
+	const first = Math.max(0, Math.min(VIT_PATCH_PAGES - 1, Math.floor(page))) * VIT_PATCH_PAGE + 1;
 	showVitPositions(
-		[0, ...Array.from({ length: Math.min(8, 197 - first) }, (_, i) => first + i)],
+		[0, ...Array.from({ length: Math.min(VIT_PATCH_PAGE, 197 - first) }, (_, i) => first + i)],
 		first
 	);
 }
@@ -156,7 +159,11 @@ export async function loadVitRecording(): Promise<() => void> {
 		traceUrl: recordedAssetUrl(`${base}/traces/vit/manifest.json`),
 		replay: () => showVitPositions(get(vitVisiblePositions), get(vitSelectedPosition))
 	});
-	showVitPositions([0, 1, 2, 3, 4, 5, 6, 7, 8], 0, false);
+	showVitPositions(
+		Array.from({ length: VIT_PATCH_PAGE + 1 }, (_, i) => i),
+		0,
+		false
+	);
 	return () => {
 		vitRecording.set(null);
 		vitInspectorStage.set(null);

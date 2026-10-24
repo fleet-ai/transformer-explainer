@@ -2,10 +2,9 @@
 	import { base } from '$app/paths';
 	import { AngleLeftOutline, AngleRightOutline } from 'flowbite-svelte-icons';
 	import { recordedAssetUrl } from '$lib/recorded-json.js';
-	import { showVitPatchPage } from '$lib/vit/adapter';
+	import { showVitPatchPage, VIT_PATCH_PAGE as PAGE } from '$lib/vit/adapter';
 	import { vitRecording, vitVisiblePositions } from '$lib/vit/store';
-	/** The image is the input; its grid picks which 8 patches the diagram shows beside [CLS]. */
-	const PAGE = 8;
+	/** The image is the input; its grid picks which patches the diagram shows beside [CLS]. */
 	$: grid = $vitRecording?.document.image.gridSize ?? 14;
 	$: patches = grid * grid;
 	$: pages = Math.ceil(patches / PAGE);

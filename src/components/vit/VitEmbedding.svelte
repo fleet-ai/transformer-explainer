@@ -276,10 +276,10 @@
 		flex-shrink: 0;
 	}
 	.cls {
-		font-size: 6.5px;
+		font-size: 7px;
 		background: #f2eaf9;
 		color: #8f65ad;
-		line-height: 14px;
+		line-height: calc(clamp(14px, calc(var(--vector-height) + 4px), 22px) - 2px);
 		text-align: center;
 	}
 	.patch-embedding .cell,
